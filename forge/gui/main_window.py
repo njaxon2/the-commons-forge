@@ -116,6 +116,8 @@ class ForgeMainWindow(QMainWindow):
         self.action_toggle_workspace = QAction("Workspace", self, checkable=True, checked=True)
 
         self.action_run = QAction("&Run File", self, shortcut=QKeySequence("F5"))
+        self.action_focus_command = QAction("Focus &Command", self, shortcut=QKeySequence("Ctrl+0"))
+        self.action_focus_command.triggered.connect(self._focus_command_input)
         self.action_stop = QAction("&Stop", self, shortcut=QKeySequence("Shift+F5"))
         self.action_step = QAction("S&tep", self, shortcut=QKeySequence("F10"))
         self.action_continue = QAction("&Continue", self, shortcut=QKeySequence("F5"))
@@ -123,6 +125,7 @@ class ForgeMainWindow(QMainWindow):
         self.action_reset_layout = QAction("Reset Layout", self)
         self.action_reset_layout.triggered.connect(self._reset_layout)
 
+        self.addAction(self.action_focus_command)  # Make shortcut global
         self.action_about = QAction("&About", self)
         self.action_docs = QAction("&Documentation", self)
 
@@ -279,6 +282,12 @@ class ForgeMainWindow(QMainWindow):
         s.setValue("geometry", self.saveGeometry())
         s.setValue("windowState", self.saveState())
         super().closeEvent(event)
+
+    def _focus_command_input(self):
+        """Focus the command input line."""
+        if hasattr(self, "command_widget") and self.command_widget:
+            self.command_widget.input_line.setFocus()
+            self.command_widget.input_line.selectAll()
 
     def _reset_layout(self):
         """Remove saved state so next launch uses defaults."""

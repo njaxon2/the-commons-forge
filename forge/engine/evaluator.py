@@ -360,10 +360,12 @@ class Session:
         self.output_buffer.write(f"warning: {msg}\n")
 
     def _resolve_m_file(self, name):
-        """Search session path for {name}.m, parse and register it."""
+        """Search CWD then session path for {name}.m, parse and register it."""
         if self._session_ref is None:
             return None
-        for directory in self._session_ref.path:
+        # Search current working directory first (MATLAB/Octave behavior)
+        search_dirs = [os.getcwd()] + list(self._session_ref.path)
+        for directory in search_dirs:
             mfile = os.path.join(directory, name + ".m")
             if os.path.isfile(mfile):
                 with open(mfile, "r") as f:
