@@ -114,6 +114,8 @@ class Session:
         self.workspace.set("NaN", ForgeArray(FORGE_NAN))
         self.workspace.set("nan", ForgeArray(FORGE_NAN))
         self.workspace.set("eps", ForgeArray(FORGE_EPS))
+        self.workspace.set("realmin", ForgeArray(np.atleast_2d(np.finfo(float).tiny)))
+        self.workspace.set("realmax", ForgeArray(np.atleast_2d(np.finfo(float).max)))
         self.workspace.set("i", ForgeArray(FORGE_I))
         self.workspace.set("j", ForgeArray(FORGE_I))
         self.workspace.set("true", ForgeArray(np.array(True)))
@@ -215,6 +217,7 @@ class Session:
         b["sprintf"] = self._builtin_sprintf
         b["error"] = self._builtin_error
         b["warning"] = self._builtin_warning
+        b["clc"] = lambda: None  # Clear command window (no-op in engine)
 
         # Struct/cell
         b["struct"] = lambda *a: forge_struct(*a)
@@ -273,7 +276,7 @@ class Session:
             return ForgeArray(np.array([1, 1]))
         if args:
             dim = _to_py(args[0])
-            return ForgeArray(np.array(x.shape[dim-1] if dim <= x.ndim else 1))
+            dim = int(dim); return ForgeArray(np.array(x.shape[dim-1] if dim <= x.ndim else 1))
         return ForgeArray(np.array(x.shape))
 
     def _builtin_disp(self, *args):
@@ -695,7 +698,14 @@ class Session:
                     # Numeric indexing (1-based) - linear indexing into column-major
                     flat = data.ravel(order='F')
                     int_idx = raw_idx.astype(int).ravel() - 1  # Convert to 0-based
-                    return ForgeArray(flat[int_idx])
+                    result = flat[int_idx]
+                    # Preserve shape: if source is column vector, result is column
+                    # If source is row vector, result is row
+                    if data.ndim == 2 and data.shape[1] == 1:
+                        result = result.reshape(-1, 1)  # Column vector
+                    elif data.ndim == 2 and data.shape[0] == 1:
+                        result = result.reshape(1, -1)  # Row vector
+                    return ForgeArray(result)
             # Single scalar index
             idx_int = int(_to_py(idx))
             flat = data.ravel(order='F')

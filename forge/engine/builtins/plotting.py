@@ -88,7 +88,16 @@ def forge_plot(*args):
     _maybe_clear()
     ax = _cur_ax()
     i = 0
-    a = [_unwrap(a) if hasattr(a, '__array__') or isinstance(a, ForgeArray) else a for a in args]
+    # Convert args, but preserve ForgeChar as strings (format specs like 'b-', 'r--')
+    from forge.engine.containers import ForgeChar
+    a = []
+    for arg in args:
+        if isinstance(arg, ForgeChar):
+            a.append(arg.to_str())  # Convert to Python string
+        elif hasattr(arg, '__array__') or isinstance(arg, ForgeArray):
+            a.append(_unwrap(arg))
+        else:
+            a.append(arg)
     while i < len(a):
         if i + 1 < len(a) and isinstance(a[i + 1], str):
             ax.plot(_to_np(a[i]), **_parse_linespec(a[i + 1]))
@@ -398,7 +407,13 @@ def forge_grid(on=None):
         ax = _cur_ax()
         ax.grid(not ax.xaxis.get_gridlines()[0].get_visible())
     else:
-        _cur_ax().grid(bool(on))
+        # Handle ForgeChar string args from command-style (grid on, grid off)
+        if hasattr(on, 'to_str'):
+            on = on.to_str()
+        if isinstance(on, str):
+            _cur_ax().grid(on.lower() in ('on', 'true', '1'))
+        else:
+            _cur_ax().grid(bool(on))
     plt.draw()
     plt.pause(0.01)
 
@@ -539,6 +554,24 @@ def forge_print_fig(filename, *args):
 # Registry
 # ===================================================================
 
+def forge_drawnow():
+    """Force figure update."""
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_pause(t=None):
+    """Pause execution. With arg, pause for t seconds."""
+    if t is not None:
+        from forge.engine.types import ForgeArray
+        if isinstance(t, ForgeArray):
+            t = float(t.data.flat[0])
+        import time
+        time.sleep(float(t))
+    else:
+        plt.pause(0.1)
+
+
 PLOTTING_REGISTRY = {
     # 2-D
     "plot":         forge_plot,
@@ -595,4 +628,6 @@ PLOTTING_REGISTRY = {
     "close":        forge_close,
     "saveas":       forge_saveas,
     "print":        forge_print_fig,
+    "drawnow":      forge_drawnow,
+    "pause":        forge_pause,
 }

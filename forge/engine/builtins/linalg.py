@@ -254,12 +254,26 @@ def _forge_norm(A, *args):
     ord_val = None
     if args:
         a0 = args[0]
-        ord_val = float(a0.data.flat[0]) if isinstance(a0, ForgeArray) else a0
-        if isinstance(ord_val, str):
-            if ord_val == 'fro':
+        # Handle ForgeChar string arguments (e.g., 'fro', 'inf')
+        if hasattr(a0, 'to_str'):
+            ord_str = a0.to_str().strip()
+            if ord_str == 'fro':
                 ord_val = 'fro'
-            elif ord_val == 'inf':
+            elif ord_str == 'inf':
                 ord_val = np.inf
+            else:
+                ord_val = ord_str
+        elif isinstance(a0, ForgeArray):
+            ord_val = float(a0.data.flat[0])
+        elif isinstance(a0, str):
+            if a0 == 'fro':
+                ord_val = 'fro'
+            elif a0 == 'inf':
+                ord_val = np.inf
+            else:
+                ord_val = a0
+        else:
+            ord_val = a0
     return ForgeArray(np.array(np.linalg.norm(_unwrap(A), ord=ord_val)))
 
 def _forge_pinv(A):

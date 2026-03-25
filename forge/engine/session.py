@@ -170,12 +170,17 @@ class ForgeSession:
 
         def forge_clear(*args):
             ws = session._engine.workspace
+            _PROTECTED = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
+                          "true", "false", "i", "j", "realmin", "realmax"}
             if not args:
                 for n in list(ws.names()):
-                    ws.delete(n)
+                    if n not in _PROTECTED:
+                        ws.delete(n)
             else:
                 for a in args:
-                    ws.delete(str(a))
+                    name = str(a)
+                    if name not in _PROTECTED:
+                        ws.delete(name)
 
         def forge_addpath(*args):
             for p in args:
@@ -231,6 +236,13 @@ class ForgeSession:
             for stmt in stmts:
                 session._engine._exec(stmt, session._engine.workspace)
 
+
+        def forge_clc():
+            """Clear the command window output."""
+            # In GUI mode, this would clear the output display
+            # In engine mode, this is a no-op
+            pass
+
         for name, fn in [
             ('cd', forge_cd), ('pwd', forge_pwd), ('who', forge_who),
             ('whos', forge_whos), ('clear', forge_clear),
@@ -239,5 +251,6 @@ class ForgeSession:
             ('exist', forge_exist), ('class', forge_class),
             ('format', forge_format),
             ('run', forge_run),
+            ('clc', forge_clc),
         ]:
             self._engine.functions[name] = fn
