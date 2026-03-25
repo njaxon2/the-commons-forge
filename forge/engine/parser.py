@@ -361,6 +361,23 @@ class Parser:
 
         expr = self._parse_expression(0)
 
+        # Command-style syntax: hold on, axis equal, cd dir, etc.
+        # If expr is an Identifier in the command set and next token is IDENT
+        # (not =, not (, not operator), treat subsequent idents as string args.
+        _CMD_STYLE_NAMES = {
+            "hold", "axis", "format", "grid", "box", "legend",
+            "colormap", "shading", "view", "cd", "type", "help",
+            "doc", "edit", "dbstop", "dbclear", "dbcont",
+        }
+        if (isinstance(expr, Identifier)
+                and expr.name in _CMD_STYLE_NAMES
+                and self._peek().type == TokenType.IDENT):
+            # Collect remaining identifiers as string arguments
+            str_args = []
+            while self._peek().type == TokenType.IDENT:
+                str_args.append(StringLiteral(self._advance().value, is_char=True))
+            expr = Index(expr, str_args)
+
         # Check for assignment: expr = value
         if self._at(TokenType.ASSIGN):
             if isinstance(expr, (Identifier, Index, FieldAccess, DynamicFieldAccess, CellIndex)):

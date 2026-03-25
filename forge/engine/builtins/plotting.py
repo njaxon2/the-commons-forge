@@ -11,6 +11,9 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3-D projecti
 
 from forge.engine.types import ForgeArray, _unwrap
 
+# Enable interactive mode so figures appear without blocking
+plt.ion()
+
 # ---------------------------------------------------------------------------
 # Internal state
 # ---------------------------------------------------------------------------
@@ -100,6 +103,7 @@ def forge_plot(*args):
             ax.plot(_to_np(a[i]))
             i += 1
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_semilogx(*args):
@@ -107,6 +111,7 @@ def forge_semilogx(*args):
     forge_plot(*args)
     _cur_ax().set_xscale("log")
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_semilogy(*args):
@@ -114,6 +119,7 @@ def forge_semilogy(*args):
     forge_plot(*args)
     _cur_ax().set_yscale("log")
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_loglog(*args):
@@ -123,6 +129,7 @@ def forge_loglog(*args):
     ax.set_xscale("log")
     ax.set_yscale("log")
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_bar(x, y=None, width=0.8):
@@ -134,6 +141,7 @@ def forge_bar(x, y=None, width=0.8):
         x, y = _to_np(x), _to_np(y)
     _cur_ax().bar(x, y, width=width)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_barh(x, y=None, height=0.8):
@@ -145,12 +153,14 @@ def forge_barh(x, y=None, height=0.8):
         x, y = _to_np(x), _to_np(y)
     _cur_ax().barh(x, y, height=height)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_scatter(x, y, s=None, c=None, **kwargs):
     _maybe_clear()
     _cur_ax().scatter(_to_np(x), _to_np(y), s=s, c=c, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_stem(x, y=None):
@@ -160,6 +170,7 @@ def forge_stem(x, y=None):
     else:
         _cur_ax().stem(_to_np(x), _to_np(y))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_stairs(x, y=None):
@@ -169,6 +180,7 @@ def forge_stairs(x, y=None):
     else:
         _cur_ax().step(_to_np(x), _to_np(y), where="post")
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_area(x, y=None):
@@ -180,12 +192,14 @@ def forge_area(x, y=None):
         x, y = _to_np(x), _to_np(y)
     _cur_ax().fill_between(x, y)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_errorbar(x, y, err, **kwargs):
     _maybe_clear()
     _cur_ax().errorbar(_to_np(x), _to_np(y), yerr=_to_np(err), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_histogram(data, bins=10):
@@ -193,12 +207,14 @@ def forge_histogram(data, bins=10):
     counts, edges = np.histogram(_to_np(data), bins=bins)
     _cur_ax().bar(edges[:-1], counts, width=np.diff(edges), align="edge")
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_pie(x, **kwargs):
     _maybe_clear()
     _cur_ax().pie(_to_np(x), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_polar(theta, r):
@@ -206,18 +222,21 @@ def forge_polar(theta, r):
     ax = fig.add_subplot(111, projection="polar")
     ax.plot(_to_np(theta), _to_np(r))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_fill(x, y, *args, **kwargs):
     _maybe_clear()
     _cur_ax().fill(_to_np(x), _to_np(y), *args, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_line(x, y, **kwargs):
     _maybe_clear()
     _cur_ax().plot(_to_np(x), _to_np(y), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_rectangle(pos, width, height, **kwargs):
@@ -227,6 +246,7 @@ def forge_rectangle(pos, width, height, **kwargs):
     _cur_ax().add_patch(_Rectangle((x, y), width, height, **kwargs))
     _cur_ax().autoscale_view()
     plt.draw()
+    plt.pause(0.01)
 
 
 # ===================================================================
@@ -246,18 +266,21 @@ def forge_plot3(x, y, z, **kwargs):
     ax = _get_3d_ax()
     ax.plot(_to_np(x), _to_np(y), _to_np(z), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_scatter3(x, y, z, **kwargs):
     ax = _get_3d_ax()
     ax.scatter(_to_np(x), _to_np(y), _to_np(z), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_surf(X, Y, Z, **kwargs):
     ax = _get_3d_ax()
     ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_surfc(X, Y, Z, **kwargs):
@@ -266,6 +289,7 @@ def forge_surfc(X, Y, Z, **kwargs):
     ax.contour(_to_np(X), _to_np(Y), _to_np(Z), zdir="z",
                offset=_to_np(Z).min())
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_surfl(X, Y, Z, **kwargs):
@@ -273,12 +297,14 @@ def forge_surfl(X, Y, Z, **kwargs):
     ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z),
                     rstride=1, cstride=1, shade=True, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_mesh(X, Y, Z, **kwargs):
     ax = _get_3d_ax()
     ax.plot_wireframe(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_meshc(X, Y, Z, **kwargs):
@@ -287,6 +313,7 @@ def forge_meshc(X, Y, Z, **kwargs):
     ax.contour(_to_np(X), _to_np(Y), _to_np(Z), zdir="z",
                offset=_to_np(Z).min())
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_meshz(X, Y, Z, **kwargs):
@@ -296,24 +323,28 @@ def forge_meshz(X, Y, Z, **kwargs):
     # "curtain" along edges
     ax.plot_surface(_to_np(X), _to_np(Y), np.zeros_like(Zn), alpha=0.1)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_contour(X, Y, Z, *args, **kwargs):
     _maybe_clear()
     _cur_ax().contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_contourf(X, Y, Z, *args, **kwargs):
     _maybe_clear()
     _cur_ax().contourf(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_contour3(X, Y, Z, *args, **kwargs):
     ax = _get_3d_ax()
     ax.contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_waterfall(X, Y, Z, **kwargs):
@@ -322,6 +353,7 @@ def forge_waterfall(X, Y, Z, **kwargs):
     for i in range(Xn.shape[0]):
         ax.plot(Xn[i, :], Yn[i, :], Zn[i, :], color="blue", **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 # ===================================================================
@@ -331,16 +363,19 @@ def forge_waterfall(X, Y, Z, **kwargs):
 def forge_title(t: str):
     _cur_ax().set_title(str(t))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_xlabel(label: str):
     _cur_ax().set_xlabel(str(label))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_ylabel(label: str):
     _cur_ax().set_ylabel(str(label))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_zlabel(label: str):
@@ -348,11 +383,13 @@ def forge_zlabel(label: str):
     if hasattr(ax, "set_zlabel"):
         ax.set_zlabel(str(label))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_legend(*args, **kwargs):
     _cur_ax().legend(*args, **kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_grid(on=None):
@@ -363,6 +400,7 @@ def forge_grid(on=None):
     else:
         _cur_ax().grid(bool(on))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_axis(spec=None):
@@ -377,6 +415,7 @@ def forge_axis(spec=None):
         ax.set_xlim(lims[0], lims[1])
         ax.set_ylim(lims[2], lims[3])
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_xlim(lo=None, hi=None):
@@ -384,6 +423,7 @@ def forge_xlim(lo=None, hi=None):
         return _cur_ax().get_xlim()
     _cur_ax().set_xlim(float(lo), float(hi))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_ylim(lo=None, hi=None):
@@ -391,6 +431,7 @@ def forge_ylim(lo=None, hi=None):
         return _cur_ax().get_ylim()
     _cur_ax().set_ylim(float(lo), float(hi))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_zlim(lo=None, hi=None):
@@ -401,20 +442,31 @@ def forge_zlim(lo=None, hi=None):
         return ax.get_zlim()
     ax.set_zlim(float(lo), float(hi))
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_hold(state=None):
-    """Toggle or set hold state."""
+    """Toggle or set hold state. Accepts 'on', 'off', or boolean."""
     global _hold_state
     if state is None:
         _hold_state = not _hold_state
     else:
-        _hold_state = bool(state)
+        # Handle string args from command-style: hold on, hold off
+        s = str(state)
+        if hasattr(state, 'to_str'):
+            s = state.to_str()
+        if s.lower() == 'on':
+            _hold_state = True
+        elif s.lower() == 'off':
+            _hold_state = False
+        else:
+            _hold_state = bool(state)
 
 
 def forge_colorbar(**kwargs):
     plt.colorbar(**kwargs)
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_colormap(name: str):
@@ -448,11 +500,13 @@ def forge_gcf():
 def forge_cla():
     _cur_ax().cla()
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_clf():
     _cur_fig().clf()
     plt.draw()
+    plt.pause(0.01)
 
 
 def forge_close(n=None):
