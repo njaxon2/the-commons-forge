@@ -1,0 +1,2 @@
+[console_scripts]
+forge = forge.__main__:main

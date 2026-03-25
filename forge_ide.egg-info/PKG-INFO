@@ -1,0 +1,32 @@
+Metadata-Version: 2.4
+Name: forge-ide
+Version: 0.1.0
+Summary: Octave-compatible numerical computing environment with PySide6 GUI
+License: MIT
+Project-URL: Homepage, https://github.com/forge-ide/forge
+Project-URL: Documentation, https://forge-ide.readthedocs.io
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Education
+Classifier: Topic :: Scientific/Engineering :: Mathematics
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: PySide6>=6.5
+Requires-Dist: numpy>=1.24
+Requires-Dist: scipy>=1.10
+Requires-Dist: matplotlib>=3.7
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-qt; extra == "dev"
+Requires-Dist: pytest-xvfb; extra == "dev"
+Provides-Extra: symbolic
+Requires-Dist: sympy>=1.12; extra == "symbolic"
+Provides-Extra: full
+Requires-Dist: sympy>=1.12; extra == "full"
+Requires-Dist: soundfile; extra == "full"
+Requires-Dist: requests; extra == "full"

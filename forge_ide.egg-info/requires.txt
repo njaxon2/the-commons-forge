@@ -1,0 +1,17 @@
+PySide6>=6.5
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+
+[dev]
+pytest
+pytest-qt
+pytest-xvfb
+
+[full]
+sympy>=1.12
+soundfile
+requests
+
+[symbolic]
+sympy>=1.12
