@@ -1042,9 +1042,28 @@ class Session:
                     cols = (ind // sz[0]) + 1
                     return (ForgeArray(rows.astype(float)), ForgeArray(cols.astype(float)))
             return None
+        if name == 'sort':
+            x = _unwrap(args[0])
+            if x.ndim == 2 and (x.shape[0] == 1 or x.shape[1] == 1):
+                flat = x.ravel()
+                idx = np.argsort(flat)
+                sorted_vals = flat[idx]
+                if x.shape[0] == 1:
+                    return (ForgeArray(sorted_vals.reshape(1, -1)), ForgeArray((idx + 1).astype(float).reshape(1, -1)))
+                else:
+                    return (ForgeArray(sorted_vals.reshape(-1, 1)), ForgeArray((idx + 1).astype(float).reshape(-1, 1)))
+            else:
+                idx = np.argsort(x, axis=0)
+                sorted_vals = np.take_along_axis(x, idx, axis=0)
+                return (ForgeArray(sorted_vals), ForgeArray((idx + 1).astype(float)))
         if name == 'eig':
             x = _unwrap(args[0])
-            vals, vecs = np.linalg.eig(x)
+            if len(args) >= 2:
+                b = _unwrap(args[1])
+                from scipy.linalg import eig as scipy_eig
+                vals, vecs = scipy_eig(x, b)
+            else:
+                vals, vecs = np.linalg.eig(x)
             return (ForgeArray(vecs), ForgeArray(np.diag(vals)))
         return None
 

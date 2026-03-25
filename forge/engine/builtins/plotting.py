@@ -88,8 +88,38 @@ def _parse_linespec(fmt: str) -> dict:
 # 2-D plots
 # ===================================================================
 
+def _is_property_name(s):
+    """Check if a string is a MATLAB plot property name (not a linespec)."""
+    props = {'linewidth', 'markersize', 'color', 'marker', 'linestyle',
+             'markeredgecolor', 'markerfacecolor', 'displayname'}
+    return isinstance(s, str) and s.lower() in props
+
+def _extract_plot_kwargs(a, start):
+    """Extract key-value property pairs from args starting at index start."""
+    kwargs = {}
+    i = start
+    while i + 1 < len(a):
+        if not isinstance(a[i], str) or not _is_property_name(a[i]):
+            break
+        key = a[i].lower()
+        val = a[i + 1]
+        if key == 'linewidth':
+            kwargs['linewidth'] = float(_to_np(val).flat[0]) if hasattr(val, '__array__') else float(val)
+        elif key == 'markersize':
+            kwargs['markersize'] = float(_to_np(val).flat[0]) if hasattr(val, '__array__') else float(val)
+        elif key == 'color':
+            kwargs['color'] = val
+        elif key == 'displayname':
+            kwargs['label'] = val if isinstance(val, str) else str(val)
+        elif key == 'linestyle':
+            kwargs['linestyle'] = val if isinstance(val, str) else str(val)
+        elif key == 'marker':
+            kwargs['marker'] = val if isinstance(val, str) else str(val)
+        i += 2
+    return kwargs, i
+
 def forge_plot(*args):
-    """plot(y), plot(x,y), plot(x,y,fmt), plot(x1,y1,fmt1, x2,y2,fmt2,...)."""
+    """plot(y), plot(x,y), plot(x,y,fmt), plot(x,y,fmt,'Prop',val,...), etc."""
     _maybe_clear()
     ax = _cur_ax()
     i = 0
@@ -104,18 +134,39 @@ def forge_plot(*args):
         else:
             a.append(arg)
     while i < len(a):
-        if i + 1 < len(a) and isinstance(a[i + 1], str):
-            ax.plot(_to_np(a[i]), **_parse_linespec(a[i + 1]))
-            i += 2
-        elif i + 2 < len(a) and isinstance(a[i + 2], str):
-            ax.plot(_to_np(a[i]), _to_np(a[i + 1]), **_parse_linespec(a[i + 2]))
-            i += 3
-        elif i + 1 < len(a) and not isinstance(a[i + 1], str):
-            ax.plot(_to_np(a[i]), _to_np(a[i + 1]))
-            i += 2
+        # Determine x, y, fmt for this data group
+        x_data = None
+        y_data = None
+        fmt_kwargs = {}
+
+        if i < len(a) and not isinstance(a[i], str):
+            # First arg is data
+            if i + 1 < len(a) and not isinstance(a[i + 1], str):
+                # plot(x, y, ...)
+                x_data = _to_np(a[i])
+                y_data = _to_np(a[i + 1])
+                i += 2
+            else:
+                # plot(y, ...) or plot(y, fmt, ...)
+                y_data = _to_np(a[i])
+                i += 1
         else:
-            ax.plot(_to_np(a[i]))
+            break
+
+        # Check for format string (short: 'b-', 'r--o', etc.)
+        if i < len(a) and isinstance(a[i], str) and len(a[i]) <= 4 and not _is_property_name(a[i]):
+            fmt_kwargs = _parse_linespec(a[i])
             i += 1
+
+        # Check for property key-value pairs
+        extra_kwargs, i = _extract_plot_kwargs(a, i)
+        fmt_kwargs.update(extra_kwargs)
+
+        # Plot
+        if x_data is not None:
+            ax.plot(x_data, y_data, **fmt_kwargs)
+        else:
+            ax.plot(y_data, **fmt_kwargs)
     plt.draw()
     plt.pause(0.01)
 
@@ -571,7 +622,15 @@ def forge_figure(n=None):
 
 
 def forge_subplot(m, n, p):
-    return _cur_fig().add_subplot(int(m), int(n), int(p))
+    m_int = int(_to_np(m).flat[0]) if hasattr(m, '__array__') else int(m)
+    n_int = int(_to_np(n).flat[0]) if hasattr(n, '__array__') else int(n)
+    p_int = int(_to_np(p).flat[0]) if hasattr(p, '__array__') else int(p)
+    fig = _cur_fig()
+    ax = fig.add_subplot(m_int, n_int, p_int)
+    plt.sca(ax)
+    plt.draw()
+    plt.pause(0.01)
+    return ax
 
 
 def forge_gca():

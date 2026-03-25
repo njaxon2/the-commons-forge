@@ -282,16 +282,32 @@ def _forge_pinv(A):
 def _forge_kron(A, B):
     return ForgeArray(np.kron(_unwrap(A), _unwrap(B)))
 
-def _forge_eig(A):
-    """eig(A) returns eigenvalues as a column vector (MATLAB single-output behavior)."""
-    vals = np.linalg.eigvalsh(_unwrap(A)) if np.allclose(_unwrap(A), _unwrap(A).T) else np.linalg.eig(_unwrap(A))[0]
-    vals = np.sort(np.real(vals))
+def _forge_eig(A, B=None):
+    """eig(A) or eig(A,B) returns eigenvalues as a column vector (MATLAB single-output behavior)."""
+    Aa = _unwrap(A)
+    if B is not None:
+        Bb = _unwrap(B)
+        from scipy.linalg import eigvalsh, eig as scipy_eig
+        if np.allclose(Aa, Aa.T) and np.allclose(Bb, Bb.T):
+            vals = eigvalsh(Aa, Bb)
+        else:
+            vals = scipy_eig(Aa, Bb)[0]
+        vals = np.sort(np.real(vals))
+    else:
+        vals = np.linalg.eigvalsh(Aa) if np.allclose(Aa, Aa.T) else np.linalg.eig(Aa)[0]
+        vals = np.sort(np.real(vals))
     return ForgeArray(np.atleast_2d(vals).T)  # column vector
 
 
-def _forge_eig_full(A):
-    """[V,D] = eig(A) returns eigenvectors and diagonal eigenvalue matrix."""
-    vals, vecs = np.linalg.eig(_unwrap(A))
+def _forge_eig_full(A, B=None):
+    """[V,D] = eig(A) or [V,D] = eig(A,B) returns eigenvectors and diagonal eigenvalue matrix."""
+    Aa = _unwrap(A)
+    if B is not None:
+        Bb = _unwrap(B)
+        from scipy.linalg import eig as scipy_eig
+        vals, vecs = scipy_eig(Aa, Bb)
+    else:
+        vals, vecs = np.linalg.eig(Aa)
     return ForgeArray(vecs), ForgeArray(np.diag(vals))
 
 def _forge_svd(A):
