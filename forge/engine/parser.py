@@ -227,6 +227,7 @@ class Parser:
         self.tokens = [t for t in tokens if t.type != TokenType.COMMENT]
         self.pos = 0
         self._in_matrix = False
+        self._paren_depth = 0
 
     def _peek(self) -> Token:
         if self.pos < len(self.tokens):
@@ -475,8 +476,10 @@ class Parser:
         # Parenthesized expression
         if tok.type == TokenType.LPAREN:
             self._advance()
+            self._paren_depth += 1
             expr = self._parse_expression(0)
             self._expect(TokenType.RPAREN)
+            self._paren_depth -= 1
             return expr
 
         # Matrix literal [...]
@@ -563,7 +566,7 @@ class Parser:
         if tt == TokenType.COLON:
             return PREC_COLON
         if tt in (TokenType.PLUS, TokenType.MINUS):
-            if self._in_matrix and self.pos > 0 and self.pos < len(self.tokens):
+            if self._in_matrix and self._paren_depth == 0 and self.pos > 0 and self.pos < len(self.tokens):
                 cur_tok = self.tokens[self.pos]
                 prev_tok = self.tokens[self.pos - 1]
                 prev_end = prev_tok.col + len(prev_tok.value)
