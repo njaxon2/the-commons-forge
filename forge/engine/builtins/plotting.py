@@ -436,7 +436,24 @@ def forge_contour(X, Y, Z, *args, **kwargs):
 
 def forge_contourf(X, Y, Z, *args, **kwargs):
     _maybe_clear()
-    _cur_ax().contourf(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
+    # Convert ForgeArray args (e.g., levels)
+    converted_args = []
+    for a in args:
+        if hasattr(a, '__array__') or isinstance(a, ForgeArray):
+            val = _to_np(a)
+            if val.size == 1:
+                converted_args.append(int(val.flat[0]))  # scalar -> int (num levels)
+            else:
+                converted_args.append(val)
+        else:
+            converted_args.append(a)
+    Xn, Yn, Zn = _to_np(X), _to_np(Y), _to_np(Z)
+    # Handle constant data (contourf needs variation)
+    if np.ptp(Zn) < 1e-15:
+        Zn = Zn + np.random.randn(*Zn.shape) * 1e-15
+    cs = _cur_ax().contourf(Xn, Yn, Zn, *converted_args, **kwargs)
+    # Store for colorbar
+    _cur_fig()._forge_last_mappable = cs
     plt.draw()
     plt.pause(0.01)
 
@@ -588,7 +605,14 @@ def forge_hold(state=None):
 
 
 def forge_colorbar(**kwargs):
-    plt.colorbar(**kwargs)
+    fig = _cur_fig()
+    mappable = getattr(fig, '_forge_last_mappable', None)
+    if mappable is not None:
+        plt.colorbar(mappable, ax=_cur_ax(), **kwargs)
+    else:
+        plt.colorbar(**kwargs)
+    plt.draw()
+    plt.pause(0.01)
     plt.draw()
     plt.pause(0.01)
 
