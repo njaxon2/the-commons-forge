@@ -276,9 +276,45 @@ def _get_3d_ax():
     return ax
 
 
-def forge_plot3(x, y, z, **kwargs):
+def forge_plot3(*args, **kwargs):
+    """plot3(x,y,z), plot3(x,y,z,fmt), plot3(x,y,z,fmt,'Prop',val,...)"""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
     ax = _get_3d_ax()
-    ax.plot(_to_np(x), _to_np(y), _to_np(z), **kwargs)
+    # Convert args
+    a = []
+    for arg in args:
+        if isinstance(arg, ForgeChar):
+            a.append(arg.to_str())
+        elif hasattr(arg, '__array__') or isinstance(arg, ForgeArray):
+            a.append(_to_np(arg))
+        else:
+            a.append(arg)
+    # Parse: x,y,z required, then optional fmt, then key-value pairs
+    if len(a) >= 3:
+        x, y, z = a[0], a[1], a[2]
+        rest = a[3:]
+        fmt_kwargs = {}
+        # Check for format string
+        if rest and isinstance(rest[0], str) and len(rest[0]) <= 4:
+            fmt_kwargs = _parse_linespec(rest[0])
+            rest = rest[1:]
+        # Parse key-value pairs (e.g. 'LineWidth', 2)
+        i = 0
+        while i + 1 < len(rest):
+            key = rest[i]
+            val = rest[i + 1]
+            if isinstance(key, str):
+                kl = key.lower()
+                if kl == 'linewidth':
+                    fmt_kwargs['linewidth'] = float(_to_np(val).flat[0]) if hasattr(val, '__array__') else float(val)
+                elif kl == 'markersize':
+                    fmt_kwargs['markersize'] = float(_to_np(val).flat[0]) if hasattr(val, '__array__') else float(val)
+                elif kl == 'color':
+                    fmt_kwargs['color'] = val
+            i += 2
+        fmt_kwargs.update(kwargs)
+        ax.plot(x, y, z, **fmt_kwargs)
     plt.draw()
     plt.pause(0.01)
 
