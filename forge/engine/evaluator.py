@@ -687,6 +687,14 @@ class Session:
             args = [self._eval_expr(a, ws) for a in node.args]
             return self._call_function(target, args, ws)
 
+        # Step 3.5: If it's a cell array, () indexing returns element (struct array behavior)
+        if isinstance(target, ForgeCell):
+            args = [self._eval_expr(a, ws) for a in node.args]
+            if len(args) == 1:
+                idx = int(_to_py(args[0]))
+                return target._data[idx - 1]  # 1-based
+            raise TypeError("Cannot index ForgeCell with multiple indices via ()")
+
         # Step 4: If it's an array, do indexing (with end support)
         if isinstance(target, ForgeArray):
             n_args = len(node.args)
@@ -892,6 +900,41 @@ class Session:
             return value
 
         if isinstance(target, FieldAccess):
+            # Handle struct array: results(c).name = value
+            if isinstance(target.target, Index) and isinstance(target.target.target, Identifier):
+                struct_name = target.target.target.name
+                idx_args = [self._eval_expr(a, ws) for a in target.target.args]
+                idx = int(_to_py(idx_args[0])) if len(idx_args) == 1 else None
+
+                if not ws.has(struct_name):
+                    # Create new struct array
+                    # ForgeCell imported at top
+                    struct_arr = ForgeCell([None] * max(idx, 1))
+                    for i in range(len(struct_arr._data)):
+                        struct_arr._data[i] = ForgeStruct()
+                    ws.set(struct_name, struct_arr)
+
+                container = ws.get(struct_name)
+
+                if isinstance(container, ForgeCell) and idx is not None:
+                    # Grow if needed
+                    while len(container._data) < idx:
+                        container._data.append(ForgeStruct())
+                    entry = container._data[idx - 1]
+                    if not isinstance(entry, ForgeStruct):
+                        entry = ForgeStruct()
+                        container._data[idx - 1] = entry
+                    entry._fields[target.field] = value
+                elif isinstance(container, ForgeStruct):
+                    # Single struct being indexed — convert to struct array
+                    # ForgeCell imported at top
+                    struct_arr = ForgeCell([container])
+                    while len(struct_arr._data) < idx:
+                        struct_arr._data.append(ForgeStruct())
+                    struct_arr._data[idx - 1]._fields[target.field] = value
+                    ws.set(struct_name, struct_arr)
+                return value
+
             if isinstance(target.target, Identifier) and not ws.has(target.target.name):
                 new_struct = ForgeStruct()
                 new_struct._fields[target.field] = value
