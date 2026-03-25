@@ -304,10 +304,21 @@ def _forge_eig_full(A, B=None):
     Aa = _unwrap(A)
     if B is not None:
         Bb = _unwrap(B)
-        from scipy.linalg import eig as scipy_eig
-        vals, vecs = scipy_eig(Aa, Bb)
+        from scipy.linalg import eigh as scipy_eigh, eig as scipy_eig
+        if np.allclose(Aa, Aa.T) and np.allclose(Bb, Bb.T):
+            vals, vecs = scipy_eigh(Aa, Bb)
+        else:
+            vals, vecs = scipy_eig(Aa, Bb)
     else:
-        vals, vecs = np.linalg.eig(Aa)
+        if np.allclose(Aa, Aa.T):
+            vals, vecs = np.linalg.eigh(Aa)
+        else:
+            vals, vecs = np.linalg.eig(Aa)
+    # Convert to real if all imaginary parts are negligible
+    if np.isrealobj(vals) or np.allclose(np.imag(vals), 0):
+        vals = np.real(vals)
+    if np.isrealobj(vecs) or np.allclose(np.imag(vecs), 0):
+        vecs = np.real(vecs)
     return ForgeArray(vecs), ForgeArray(np.diag(vals))
 
 def _forge_svd(A):

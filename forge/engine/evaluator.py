@@ -313,8 +313,14 @@ class Session:
                 out += fmt % (float(val),)
             self.output_buffer.write(out)
         elif not has_array:
-            # All scalar args
-            vals = tuple(float(v) if isinstance(v, (_np.floating, _np.integer)) else v for v in raw_vals)
+            # All scalar args — handle complex by taking real part for real formats
+            def _to_real_if_needed(v):
+                if isinstance(v, (_np.complexfloating, complex)):
+                    return float(v.real)
+                if isinstance(v, (_np.floating, _np.integer)):
+                    return float(v)
+                return v
+            vals = tuple(_to_real_if_needed(v) for v in raw_vals)
             self.output_buffer.write(fmt % vals)
         else:
             # Multiple args, some arrays: try element-wise
