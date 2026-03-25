@@ -322,8 +322,17 @@ def _get_3d_ax():
     fig = _cur_fig()
     ax = fig.gca()
     if not hasattr(ax, "plot3D"):
-        fig.clf()
-        ax = fig.add_subplot(111, projection="3d")
+        # Get current subplot geometry if any
+        geo = ax.get_geometry() if hasattr(ax, "get_geometry") else None
+        ss = ax.get_subplotspec() if hasattr(ax, "get_subplotspec") else None
+        ax.remove()
+        if ss is not None:
+            ax = fig.add_subplot(ss, projection="3d")
+        elif geo is not None:
+            ax = fig.add_subplot(geo[0], geo[1], geo[2], projection="3d")
+        else:
+            ax = fig.add_subplot(111, projection="3d")
+        plt.sca(ax)
     return ax
 
 
