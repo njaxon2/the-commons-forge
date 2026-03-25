@@ -295,7 +295,13 @@ class Session:
         fmt = _process_c_escapes(fmt)
         # Handle array arguments: in MATLAB, fprintf repeats the format
         # for each element when given array args
-        raw_vals = [_to_py(a) for a in args[1:]]
+        # Convert ForgeChar to string for %s format specifiers
+        raw_vals = []
+        for a in args[1:]:
+            if isinstance(a, ForgeChar):
+                raw_vals.append(a.to_str())
+            else:
+                raw_vals.append(_to_py(a))
         # Check if any arg is an array with multiple elements
         import numpy as _np
         has_array = any(hasattr(v, '__len__') and _np.asarray(v).size > 1 for v in raw_vals)
@@ -325,8 +331,13 @@ class Session:
         if isinstance(fmt, ForgeChar):
             fmt = fmt.to_str()
         fmt = _process_c_escapes(fmt)
-        vals = tuple(_to_py(a) for a in args[1:])
-        return ForgeChar(fmt % vals)
+        vals = []
+        for a in args[1:]:
+            if isinstance(a, ForgeChar):
+                vals.append(a.to_str())
+            else:
+                vals.append(_to_py(a))
+        return ForgeChar(fmt % tuple(vals))
 
     def _builtin_error(self, *args):
         if len(args) >= 2:
@@ -576,6 +587,11 @@ class Session:
     def _eval_binop(self, node: BinaryOp, ws: Workspace) -> ForgeArray:
         left = self._eval_expr(node.left, ws)
         right = self._eval_expr(node.right, ws)
+        # Auto-call zero-arg callables used as values (e.g., toc * 1000)
+        if callable(left) and not isinstance(left, (ForgeArray, type)):
+            left = left()
+        if callable(right) and not isinstance(right, (ForgeArray, type)):
+            right = right()
         l, r = _unwrap(left), _unwrap(right)
         op = node.op
         if op == "+": return ForgeArray(l + r)
