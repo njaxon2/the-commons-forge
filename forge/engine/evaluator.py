@@ -197,8 +197,8 @@ class Session:
         b["cumprod"] = lambda x, *a: ForgeArray(np.cumprod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
         b["diff"] = lambda x, *a: ForgeArray(np.diff(_unwrap(x), n=_to_py(a[0]) if a else 1, axis=-1))
         b["cat"] = lambda dim, *arrays: ForgeArray(np.concatenate([_unwrap(a) for a in arrays], axis=_to_py(dim)-1))
-        b["horzcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a], axis=1))
-        b["vertcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a], axis=0))
+        b["horzcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0], axis=1)) if any(np.asarray(_unwrap(x)).size > 0 for x in a) else ForgeArray(np.array([]).reshape(0, 0))
+        b["vertcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0], axis=0)) if any(np.asarray(_unwrap(x)).size > 0 for x in a) else ForgeArray(np.array([]).reshape(0, 0))
         b["fliplr"] = lambda x: ForgeArray(np.fliplr(_unwrap(x)))
         b["flipud"] = lambda x: ForgeArray(np.flipud(_unwrap(x)))
         b["rot90"] = lambda x, *a: ForgeArray(np.rot90(_unwrap(x), k=_to_py(a[0]) if a else 1))
@@ -767,7 +767,13 @@ class Session:
         for row in node.rows:
             vals = [_unwrap(self._eval_expr(e, ws)) for e in row]
             vals = [np.atleast_2d(v) if np.asarray(v).ndim < 2 else v for v in vals]
+            # Filter out empty arrays (MATLAB skips [] in concatenation)
+            vals = [v for v in vals if v.size > 0]
+            if not vals:
+                continue
             rows.append(np.concatenate(vals, axis=1))
+        if not rows:
+            return ForgeArray(np.array([]).reshape(0, 0))
         return ForgeArray(np.concatenate(rows, axis=0))
 
     def _eval_cell_literal(self, node: CellLiteral, ws: Workspace) -> ForgeCell:
