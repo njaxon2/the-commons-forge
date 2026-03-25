@@ -360,6 +360,33 @@ class Parser:
             except ParseError:
                 self.pos = saved
 
+        # Pre-check: path commands like "cd /path/to/dir" before expression parsing
+        _PRE_PATH_CMDS = {"cd", "edit", "type", "help", "doc"}
+        if (self._at(TokenType.IDENT) and self._peek().value in _PRE_PATH_CMDS):
+            _saved_pre = self.pos
+            _cmd_name = self._peek().value
+            _cmd_pos = self.pos
+            self._advance()  # consume the command name
+            _nxt = self._peek().type if self.pos < len(self.tokens) else TokenType.EOF
+            if _nxt in (TokenType.RDIVIDE, TokenType.DOT, TokenType.NOT):
+                # This looks like a path argument - consume rest of line
+                parts = []
+                while not self._at_end_of_statement() and self._peek().type != TokenType.EOF:
+                    tok = self._advance()
+                    parts.append(tok.value)
+                path_str = "".join(parts).strip()
+                cmd_ident = Identifier(_cmd_name)
+                if path_str:
+                    str_args = [StringLiteral(path_str, is_char=True)]
+                else:
+                    str_args = []
+                expr = Index(cmd_ident, str_args)
+                suppress = bool(self._match(TokenType.SEMICOLON))
+                self._match(TokenType.NEWLINE)
+                return ExpressionStatement(expr, not suppress)
+            else:
+                self.pos = _saved_pre  # backtrack
+
         expr = self._parse_expression(0)
 
         # Command-style syntax: hold on, axis equal, cd dir, etc.
@@ -370,11 +397,17 @@ class Parser:
             "colormap", "shading", "view", "cd", "type", "help",
             "doc", "edit", "dbstop", "dbclear", "dbcont",
         }
+        _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc"}
+        _next_tt = self._peek().type
+        _is_cmd_trigger = _next_tt == TokenType.IDENT
+        # For path commands, also trigger on / ~ . (common path starts)
+        if (not _is_cmd_trigger and isinstance(expr, Identifier)
+                and expr.name in _PATH_COMMANDS
+                and _next_tt in (TokenType.RDIVIDE, TokenType.LDIVIDE, TokenType.DOT, TokenType.NOT)):
+            _is_cmd_trigger = True
         if (isinstance(expr, Identifier)
                 and expr.name in _CMD_STYLE_NAMES
-                and self._peek().type == TokenType.IDENT):
-            # Path-accepting commands: consume rest of line as single string
-            _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc"}
+                and _is_cmd_trigger):
             if expr.name in _PATH_COMMANDS:
                 # Consume all tokens until end of statement, join as single path string
                 parts = []
