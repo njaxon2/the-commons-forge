@@ -247,6 +247,35 @@ class Session:
         b["assert"] = self._builtin_assert
         b["clc"] = lambda: None  # Clear command window (no-op in engine)
 
+        def _help_func(*args):
+            if not args:
+                self.output_buffer.write("Forge help system. Use: help <function_name>" + chr(10))
+                return
+            name = args[0]
+            if hasattr(name, "to_str"):
+                func_name = name.to_str()
+            else:
+                func_name = str(name)
+            func = self.functions.get(func_name)
+            if func and hasattr(func, "__doc__") and func.__doc__:
+                self.output_buffer.write("  " + func_name + ": " + func.__doc__ + chr(10))
+            else:
+                self.output_buffer.write("  " + func_name + ": No help available." + chr(10))
+        b["help"] = _help_func
+
+        def _which_func(*args):
+            if not args:
+                return
+            name = args[0]
+            if hasattr(name, "to_str"):
+                name = name.to_str()
+            name = str(name)
+            if name in self.functions:
+                self.output_buffer.write("  " + name + " is a built-in function" + chr(10))
+            else:
+                self.output_buffer.write("  " + name + " is undefined" + chr(10))
+        b["which"] = _which_func
+
         # Struct/cell
         b["struct"] = lambda *a: forge_struct(*a)
         b["fieldnames"] = forge_fieldnames

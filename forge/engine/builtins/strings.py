@@ -579,3 +579,123 @@ def forge_validatestring(s, valid_strings, func_name=None):
             f"Ambiguous string '{s}'{ctx}. "
             f"Matches: {', '.join(matches)}"
         )
+
+
+@_tb("upper")
+def forge_upper(s):
+    """Convert string to uppercase."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        return ForgeChar(s.to_str().upper())
+    return str(s).upper()
+
+
+@_tb("lower")
+def forge_lower(s):
+    """Convert string to lowercase."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        return ForgeChar(s.to_str().lower())
+    return str(s).lower()
+
+
+@_tb("toupper")
+def forge_toupper(s):
+    """Convert string to uppercase (alias for upper)."""
+    return forge_upper(s)
+
+
+@_tb("tolower")
+def forge_tolower(s):
+    """Convert string to lowercase (alias for lower)."""
+    return forge_lower(s)
+
+
+@_tb("num2str")
+def forge_num2str(x, fmt=None):
+    """Convert number to string."""
+    from forge.engine.types import ForgeArray
+    from forge.engine.containers import ForgeChar
+    import numpy as np
+    if isinstance(x, ForgeArray):
+        val = x._data.flat[0] if x._data.size == 1 else x._data
+        if isinstance(val, np.ndarray):
+            parts = []
+            for v in val.flat:
+                if fmt:
+                    parts.append(fmt % v)
+                elif v == int(v):
+                    parts.append(str(int(v)))
+                else:
+                    parts.append(str(v))
+            return ForgeChar(" ".join(parts))
+        x = val
+    if fmt:
+        return ForgeChar(fmt % x)
+    if isinstance(x, (int, float)) and x == int(x):
+        return ForgeChar(str(int(x)))
+    return ForgeChar(str(x))
+
+
+@_tb("sprintf")
+def forge_sprintf(fmt, *args):
+    """Format string with printf-style formatting."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    import numpy as np
+    if isinstance(fmt, ForgeChar):
+        fmt = fmt.to_str()
+    # Convert ForgeArray args to scalars where possible
+    converted = []
+    for a in args:
+        if isinstance(a, ForgeArray):
+            if a._data.size == 1:
+                converted.append(a._data.flat[0])
+            else:
+                converted.append(a._data)
+        elif isinstance(a, ForgeChar):
+            converted.append(a.to_str())
+        else:
+            converted.append(a)
+    try:
+        result = fmt % tuple(converted)
+    except TypeError:
+        result = fmt
+    return ForgeChar(result)
+
+
+@_tb("strcmp")
+def forge_strcmp(s1, s2):
+    import numpy as np
+    """Compare two strings (exact match)."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    a = s1.to_str() if isinstance(s1, ForgeChar) else str(s1)
+    b = s2.to_str() if isinstance(s2, ForgeChar) else str(s2)
+    return ForgeArray(np.float64(1.0 if a == b else 0.0))
+
+
+@_tb("strcmpi")
+def forge_strcmpi(s1, s2):
+    import numpy as np
+    """Compare two strings (case-insensitive)."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    a = s1.to_str() if isinstance(s1, ForgeChar) else str(s1)
+    b = s2.to_str() if isinstance(s2, ForgeChar) else str(s2)
+    return ForgeArray(np.float64(1.0 if a.lower() == b.lower() else 0.0))
+
+
+@_tb("regexpi")
+def forge_regexpi(s, pattern, *args):
+    """Case-insensitive regex match."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    import re
+    s_str = s.to_str() if isinstance(s, ForgeChar) else str(s)
+    pat = pattern.to_str() if isinstance(pattern, ForgeChar) else str(pattern)
+    matches = list(re.finditer(pat, s_str, re.IGNORECASE))
+    if not matches:
+        return ForgeArray._from_list([])
+    starts = [m.start() + 1 for m in matches]  # 1-based
+    return ForgeArray._from_list(starts)
