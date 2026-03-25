@@ -566,11 +566,17 @@ class Parser:
         if tt == TokenType.COLON:
             return PREC_COLON
         if tt in (TokenType.PLUS, TokenType.MINUS):
-            if self._in_matrix and self._paren_depth == 0 and self.pos > 0 and self.pos < len(self.tokens):
+            if self._in_matrix and self._paren_depth == 0 and self.pos > 0 and self.pos + 1 < len(self.tokens):
                 cur_tok = self.tokens[self.pos]
                 prev_tok = self.tokens[self.pos - 1]
+                next_tok = self.tokens[self.pos + 1]
                 prev_end = prev_tok.col + len(prev_tok.value)
-                if cur_tok.col > prev_end:
+                cur_end = cur_tok.col + len(cur_tok.value)
+                space_before = cur_tok.col > prev_end
+                space_after = next_tok.col > cur_end
+                # MATLAB rule: space before + no space after = unary (separator)
+                # space on both sides or no space = binary operator
+                if space_before and not space_after:
                     return 0
             return PREC_ADD
         if tt in (TokenType.TIMES, TokenType.RDIVIDE, TokenType.LDIVIDE,

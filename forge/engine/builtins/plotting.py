@@ -379,7 +379,12 @@ def forge_scatter3(x, y, z, **kwargs):
 
 def forge_surf(X, Y, Z, **kwargs):
     ax = _get_3d_ax()
-    ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
+    import matplotlib.cm as cm
+    if "cmap" not in kwargs:
+        kwargs["cmap"] = cm.viridis
+    surf_obj = ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
+    fig = plt.gcf()
+    fig._forge_last_mappable = surf_obj
     plt.draw()
     plt.pause(0.01)
 
