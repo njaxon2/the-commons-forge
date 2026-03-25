@@ -292,6 +292,7 @@ class Session:
         fmt = args[0]
         if isinstance(fmt, ForgeChar):
             fmt = fmt.to_str()
+        fmt = _process_c_escapes(fmt)
         # Handle array arguments: in MATLAB, fprintf repeats the format
         # for each element when given array args
         raw_vals = [_to_py(a) for a in args[1:]]
@@ -323,6 +324,7 @@ class Session:
         fmt = args[0]
         if isinstance(fmt, ForgeChar):
             fmt = fmt.to_str()
+        fmt = _process_c_escapes(fmt)
         vals = tuple(_to_py(a) for a in args[1:])
         return ForgeChar(fmt % vals)
 
@@ -1039,6 +1041,31 @@ class Session:
             vals, vecs = np.linalg.eig(x)
             return (ForgeArray(vecs), ForgeArray(np.diag(vals)))
         return None
+
+
+def _process_c_escapes(s):
+    """Process C-style escape sequences in format strings (MATLAB fprintf behavior)."""
+    result = []
+    i = 0
+    while i < len(s):
+        if s[i] == '\\' and i + 1 < len(s):
+            c = s[i + 1]
+            if c == 'n': result.append('\n'); i += 2
+            elif c == 't': result.append('\t'); i += 2
+            elif c == 'r': result.append('\r'); i += 2
+            elif c == '\\': result.append('\\'); i += 2
+            elif c == '0': result.append('\0'); i += 2
+            elif c == 'a': result.append('\a'); i += 2
+            elif c == 'b': result.append('\b'); i += 2
+            elif c == 'f': result.append('\f'); i += 2
+            elif c == 'v': result.append('\v'); i += 2
+            elif c == "'": result.append("'"); i += 2
+            elif c == '"': result.append('"'); i += 2
+            else: result.append(s[i]); i += 1
+        else:
+            result.append(s[i])
+            i += 1
+    return ''.join(result)
 
 def _to_py(val):
     """Convert ForgeArray scalar to Python number."""

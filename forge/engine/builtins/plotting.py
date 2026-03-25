@@ -35,7 +35,12 @@ def _maybe_clear():
 
 
 def _to_np(x):
-    return np.asarray(_unwrap(x), dtype=float)
+    arr = np.asarray(_unwrap(x), dtype=float)
+    # Flatten row/column vectors to 1D for matplotlib compatibility
+    # (matplotlib interprets 2D arrays as column-per-series)
+    if arr.ndim == 2 and (arr.shape[0] == 1 or arr.shape[1] == 1):
+        arr = arr.ravel()
+    return arr
 
 
 # ---------------------------------------------------------------------------
@@ -513,8 +518,20 @@ def forge_colormap(name: str):
 def forge_figure(n=None):
     """Create or switch to figure *n*."""
     if n is None:
-        return plt.figure()
-    return plt.figure(int(n))
+        fig = plt.figure()
+    else:
+        fig = plt.figure(int(n))
+    # Raise the figure window to the front
+    try:
+        manager = fig.canvas.manager
+        if hasattr(manager, 'window'):
+            manager.window.raise_()
+            manager.window.activateWindow()
+    except Exception:
+        pass
+    plt.draw()
+    plt.pause(0.01)
+    return fig
 
 
 def forge_subplot(m, n, p):

@@ -198,7 +198,9 @@ class ForgeSession:
             return '\n'.join(session.path)
 
         def forge_disp(x):
-            return session._format_result(x)
+            text = session._format_result(x)
+            if text:
+                session._engine.output_buffer.write(text + chr(10))
 
         def forge_exist(name):
             n = str(name)
