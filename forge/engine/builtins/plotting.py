@@ -396,7 +396,22 @@ def forge_zlabel(label: str):
 
 
 def forge_legend(*args, **kwargs):
-    _cur_ax().legend(*args, **kwargs)
+    # Convert ForgeChar args to Python strings
+    from forge.engine.containers import ForgeChar
+    labels = []
+    for a in args:
+        if isinstance(a, ForgeChar):
+            labels.append(a.to_str())
+        elif hasattr(a, 'to_str'):
+            labels.append(a.to_str())
+        elif isinstance(a, str):
+            labels.append(a)
+        else:
+            labels.append(str(a))
+    if labels:
+        _cur_ax().legend(labels, **kwargs)
+    else:
+        _cur_ax().legend(**kwargs)
     plt.draw()
     plt.pause(0.01)
 
@@ -423,6 +438,8 @@ def forge_axis(spec=None):
     ax = _cur_ax()
     if spec is None:
         return list(ax.axis())
+    if hasattr(spec, 'to_str'):
+        spec = spec.to_str()
     if isinstance(spec, str):
         ax.axis(spec)
     else:
