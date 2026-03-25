@@ -967,7 +967,7 @@ class Session:
                     else:
                         idx_int = int(_to_py(idx)) - 1
                         data.ravel(order='F')[idx_int] = assign_val
-                elif len(args) == 2:
+                elif len(args) >= 2:
                     slices = []
                     for dim, arg in enumerate(args):
                         if arg is None:
@@ -983,7 +983,7 @@ class Session:
                     idx_arrays = []
                     for i, s in enumerate(slices):
                         if isinstance(s, slice):
-                            idx_arrays.append(np.arange(data.shape[i]))
+                            idx_arrays.append(np.arange(data.shape[i] if i < len(data.shape) else 1))
                         elif isinstance(s, np.ndarray):
                             idx_arrays.append(s)
                         else:
