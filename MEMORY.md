@@ -1,56 +1,39 @@
 # Forge MEMORY.md — Session Continuity
 
-## Current State (R61)
-- **Last commit**: R61 — Poisson on NURBS-mapped quarter annulus
+## Current State (R67)
+- **Last commit**: R67 — Multi-patch full annulus with DOF stitching
 - **VPS**: ubuntu@15.204.8.77 (NOT 34.32.100.183 which is production)
 - **Display**: :99 port 5900 (GUI), :98 port 5901 (testing)
 - **Git branch**: master
 
-## Recent Commits
-- R54: Fix 2D elasticity body force, auto-call bare callable (t=toc)
-- R55: Stress recovery with von Mises visualization
-- R56: k-refinement study (C^(p-1) vs C^0)
-- R57: Fix cd /path command-form parsing, add helper scripts
-- R58: Major surface plot upgrade (surf, mesh, contourf, peaks, sombrero, etc.)
-- R59: V-model iterative development process documentation
-- R60: NURBS surface geometry (cylinder, sphere), 3D subplot fix
-- R61: Poisson on NURBS-mapped quarter annulus (error 2.37e-02, O(h²) convergence)
+## Recent Commits (R61-R67)
+- R61: Poisson on NURBS-mapped quarter annulus (error 2.37e-02)
+- R62: Eigenvalue problem on quarter annulus (λ₁=9.59)
+- R63: String builtins (upper/lower/strcmp/sprintf/num2str) + help/which
+- R64: Annulus gallery, view/clim/text plot functions
+- R65: squeeze/permute/ndims builtins
+- R66: Fix N-dimensional indexed assignment (A(i,j,k)=v)
+- R67: Multi-patch full annulus (4 patches, DOF stitching, error 1.54e-02)
 
-## Key Bug Fixes
-- J^{-T} vs J^{-1}: Inverse Jacobian for gradient transformation must use transpose
-  - Wrong: inv_J12 = -dx_deta/detJ, inv_J21 = -dy_dxi/detJ
-  - Right: inv_J12 = -dy_dxi/detJ, inv_J21 = -dx_deta/detJ
-- Auto-call bare callable in assignment RHS (evaluator.py _exec_assign)
-- cd /path command-form parsing (parser.py pre-check before expression parsing)
-- 3D subplot preservation (_get_3d_ax keeps subplot geometry)
+## Key Bug Fixes This Session
+- J^{-T} vs J^{-1}: gradient transformation uses transposed inverse Jacobian
+- N-D indexed assignment: changed len(args)==2 to len(args)>=2
+- Source term: f=16r²-4(R1²+R2²) for u=(r²-R1²)(R2²-r²)
 
-## TIGA Scripts (ForgeHome/tiga/)
-Working:
-- tiga_poisson1d.m — 1D Poisson, L2 error ~1e-06
-- tiga_convergence.m — h-refinement convergence rates
-- tiga_2d_poisson.m — 2D Poisson on unit square
-- tiga_elasticity.m — 2D plane stress, L2 error 2.58e-04
-- tiga_stress_recovery.m — Stress/strain from displacements
-- tiga_k_refinement.m — IGA vs FEA continuity comparison
-- tiga_nurbs_surface.m — Quarter cylinder (exact), quarter sphere
-- tiga_mapped_solution.m — Poisson on quarter annulus, error 2.37e-02
-- tiga_plot_showcase.m — 4-panel surface plot demo
+## TIGA Scripts Working
+- All 1D/2D scripts from previous sessions
+- tiga_mapped_solution.m — Poisson on quarter annulus, O(h²) convergence
+- tiga_mapped_eigen.m — Eigenvalue problem on quarter annulus
+- tiga_annulus_gallery.m — 2x3 subplot gallery (Poisson + modes)
+- tiga_multi_patch.m — Full annulus from 4 patches, smooth across interfaces
 
 ## Known Issues
-- help function not registered as standalone callable
-- upper/lower string functions not registered
+- 3D array display shows type info instead of values for large arrays
 - NURBS quarter sphere has 0.56 radius error (single patch limitation)
 - Plot window focus stealing in GUI (use headless for logic testing)
 
-## Workflow
-- Headless testing: python3 scripts/run_m.py "script_name"
-- Save figures: use Agg backend, fig.savefig()
-- GUI testing: DISPLAY=:99 with Forge app
-- Fast command: scripts/forge_cmd.sh "command"
-- Screenshot: scripts/forge_snap.sh
-
 ## Next Steps
-- More NURBS-mapped geometries (full annulus, multi-patch)
-- Surface plot enhancements (lighting, view angles, colormaps)
-- Eigenvalue problems on mapped domains
-- Register missing builtins (help, upper, lower)
+- Time-dependent problems (heat equation on annulus)
+- Higher-order elements (p=3, p=4)
+- Error estimation and adaptive refinement on mapped geometry
+- More surface plot features (contourf on mapped geometry)
