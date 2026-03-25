@@ -292,8 +292,32 @@ class Session:
         fmt = args[0]
         if isinstance(fmt, ForgeChar):
             fmt = fmt.to_str()
-        vals = tuple(_to_py(a) for a in args[1:])
-        self.output_buffer.write(fmt % vals)
+        # Handle array arguments: in MATLAB, fprintf repeats the format
+        # for each element when given array args
+        raw_vals = [_to_py(a) for a in args[1:]]
+        # Check if any arg is an array with multiple elements
+        import numpy as _np
+        has_array = any(hasattr(v, '__len__') and _np.asarray(v).size > 1 for v in raw_vals)
+        if has_array and len(raw_vals) == 1:
+            # Single array arg: repeat format for each element
+            arr = _np.asarray(raw_vals[0]).ravel()
+            out = ''
+            for val in arr:
+                out += fmt % (float(val),)
+            self.output_buffer.write(out)
+        elif not has_array:
+            # All scalar args
+            vals = tuple(float(v) if isinstance(v, (_np.floating, _np.integer)) else v for v in raw_vals)
+            self.output_buffer.write(fmt % vals)
+        else:
+            # Multiple args, some arrays: try element-wise
+            arrays = [_np.asarray(v).ravel() for v in raw_vals]
+            max_len = max(len(a) for a in arrays)
+            out = ''
+            for i in range(max_len):
+                vals = tuple(float(a[min(i, len(a)-1)]) for a in arrays)
+                out += fmt % vals
+            self.output_buffer.write(out)
 
     def _builtin_sprintf(self, *args):
         fmt = args[0]
