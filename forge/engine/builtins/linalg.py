@@ -283,6 +283,14 @@ def _forge_kron(A, B):
     return ForgeArray(np.kron(_unwrap(A), _unwrap(B)))
 
 def _forge_eig(A):
+    """eig(A) returns eigenvalues as a column vector (MATLAB single-output behavior)."""
+    vals = np.linalg.eigvalsh(_unwrap(A)) if np.allclose(_unwrap(A), _unwrap(A).T) else np.linalg.eig(_unwrap(A))[0]
+    vals = np.sort(np.real(vals))
+    return ForgeArray(np.atleast_2d(vals).T)  # column vector
+
+
+def _forge_eig_full(A):
+    """[V,D] = eig(A) returns eigenvectors and diagonal eigenvalue matrix."""
     vals, vecs = np.linalg.eig(_unwrap(A))
     return ForgeArray(vecs), ForgeArray(np.diag(vals))
 
@@ -334,7 +342,7 @@ LINALG_REGISTRY = {
     "condeig": forge_condeig, "lscov": forge_lscov, "ols": forge_ols,
     "tensorprod": forge_tensorprod,
     "inv": _forge_inv, "det": _forge_det, "norm": _forge_norm,
-    "pinv": _forge_pinv, "kron": _forge_kron, "eig": _forge_eig,
+    "pinv": _forge_pinv, "kron": _forge_kron, "eig": _forge_eig, "eig_full": _forge_eig_full,
     "svd": _forge_svd, "lu": _forge_lu, "qr": _forge_qr,
     "chol": _forge_chol, "fft": _forge_fft, "ifft": _forge_ifft,
     "fft2": _forge_fft2, "ifft2": _forge_ifft2,

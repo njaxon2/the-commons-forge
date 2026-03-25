@@ -372,10 +372,24 @@ class Parser:
         if (isinstance(expr, Identifier)
                 and expr.name in _CMD_STYLE_NAMES
                 and self._peek().type == TokenType.IDENT):
-            # Collect remaining identifiers as string arguments
-            str_args = []
-            while self._peek().type == TokenType.IDENT:
-                str_args.append(StringLiteral(self._advance().value, is_char=True))
+            # Path-accepting commands: consume rest of line as single string
+            _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc"}
+            if expr.name in _PATH_COMMANDS:
+                # Consume all tokens until end of statement, join as single path string
+                parts = []
+                while not self._at_end_of_statement() and self._peek().type != TokenType.EOF:
+                    tok = self._advance()
+                    parts.append(tok.value)
+                path_str = "".join(parts).strip()
+                if path_str:
+                    str_args = [StringLiteral(path_str, is_char=True)]
+                else:
+                    str_args = []
+            else:
+                # Regular command-style: collect identifiers as separate string args
+                str_args = []
+                while self._peek().type == TokenType.IDENT:
+                    str_args.append(StringLiteral(self._advance().value, is_char=True))
             expr = Index(expr, str_args)
 
         # Check for assignment: expr = value
