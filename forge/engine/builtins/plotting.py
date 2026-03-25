@@ -901,6 +901,98 @@ def forge_pause(t=None):
         plt.pause(0.1)
 
 
+
+def forge_view(*args):
+    """Set 3D view angle. view(az, el) or view(2) or view(3)."""
+    from forge.engine.types import ForgeArray
+    ax = _cur_ax()
+    if len(args) == 1:
+        v = args[0]
+        if isinstance(v, ForgeArray):
+            v = float(v.data.flat[0])
+        v = int(v)
+        if v == 2:
+            ax.view_init(elev=90, azim=-90)
+        elif v == 3:
+            ax.view_init(elev=30, azim=-37.5)
+    elif len(args) == 2:
+        az = args[0]
+        el = args[1]
+        if isinstance(az, ForgeArray):
+            az = float(az.data.flat[0])
+        if isinstance(el, ForgeArray):
+            el = float(el.data.flat[0])
+        ax.view_init(elev=float(el), azim=float(az))
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_clim(*args):
+    """Set color axis limits. clim([lo hi]) or clim(lo, hi)."""
+    from forge.engine.types import ForgeArray
+    ax = _cur_ax()
+    if len(args) == 1:
+        v = args[0]
+        if isinstance(v, ForgeArray):
+            v = v.data.flatten()
+        lo, hi = float(v[0]), float(v[1])
+    elif len(args) == 2:
+        lo = float(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else float(args[0])
+        hi = float(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else float(args[1])
+    else:
+        return
+    for im in ax.get_images() + ax.collections:
+        if hasattr(im, "set_clim"):
+            im.set_clim(lo, hi)
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_rotate3d(state=None):
+    """Enable/disable 3D rotation."""
+    pass
+
+
+def forge_set_prop(*args):
+    """Set graphics object property. set(h, prop, val)."""
+    from forge.engine.types import ForgeArray
+    from forge.engine.containers import ForgeChar
+    if len(args) >= 3:
+        for i in range(1, len(args)-1, 2):
+            prop = args[i]
+            val = args[i+1]
+            if isinstance(prop, ForgeChar):
+                prop = prop.to_str()
+            if isinstance(val, ForgeChar):
+                val = val.to_str()
+            prop = str(prop).lower()
+            ax = _cur_ax()
+            if prop == "fontsize":
+                if isinstance(val, ForgeArray):
+                    val = float(val.data.flat[0])
+                ax.title.set_fontsize(val)
+
+
+def forge_get_prop(*args):
+    """Get graphics object property."""
+    return None
+
+
+def forge_text_func(*args):
+    """Add text annotation. text(x, y, str)."""
+    from forge.engine.types import ForgeArray
+    from forge.engine.containers import ForgeChar
+    ax = _cur_ax()
+    if len(args) >= 3:
+        x = float(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else float(args[0])
+        y = float(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else float(args[1])
+        s = args[2]
+        if isinstance(s, ForgeChar):
+            s = s.to_str()
+        ax.text(x, y, str(s))
+    plt.draw()
+    plt.pause(0.01)
+
 PLOTTING_REGISTRY = {
     # 2-D
     "plot":         forge_plot,
@@ -964,4 +1056,12 @@ PLOTTING_REGISTRY = {
     "print":        forge_print_fig,
     "drawnow":      forge_drawnow,
     "pause":        forge_pause,
+    # View and display
+    "view":          forge_view,
+    "clim":          forge_clim,
+    "caxis":         forge_clim,
+    "rotate3d":      forge_rotate3d,
+    "set":           forge_set_prop,
+    "get":           forge_get_prop,
+    "text":          forge_text_func,
 }
