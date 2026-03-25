@@ -138,6 +138,33 @@ class Session:
         b["linspace"] = lambda *a: forge_linspace(*[_to_py(x) for x in a])
         b["repmat"] = lambda *a: forge_repmat(*a)
 
+        def _meshgrid(*args):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            arrays = [_unwrap(a) if isinstance(a, ForgeArray) else np.asarray(a) for a in args]
+            arrays = [a.flatten() for a in arrays]
+            if len(arrays) == 2:
+                X, Y = np.meshgrid(arrays[0], arrays[1])
+                return ForgeArray(X), ForgeArray(Y)
+            elif len(arrays) == 3:
+                X, Y, Z = np.meshgrid(arrays[0], arrays[1], arrays[2], indexing="xy")
+                return ForgeArray(X), ForgeArray(Y), ForgeArray(Z)
+            elif len(arrays) == 1:
+                X, Y = np.meshgrid(arrays[0], arrays[0])
+                return ForgeArray(X), ForgeArray(Y)
+            else:
+                raise ValueError("meshgrid requires 1-3 arguments")
+
+        def _ndgrid(*args):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            arrays = [_unwrap(a).flatten() if isinstance(a, ForgeArray) else np.asarray(a).flatten() for a in args]
+            grids = np.meshgrid(*arrays, indexing="ij")
+            return tuple(ForgeArray(g) for g in grids)
+
+        b["meshgrid"] = _meshgrid
+        b["ndgrid"] = _ndgrid
+
         # Type conversion
         b["double"] = forge_double
         b["single"] = forge_single

@@ -377,57 +377,130 @@ def forge_scatter3(x, y, z, **kwargs):
     plt.pause(0.01)
 
 
-def forge_surf(X, Y, Z, **kwargs):
+def _prepare_surf_args(*args):
+    """Parse surf/mesh args: surf(Z), surf(X,Y,Z), surf(...,C), surf(...,prop,val)"""
+    from forge.engine.types import ForgeArray
+    from forge.engine.containers import ForgeChar
+    converted = []
+    props = {}
+    i = 0
+    raw = list(args)
+    while i < len(raw):
+        a = raw[i]
+        if isinstance(a, ForgeChar):
+            # Property name - next arg is value
+            key = a.to_str().lower()
+            if i + 1 < len(raw):
+                val = raw[i + 1]
+                if isinstance(val, (ForgeArray,)):
+                    val = _to_np(val)
+                    if val.size == 1:
+                        val = float(val.flat[0])
+                elif isinstance(val, ForgeChar):
+                    val = val.to_str()
+                props[key] = val
+                i += 2
+                continue
+            i += 1
+            continue
+        converted.append(_to_np(a) if hasattr(a, "__array__") or isinstance(a, ForgeArray) else a)
+        i += 1
+
+    if len(converted) == 1:
+        Z = converted[0]
+        m, n = Z.shape
+        X, Y = np.meshgrid(np.arange(1, n + 1, dtype=float), np.arange(1, m + 1, dtype=float))
+        C = None
+    elif len(converted) == 2:
+        Z, C = converted[0], converted[1]
+        m, n = Z.shape
+        X, Y = np.meshgrid(np.arange(1, n + 1, dtype=float), np.arange(1, m + 1, dtype=float))
+    elif len(converted) == 3:
+        X, Y, Z = converted[0], converted[1], converted[2]
+        # Auto-meshgrid if X,Y are 1D vectors
+        if X.ndim == 1 and Y.ndim == 1:
+            X, Y = np.meshgrid(X, Y)
+        C = None
+    elif len(converted) >= 4:
+        X, Y, Z, C = converted[0], converted[1], converted[2], converted[3]
+        if X.ndim == 1 and Y.ndim == 1:
+            X, Y = np.meshgrid(X, Y)
+    else:
+        raise ValueError("surf requires at least 1 argument (Z)")
+    return X, Y, Z, C, props
+
+
+def forge_surf(*args, **kwargs):
     ax = _get_3d_ax()
-    import matplotlib.cm as cm
-    if "cmap" not in kwargs:
-        kwargs["cmap"] = cm.viridis
-    surf_obj = ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {"cmap": "viridis", "edgecolor": "none"}
+    if C is not None:
+        kw["facecolors"] = plt.cm.viridis((C - C.min()) / max(C.ptp(), 1e-15))
+    kw.update(props)
+    kw.update(kwargs)
+    surf_obj = ax.plot_surface(X, Y, Z, **kw)
     fig = plt.gcf()
     fig._forge_last_mappable = surf_obj
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_surfc(X, Y, Z, **kwargs):
+def forge_surfc(*args, **kwargs):
     ax = _get_3d_ax()
-    ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z), alpha=0.7, **kwargs)
-    ax.contour(_to_np(X), _to_np(Y), _to_np(Z), zdir="z",
-               offset=_to_np(Z).min())
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {"alpha": 0.7, "cmap": "viridis"}
+    kw.update(props)
+    kw.update(kwargs)
+    surf_obj = ax.plot_surface(X, Y, Z, **kw)
+    ax.contour(X, Y, Z, zdir="z", offset=Z.min())
+    fig = plt.gcf()
+    fig._forge_last_mappable = surf_obj
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_surfl(X, Y, Z, **kwargs):
+def forge_surfl(*args, **kwargs):
     ax = _get_3d_ax()
-    ax.plot_surface(_to_np(X), _to_np(Y), _to_np(Z),
-                    rstride=1, cstride=1, shade=True, **kwargs)
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {"rstride": 1, "cstride": 1, "shade": True, "cmap": "copper"}
+    kw.update(props)
+    kw.update(kwargs)
+    ax.plot_surface(X, Y, Z, **kw)
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_mesh(X, Y, Z, **kwargs):
+def forge_mesh(*args, **kwargs):
     ax = _get_3d_ax()
-    ax.plot_wireframe(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {}
+    kw.update(props)
+    kw.update(kwargs)
+    ax.plot_wireframe(X, Y, Z, **kw)
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_meshc(X, Y, Z, **kwargs):
+def forge_meshc(*args, **kwargs):
     ax = _get_3d_ax()
-    ax.plot_wireframe(_to_np(X), _to_np(Y), _to_np(Z), **kwargs)
-    ax.contour(_to_np(X), _to_np(Y), _to_np(Z), zdir="z",
-               offset=_to_np(Z).min())
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {}
+    kw.update(props)
+    kw.update(kwargs)
+    ax.plot_wireframe(X, Y, Z, **kw)
+    ax.contour(X, Y, Z, zdir="z", offset=Z.min())
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_meshz(X, Y, Z, **kwargs):
+def forge_meshz(*args, **kwargs):
     ax = _get_3d_ax()
-    Zn = _to_np(Z)
-    ax.plot_wireframe(_to_np(X), _to_np(Y), Zn, **kwargs)
-    # "curtain" along edges
-    ax.plot_surface(_to_np(X), _to_np(Y), np.zeros_like(Zn), alpha=0.1)
+    X, Y, Z, C, props = _prepare_surf_args(*args)
+    kw = {}
+    kw.update(props)
+    kw.update(kwargs)
+    ax.plot_wireframe(X, Y, Z, **kw)
+    ax.plot_surface(X, Y, np.zeros_like(Z), alpha=0.1)
     plt.draw()
     plt.pause(0.01)
 
@@ -477,6 +550,95 @@ def forge_waterfall(X, Y, Z, **kwargs):
         ax.plot(Xn[i, :], Yn[i, :], Zn[i, :], color="blue", **kwargs)
     plt.draw()
     plt.pause(0.01)
+
+
+def forge_pcolor(*args, **kwargs):
+    """pcolor(Z), pcolor(X,Y,Z) - pseudocolor plot"""
+    from forge.engine.types import ForgeArray
+    _maybe_clear()
+    arrays = [_to_np(a) for a in args if hasattr(a, "__array__") or isinstance(a, ForgeArray)]
+    if len(arrays) == 1:
+        Z = arrays[0]
+        pc = _cur_ax().pcolormesh(Z, shading="auto", **kwargs)
+    elif len(arrays) >= 3:
+        X, Y, Z = arrays[0], arrays[1], arrays[2]
+        if X.ndim == 1 and Y.ndim == 1:
+            X, Y = np.meshgrid(X, Y)
+        pc = _cur_ax().pcolormesh(X, Y, Z, shading="auto", **kwargs)
+    else:
+        raise ValueError("pcolor requires 1 or 3 array arguments")
+    _cur_fig()._forge_last_mappable = pc
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_imagesc(*args, **kwargs):
+    """imagesc(Z), imagesc(x,y,Z) - scaled image display"""
+    from forge.engine.types import ForgeArray
+    _maybe_clear()
+    arrays = [_to_np(a) for a in args if hasattr(a, "__array__") or isinstance(a, ForgeArray)]
+    if len(arrays) == 1:
+        Z = arrays[0]
+        im = _cur_ax().imshow(Z, aspect="auto", origin="upper", **kwargs)
+    elif len(arrays) >= 3:
+        x, y, Z = arrays[0].flatten(), arrays[1].flatten(), arrays[2]
+        extent = [x[0], x[-1], y[-1], y[0]]
+        im = _cur_ax().imshow(Z, aspect="auto", origin="upper", extent=extent, **kwargs)
+    else:
+        raise ValueError("imagesc requires 1 or 3 arguments")
+    _cur_fig()._forge_last_mappable = im
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_shading(*args):
+    """shading flat/interp/faceted - change surface shading"""
+    from forge.engine.containers import ForgeChar
+    if not args:
+        return
+    mode = args[0]
+    if isinstance(mode, ForgeChar):
+        mode = mode.to_str()
+    mode = str(mode).lower()
+    ax = _cur_ax()
+    for coll in ax.collections:
+        if hasattr(coll, "set_edgecolor"):
+            if mode == "flat":
+                coll.set_edgecolor("face")
+            elif mode == "interp":
+                coll.set_edgecolor("none")
+            elif mode == "faceted":
+                coll.set_edgecolor("black")
+                coll.set_linewidth(0.5)
+    plt.draw()
+    plt.pause(0.01)
+
+
+def forge_peaks(*args):
+    """[X,Y,Z] = peaks(n) - MATLAB test surface"""
+    from forge.engine.types import ForgeArray
+    n = 49
+    if args:
+        n = int(_to_np(args[0]).flat[0])
+    x = np.linspace(-3, 3, n)
+    y = np.linspace(-3, 3, n)
+    X, Y = np.meshgrid(x, y)
+    Z = 3 * (1 - X)**2 * np.exp(-X**2 - (Y + 1)**2)         - 10 * (X / 5 - X**3 - Y**5) * np.exp(-X**2 - Y**2)         - 1/3 * np.exp(-(X + 1)**2 - Y**2)
+    return ForgeArray(X), ForgeArray(Y), ForgeArray(Z)
+
+
+def forge_sombrero(*args):
+    """[X,Y,Z] = sombrero(n) - sinc hat function"""
+    from forge.engine.types import ForgeArray
+    n = 41
+    if args:
+        n = int(_to_np(args[0]).flat[0])
+    x = np.linspace(-8, 8, n)
+    y = np.linspace(-8, 8, n)
+    X, Y = np.meshgrid(x, y)
+    R = np.sqrt(X**2 + Y**2) + np.finfo(float).eps
+    Z = np.sin(R) / R
+    return ForgeArray(X), ForgeArray(Y), ForgeArray(Z)
 
 
 # ===================================================================
@@ -762,6 +924,11 @@ PLOTTING_REGISTRY = {
     "contourf":     forge_contourf,
     "contour3":     forge_contour3,
     "waterfall":    forge_waterfall,
+    "pcolor":       forge_pcolor,
+    "imagesc":      forge_imagesc,
+    "shading":      forge_shading,
+    "peaks":        forge_peaks,
+    "sombrero":     forge_sombrero,
     # Formatting
     "title":        forge_title,
     "xlabel":       forge_xlabel,
