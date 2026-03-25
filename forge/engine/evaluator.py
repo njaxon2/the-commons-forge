@@ -217,6 +217,7 @@ class Session:
         b["sprintf"] = self._builtin_sprintf
         b["error"] = self._builtin_error
         b["warning"] = self._builtin_warning
+        b["assert"] = self._builtin_assert
         b["clc"] = lambda: None  # Clear command window (no-op in engine)
 
         # Struct/cell
@@ -358,6 +359,27 @@ class Session:
         if isinstance(msg, ForgeChar):
             msg = msg.to_str()
         raise ForgeError("", str(msg))
+
+    def _builtin_assert(self, *args):
+        """MATLAB-style assert: assert(cond), assert(obs, exp), assert(obs, exp, tol)."""
+        if len(args) == 1:
+            val = args[0]
+            if isinstance(val, ForgeArray):
+                if not np.all(val.data != 0):
+                    raise ForgeError("assert failed")
+            elif not val:
+                raise ForgeError("assert failed")
+        elif len(args) == 2:
+            obs = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
+            exp = _unwrap(args[1]) if isinstance(args[1], ForgeArray) else np.asarray(args[1])
+            if not np.allclose(obs, exp):
+                raise ForgeError(f"assert failed: observed differs from expected")
+        elif len(args) == 3:
+            obs = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
+            exp = _unwrap(args[1]) if isinstance(args[1], ForgeArray) else np.asarray(args[1])
+            tol = float(_to_py(args[2]))
+            if not np.allclose(obs, exp, atol=tol, rtol=0):
+                raise ForgeError(f"assert failed: max diff = {np.max(np.abs(obs - exp)):.4e}, tol = {tol:.4e}")
 
     def _builtin_warning(self, *args):
         msg = args[0]
