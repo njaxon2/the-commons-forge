@@ -843,6 +843,10 @@ class Session:
 
     def _exec_assign(self, node: Assignment, ws: Workspace) -> Any:
         value = self._eval_expr(node.value, ws)
+        # Auto-call bare callable identifiers on RHS (e.g., t = toc)
+        if callable(value) and not isinstance(value, ForgeArray):
+            if isinstance(node.value, Identifier):
+                value = value()
         target = node.targets
 
         if isinstance(target, list):
