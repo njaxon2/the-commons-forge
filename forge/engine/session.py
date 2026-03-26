@@ -1772,6 +1772,312 @@ class ForgeSession:
         session._engine.functions["clock"] = forge_clock
         session._engine.functions["datestr"] = forge_datestr
 
+        # R120: sscanf, textscan, sylvester, inputParser, validateattributes, fscanf
+        def forge_sscanf(s, fmt, *args):
+            """sscanf(str, format) — read formatted data from string."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(fmt, ForgeChar):
+                fmt = fmt.to_str()
+            import re
+            # Simple C-style format parsing
+            values = []
+            pos = 0
+            fmt_parts = re.findall(r'%[dfiusgc]|%[0-9]*[dfiusgc]|[^%]+', fmt)
+            for part in fmt_parts:
+                if pos >= len(s):
+                    break
+                if part.startswith('%'):
+                    spec = part[-1]
+                    # Skip whitespace before numeric reads
+                    while pos < len(s) and s[pos] in ' \t\n':
+                        pos += 1
+                    if spec in ('d', 'i', 'u'):
+                        m = re.match(r'[+-]?\d+', s[pos:])
+                        if m:
+                            values.append(float(m.group()))
+                            pos += m.end()
+                    elif spec == 'f':
+                        m = re.match(r'[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?', s[pos:])
+                        if m:
+                            values.append(float(m.group()))
+                            pos += m.end()
+                    elif spec == 's':
+                        m = re.match(r'\S+', s[pos:])
+                        if m:
+                            values.append(m.group())
+                            pos += m.end()
+                    elif spec in ('c', 'g'):
+                        if spec == 'c':
+                            values.append(s[pos])
+                            pos += 1
+                        else:
+                            m = re.match(r'[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?', s[pos:])
+                            if m:
+                                values.append(float(m.group()))
+                                pos += m.end()
+                else:
+                    # Literal text — advance past it
+                    if s[pos:pos+len(part)] == part:
+                        pos += len(part)
+            # Return as array if all numeric, else cell
+            if all(isinstance(v, (int, float)) for v in values):
+                if len(values) == 1:
+                    return ForgeArray(np.float64(values[0]))
+                return ForgeArray(np.array(values, dtype=np.float64))
+            # Mixed: return first value
+            if len(values) == 1:
+                if isinstance(values[0], str):
+                    return ForgeChar(values[0])
+                return ForgeArray(np.float64(values[0]))
+            return ForgeArray(np.array([v for v in values if isinstance(v, (int, float))], dtype=np.float64))
+
+        def forge_fscanf(fid, fmt, *args):
+            """fscanf(fid, format) — read formatted data from file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fid, ForgeArray):
+                fid = int(fid.data.flat[0])
+            if isinstance(fmt, ForgeChar):
+                fmt = fmt.to_str()
+            if fid in session._open_files:
+                data = session._open_files[fid].read()
+                return forge_sscanf(ForgeChar(data), ForgeChar(fmt))
+            raise RuntimeError(f"Invalid file ID: {fid}")
+
+        def forge_textscan(fid_or_str, fmt, *args):
+            """textscan(str, format) — read formatted text into cell array."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            from forge.engine.types import ForgeArray
+            if isinstance(fid_or_str, ForgeChar):
+                text = fid_or_str.to_str()
+            elif isinstance(fid_or_str, ForgeArray):
+                fid = int(fid_or_str.data.flat[0])
+                if fid in session._open_files:
+                    text = session._open_files[fid].read()
+                else:
+                    raise RuntimeError(f"Invalid file ID: {fid}")
+            else:
+                text = str(fid_or_str)
+            if isinstance(fmt, ForgeChar):
+                fmt = fmt.to_str()
+            import re
+            specs = re.findall(r'%[dfiusg]|%[0-9]*[dfiusg]', fmt)
+            # Parse lines
+            columns = [[] for _ in specs]
+            for line in text.strip().split('\n'):
+                tokens = line.split()
+                for j, (spec, tok) in enumerate(zip(specs, tokens)):
+                    s = spec[-1]
+                    if s in ('d', 'i', 'u'):
+                        columns[j].append(float(tok))
+                    elif s == 'f':
+                        columns[j].append(float(tok))
+                    elif s == 's':
+                        columns[j].append(tok)
+                    elif s == 'g':
+                        columns[j].append(float(tok))
+            result = []
+            for col in columns:
+                if col and isinstance(col[0], (int, float)):
+                    result.append(ForgeArray(np.array(col, dtype=np.float64).reshape(-1, 1)))
+                else:
+                    result.append(ForgeCell([ForgeChar(s) for s in col]))
+            return ForgeCell(result)
+
+        def forge_sylvester(A, B, C):
+            """sylvester(A, B, C) — solve Sylvester equation AX + XB = C."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_sylvester
+            a = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            b = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            c = C.data if isinstance(C, ForgeArray) else np.atleast_2d(C)
+            return ForgeArray(solve_sylvester(a, b, c))
+
+        def forge_validateattributes(A, classes, attrs):
+            """validateattributes(A, classes, attributes) — validate input."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeCell
+            # Basic validation — just pass for now, raise on obvious failures
+            if isinstance(A, ForgeArray):
+                data = A.data
+                if isinstance(attrs, ForgeCell):
+                    for i in range(attrs.numel()):
+                        attr = attrs.content_get(i + 1)
+                        if isinstance(attr, ForgeChar):
+                            a = attr.to_str()
+                            if a == 'nonempty' and data.size == 0:
+                                raise ValueError("Expected nonempty input")
+                            elif a == 'scalar' and data.size != 1:
+                                raise ValueError("Expected scalar input")
+                            elif a == 'vector' and data.ndim > 1 and min(data.shape) > 1:
+                                raise ValueError("Expected vector input")
+                            elif a == 'positive' and np.any(data <= 0):
+                                raise ValueError("Expected positive values")
+                            elif a == 'nonnegative' and np.any(data < 0):
+                                raise ValueError("Expected nonnegative values")
+                            elif a == 'finite' and not np.all(np.isfinite(data)):
+                                raise ValueError("Expected finite values")
+                            elif a == 'nonnan' and np.any(np.isnan(data)):
+                                raise ValueError("Expected non-NaN values")
+                            elif a == 'integer' and not np.all(data == np.floor(data)):
+                                raise ValueError("Expected integer values")
+            return ForgeArray(np.array(0.0))
+
+        class ForgeInputParser:
+            """inputParser — parse and validate function inputs."""
+            def __init__(self):
+                self.Results = {}
+                self._required = []
+                self._optional = []
+                self._params = {}
+            def addRequired(self, name, validator=None):
+                self._required.append((name, validator))
+            def addOptional(self, name, default, validator=None):
+                self._optional.append((name, default, validator))
+            def addParameter(self, name, default, validator=None):
+                self._params[name] = (default, validator)
+            def parse(self, *args):
+                idx = 0
+                for name, validator in self._required:
+                    if idx >= len(args):
+                        raise ValueError(f"Required argument '{name}' missing")
+                    self.Results[name] = args[idx]
+                    idx += 1
+                for name, default, validator in self._optional:
+                    if idx < len(args):
+                        self.Results[name] = args[idx]
+                        idx += 1
+                    else:
+                        self.Results[name] = default
+                # Name-value pairs
+                while idx < len(args) - 1:
+                    key = args[idx]
+                    if isinstance(key, str) and key in self._params:
+                        self.Results[key] = args[idx + 1]
+                        idx += 2
+                    else:
+                        break
+                for name, (default, validator) in self._params.items():
+                    if name not in self.Results:
+                        self.Results[name] = default
+
+        def forge_inputParser():
+            """inputParser() — create input parser object."""
+            return ForgeInputParser()
+
+        # Additional useful functions
+        def forge_accumarray(subs, val, *args):
+            """accumarray(subs, val) — accumulate values by subscripts."""
+            from forge.engine.types import ForgeArray
+            if isinstance(subs, ForgeArray):
+                subs = subs.data.flatten().astype(int)
+            if isinstance(val, ForgeArray):
+                val = val.data.flatten()
+            n = int(subs.max())
+            result = np.zeros(n)
+            for i, s in enumerate(subs):
+                v = val[i] if i < len(val) else val[0] if len(val) == 1 else 0
+                result[int(s) - 1] += v
+            return ForgeArray(result.reshape(-1, 1))
+
+        def forge_histc(x, edges):
+            """histc(x, edges) — histogram bin counts."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(edges, ForgeArray):
+                edges = edges.data.flatten()
+            counts = np.zeros(len(edges))
+            for i in range(len(edges) - 1):
+                mask = (x >= edges[i]) & (x < edges[i + 1])
+                counts[i] = np.sum(mask)
+            # Last bin includes right edge
+            counts[-1] = np.sum(x == edges[-1])
+            return ForgeArray(counts.reshape(-1, 1))
+
+        def forge_histcounts(x, *args):
+            """histcounts(x) — histogram bin counts (modern)."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if args and isinstance(args[0], ForgeArray):
+                edges = args[0].data.flatten()
+                counts, _ = np.histogram(x, bins=edges)
+            else:
+                counts, edges = np.histogram(x)
+            return ForgeArray(counts.astype(np.float64)), ForgeArray(edges)
+
+        def forge_discretize(x, edges):
+            """discretize(x, edges) — bin data into categories."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(edges, ForgeArray):
+                edges = edges.data.flatten()
+            bins = np.digitize(x, edges)
+            return ForgeArray(bins.astype(np.float64))
+
+        def forge_movmean(x, k):
+            """movmean(x, k) — moving average."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            result = np.convolve(x, np.ones(k)/k, mode='same')
+            return ForgeArray(result)
+
+        def forge_movsum(x, k):
+            """movsum(x, k) — moving sum."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            result = np.convolve(x, np.ones(k), mode='same')
+            return ForgeArray(result)
+
+        def forge_movstd(x, k):
+            """movstd(x, k) — moving standard deviation."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                xd = x.data.flatten()
+            else:
+                xd = np.array(x).flatten()
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            n = len(xd)
+            result = np.zeros(n)
+            half = k // 2
+            for i in range(n):
+                lo = max(0, i - half)
+                hi = min(n, i + half + 1)
+                result[i] = np.std(xd[lo:hi], ddof=1) if (hi - lo) > 1 else 0
+            return ForgeArray(result)
+
+        def forge_table(*args):
+            """table(vars...) — create a table (simplified)."""
+            from forge.engine.containers import ForgeCell
+            return ForgeCell(list(args))
+
+        session._engine.functions["sscanf"] = forge_sscanf
+        session._engine.functions["fscanf"] = forge_fscanf
+        session._engine.functions["textscan"] = forge_textscan
+        session._engine.functions["sylvester"] = forge_sylvester
+        session._engine.functions["validateattributes"] = forge_validateattributes
+        session._engine.functions["inputParser"] = forge_inputParser
+        session._engine.functions["accumarray"] = forge_accumarray
+        session._engine.functions["histc"] = forge_histc
+        session._engine.functions["histcounts"] = forge_histcounts
+        session._engine.functions["discretize"] = forge_discretize
+        session._engine.functions["movmean"] = forge_movmean
+        session._engine.functions["movsum"] = forge_movsum
+        session._engine.functions["movstd"] = forge_movstd
+        session._engine.functions["table"] = forge_table
+
 
 
 
