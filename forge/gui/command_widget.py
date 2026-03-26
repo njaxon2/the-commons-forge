@@ -65,6 +65,8 @@ class CommandWidget(QWidget):
 
     def _show_initial_prompt(self):
         self.console.clear()
+        self._append_text("Forge 0.1 \u2014 Octave-compatible computing environment\n")
+        self._append_text("Type commands at the >> prompt. Use up/down for history.\n\n")
         self._write_prompt()
 
     # ------------------------------------------------------------------
@@ -245,7 +247,6 @@ class CommandWidget(QWidget):
         # Multi-line continuation
         if text.rstrip().endswith("..."):
             self._accumulator.append(text.rstrip()[:-3])
-            self._write_prompt()
             return
 
         if self._accumulator:
