@@ -1288,6 +1288,55 @@ def forge_text_func(*args):
     plt.draw()
     plt.pause(0.01)
 
+
+def forge_xline(x, *args):
+    """xline(x) - vertical line at x."""
+    import matplotlib.pyplot as plt
+    xv = float(_to_np(x).flat[0]) if hasattr(x, 'data') else float(x)
+    style_kw = {}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if isinstance(a, str):
+            if a == "LineWidth" and i + 1 < len(args):
+                style_kw['linewidth'] = float(_to_np(args[i+1]).flat[0]) if hasattr(args[i+1], 'data') else float(args[i+1])
+                i += 2; continue
+            elif len(a) <= 4 and not a[0].isupper():
+                style_kw['linestyle'] = a[:2] if len(a) > 1 and a[0] == '-' else '-'
+                if a[-1].isalpha(): style_kw['color'] = a[-1]
+                i += 1; continue
+        i += 1
+    _cur_ax().axvline(x=xv, **style_kw)
+    return _FA(np.array(xv))
+
+def forge_yline(y, *args):
+    """yline(y) - horizontal line at y."""
+    import matplotlib.pyplot as plt
+    yv = float(_to_np(y).flat[0]) if hasattr(y, 'data') else float(y)
+    style_kw = {}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if isinstance(a, str):
+            if a == "LineWidth" and i + 1 < len(args):
+                style_kw['linewidth'] = float(_to_np(args[i+1]).flat[0]) if hasattr(args[i+1], 'data') else float(args[i+1])
+                i += 2; continue
+            elif len(a) <= 4 and not a[0].isupper():
+                style_kw['linestyle'] = a[:2] if len(a) > 1 and a[0] == '-' else '-'
+                if a[-1].isalpha(): style_kw['color'] = a[-1]
+                i += 1; continue
+        i += 1
+    _cur_ax().axhline(y=yv, **style_kw)
+    return _FA(np.array(yv))
+
+def forge_meshgrid(x, y=None):
+    """[X,Y] = meshgrid(x,y) - 2D grid from vectors."""
+    xv = _to_np(x).flatten()
+    yv = _to_np(y).flatten() if y is not None else xv.copy()
+    X, Y = np.meshgrid(xv, yv)
+    return _FA(X), _FA(Y)
+
+
 PLOTTING_REGISTRY = {
     # 2-D
     "plot":         forge_plot,
@@ -1359,4 +1408,7 @@ PLOTTING_REGISTRY = {
     "set":           forge_set_prop,
     "get":           forge_get_prop,
     "text":          forge_text_func,
+    "xline":         forge_xline,
+    "yline":         forge_yline,
+    "meshgrid":      forge_meshgrid,
 }
