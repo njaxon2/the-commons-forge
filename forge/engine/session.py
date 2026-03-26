@@ -1418,6 +1418,118 @@ class ForgeSession:
 
         session._engine.functions["tiga_assemble_2d"] = forge_tiga_assemble_2d
 
+        # R113: Utility functions
+        def forge_fieldnames(s):
+            """fieldnames(struct) - return cell array of field names."""
+            from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
+            if isinstance(s, ForgeStruct):
+                names = list(s._fields.keys())
+                return ForgeCell([ForgeChar(n) for n in names])
+            return ForgeCell([])
+
+        def forge_isfield(s, fname):
+            """isfield(struct, name) - check if field exists."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(fname, ForgeChar):
+                fname = fname.to_str()
+            if isinstance(s, ForgeStruct):
+                return ForgeArray(np.float64(1.0 if fname in s._fields else 0.0))
+            return ForgeArray(np.float64(0.0))
+
+        def forge_struct_func(*args):
+            """struct(field1, val1, field2, val2, ...) - create struct."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            s = ForgeStruct()
+            i = 0
+            while i + 1 < len(args):
+                name = args[i]
+                val = args[i + 1]
+                if isinstance(name, ForgeChar):
+                    name = name.to_str()
+                s._fields[name] = val
+                i += 2
+            return s
+
+        def forge_isstruct(x):
+            """isstruct(x) - check if x is a struct."""
+            from forge.engine.containers import ForgeStruct
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1.0 if isinstance(x, ForgeStruct) else 0.0))
+
+        def forge_iscell(x):
+            """iscell(x) - check if x is a cell array."""
+            from forge.engine.containers import ForgeCell
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1.0 if isinstance(x, ForgeCell) else 0.0))
+
+        def forge_ischar(x):
+            """ischar(x) - check if x is a char array."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1.0 if isinstance(x, ForgeChar) else 0.0))
+
+        def forge_isnumeric(x):
+            """isnumeric(x) - check if x is numeric."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+            if isinstance(x, ForgeChar) or isinstance(x, ForgeCell) or isinstance(x, ForgeStruct):
+                return ForgeArray(np.float64(0.0))
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(1.0 if x.data.dtype.kind in ('f', 'i', 'u', 'c') else 0.0))
+            if isinstance(x, (int, float, complex)):
+                return ForgeArray(np.float64(1.0))
+            return ForgeArray(np.float64(0.0))
+
+        def forge_islogical(x):
+            """islogical(x) - check if x is logical."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(1.0 if x.data.dtype == np.bool_ else 0.0))
+            if isinstance(x, bool):
+                return ForgeArray(np.float64(1.0))
+            return ForgeArray(np.float64(0.0))
+
+        def forge_exist(name, typ=None):
+            """exist(name) - check if variable/function exists."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(name, ForgeChar):
+                name = name.to_str()
+            # Check functions
+            if name in session._engine.functions:
+                return ForgeArray(np.float64(5.0))  # 5 = built-in function
+            # Check workspace
+            if name in session._engine.workspace._vars:
+                return ForgeArray(np.float64(1.0))  # 1 = variable
+            return ForgeArray(np.float64(0.0))
+
+        def forge_which(name):
+            """which(name) - locate function."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(name, ForgeChar):
+                name = name.to_str()
+            if name in session._engine.functions:
+                return ForgeChar(f"built-in function: {name}")
+            return ForgeChar("")
+
+        def forge_methods(obj_or_name):
+            """methods(name) - list methods of an object or class."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            return ForgeCell([])
+
+        session._engine.functions["fieldnames"] = forge_fieldnames
+        session._engine.functions["isfield"] = forge_isfield
+        session._engine.functions["struct"] = forge_struct_func
+        session._engine.functions["isstruct"] = forge_isstruct
+        session._engine.functions["iscell"] = forge_iscell
+        session._engine.functions["ischar"] = forge_ischar
+        session._engine.functions["isnumeric"] = forge_isnumeric
+        session._engine.functions["islogical"] = forge_islogical
+        session._engine.functions["exist"] = forge_exist
+        session._engine.functions["which"] = forge_which
+        session._engine.functions["methods"] = forge_methods
+
 
 
 
