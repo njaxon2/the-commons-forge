@@ -1,20 +1,20 @@
 # Forge MEMORY.md — Session Continuity
 
-## Current State (R85)
-- **Last commit**: R85 — MATLAB-style type names in class() and whos
+## Current State (R92)
+- **Last commit**: R92 — MATLAB-style display for cells/structs
 - **VPS**: ubuntu@15.204.8.77 (NOT 34.32.100.183 which is production)
 - **Display**: :99 port 5900 (GUI), :98 port 5901 (testing)
 - **Git branch**: master
 
-## Recent Commits (R78-R85)
-- R78: Update MEMORY.md with complete thesis arc and current state
-- R79: Fix command widget welcome message and prompt after Ctrl+C/command
-- R80: Diagonal preconditioning generalizes to elliptical geometries
-- R81: Enhanced plotting (bar/legend/set/xlim/ylim) + thesis figures
-- R82: Publication-quality thesis figures + plotting fixes
-- R83: Tab completion + string builtins (chr, char, num2str, etc.)
-- R84: Register missing type-checking builtins
+## Recent Commits (R85-R92)
 - R85: MATLAB-style type names in class() and whos
+- R86: Update MEMORY.md with R80-R85 progress
+- R87: E2E test suite — 52/52 passing
+- R88: Syntax highlighting in command widget
+- R89: MATLAB-style types and previews in workspace browser GUI
+- R90: regexp/strrep/strfind + cellfun/arrayfun/cat/rmfield/cell2mat/num2cell
+- R91: basisfunder wrapper + E2E test suite expanded to 59 tests
+- R92: MATLAB-style display for cell arrays and structs
 
 ## NOVEL FINDING: Complete Thesis Arc
 
@@ -64,7 +64,7 @@
 | Ellipse 4:1 | 1.345 | 0.763 |
 | Non-conformal | 1.427 | 0.800 |
 
-## Forge Features Added (R79-R85)
+## Forge Features Added (R79-R92)
 
 ### Plotting (R81-R82)
 - bar(): Full MATLAB calling convention (x, y, width, color)
@@ -92,6 +92,27 @@
 - whos: Shows MATLAB type names
 - ischar(), isfield(), isscalar(), isvector(), ismatrix(), issquare()
 
+### Syntax Highlighting (R88)
+- VS Code-style M-code highlighting in command widget
+- Keywords (blue bold), strings (orange), numbers (green), comments (green italic), functions (yellow)
+
+### Workspace Browser (R89)
+- Shows MATLAB type names: double, char, cell, struct (not numpy names)
+- Better value previews for ForgeArray, ForgeChar, ForgeCell, ForgeStruct
+
+### String Operations (R90)
+- regexp(), regexpi(), regexprep(): Full regex support with match/tokens/names modes
+- strrep(), strfind(): String search and replace
+
+### Container Utilities (R90)
+- cellfun(), arrayfun(): Apply functions to cell/array elements
+- cat(), num2cell(), cell2mat(), rmfield(): Container manipulation
+
+### Display Formatting (R92)
+- Cell arrays: indexed display {[1] val, [2] val, ...}
+- Structs: field: value pairs with nested type summaries
+- 59/59 E2E tests passing
+
 ## GUI State
 - Single-pane command widget with tab completion
 - saveas/print fixed for MATLAB calling convention
@@ -107,12 +128,11 @@
 - 3D array display shows type info instead of values
 - Plot window focus stealing in GUI
 - No subfunction support in scripts
-- Interpreter slow for deeply nested loops (~4s per IGA assembly at nel=4)
-- fprintf with \n in string causes lexer error (escaped chars in double quotes)
+- IGA assembly performance: 31ms (nel=2), 61ms (nel=4) — acceptable
 
 ## Next Steps
 1. **Thesis production**: Document with Forge-exported figures (complete)
 2. **Forge features**: Syntax highlighting, more plotting options
 3. Build order elevation for p>2 on mapped geometry
 4. Improve interpreter performance for nested loops
-5. Fix escaped characters (\n, \t) in double-quoted strings
+5. Variable editor (double-click workspace variable to inspect)
