@@ -7,7 +7,7 @@ os.environ.setdefault("DISPLAY", ":99")
 
 from forge.engine.session import ForgeSession
 s = ForgeSession()
-s.eval('addpath("ForgeHome/tiga")')
+s.eval('addpath("/home/ubuntu/forge/ForgeHome/tiga")')
 
 passed = 0
 failed = 0
@@ -114,5 +114,18 @@ check("saveas", 'saveas(99, "/tmp/e2e_test.png");', "")
 print("\nWorkspace:")
 check("whos", "whos", contains="double")
 check("who", "who", contains="x")
+
+# --- String operations (R90) ---
+print("\nString operations (R90):")
+check("strrep", 'strrep("hello world", "world", "there")', "hello there")
+check("strfind", 'strfind("hello world", "o")', contains="5")
+check("regexprep", 'regexprep("abc 123", "\\d+", "NUM")', "abc NUM")
+
+# --- Container utilities (R90) ---
+print("\nContainer utilities (R90):")
+check("arrayfun", "arrayfun(@(x) x^2, [1 2 3])", contains="4")
+check("cat dim1", "cat(1, [1 2], [3 4])", contains="3")
+check("num2cell", 'class(num2cell([1 2 3]))', "cell")
+check("cell2mat", "cell2mat({1, 2, 3})", contains="2")
 
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
