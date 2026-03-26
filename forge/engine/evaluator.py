@@ -15,7 +15,7 @@ from forge.engine.types import (
     forge_repmat, forge_double, forge_single, forge_int8, forge_int16, forge_int32,
     forge_int64, forge_uint8, forge_uint16, forge_uint32, forge_uint64, forge_logical,
     forge_complex, forge_isnan, forge_isinf, forge_isfinite, forge_isnumeric,
-    forge_islogical, forge_isfloat, forge_isinteger,
+    forge_islogical, forge_isfloat, forge_isinteger, forge_ischar,
     FORGE_PI, FORGE_E, FORGE_INF, FORGE_NAN, FORGE_EPS, FORGE_I,
 )
 from forge.engine.containers import (
@@ -187,10 +187,23 @@ class Session:
         b["isinteger"] = lambda x: ForgeArray(np.array(forge_isinteger(x)))
         b["iscell"] = lambda x: ForgeArray(np.array(forge_iscell(x)))
         b["isstruct"] = lambda x: ForgeArray(np.array(forge_isstruct(x)))
+        b["ischar"] = lambda x: ForgeArray(np.array(forge_ischar(x)))
         b["isnan"] = forge_isnan
         b["isinf"] = forge_isinf
         b["isfinite"] = forge_isfinite
         b["isempty"] = lambda x: ForgeArray(np.array(x.isempty() if isinstance(x, ForgeArray) else len(x) == 0))
+        def _isfield(s, f):
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            if isinstance(f, ForgeChar):
+                f = f.to_str()
+            if isinstance(s, ForgeStruct):
+                return ForgeArray(np.float64(1.0 if f in s._fields else 0.0))
+            return ForgeArray(np.float64(0.0))
+        b["isfield"] = _isfield
+        b["isscalar"] = lambda x: ForgeArray(np.float64(1.0 if (isinstance(x, ForgeArray) and x.isscalar()) or np.isscalar(x) else 0.0))
+        b["isvector"] = lambda x: ForgeArray(np.float64(1.0 if (isinstance(x, ForgeArray) and (x.data.ndim <= 1 or min(x.data.shape) == 1)) else 0.0))
+        b["ismatrix"] = lambda x: ForgeArray(np.float64(1.0 if isinstance(x, ForgeArray) and x.data.ndim == 2 else 0.0))
+        b["issquare"] = lambda x: ForgeArray(np.float64(1.0 if isinstance(x, ForgeArray) and x.data.ndim == 2 and x.data.shape[0] == x.data.shape[1] else 0.0))
 
         # Math
         for name in ['abs','sqrt','exp','log','log2','log10','sin','cos','tan',
