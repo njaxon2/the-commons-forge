@@ -369,4 +369,24 @@ ratio = e4 / e8;
 ratio > 7 && ratio < 12
 """, "1")
 
+
+print("\nR134 common functions:")
+check("cast_double", "x = cast(int32(5), 'double'); class(x)", "double")
+check("mpower_2x2", "A = [1 1; 0 1]; B = mpower(A, 3); B(1,2)", "3")
+check("cputime_pos", "cputime() > 0", "1")
+check("eps_default", "eps < 1e-10", "1")
+check("nextpow2_1000", "nextpow2(1000)", "10")
+check("log1p_small", "abs(log1p(1e-15) - 1e-15) < 1e-25", "1")
+check("expm1_small", "abs(expm1(1e-15) - 1e-15) < 1e-25", "1")
+check("sinc_zero", "sinc(0)", "1")
+check("unwrap_phase", "length(unwrap([0 3 6])) == 3", "1")
+check("colon_func", "length(colon(1, 5))", "5")
+check("colon_step", "length(colon(0, 0.5, 2))", "5")
+check("ndgrid_2d", "[X, Y] = ndgrid([1 2], [3 4]); X(1,2)", "1")
+check("allclose_true", "allclose([1 2 3], [1 2 3])", "1")
+check("allclose_false", "allclose([1 2 3], [1 2 4])", "0")
+check("nthroot_neg", "nthroot(-8, 3)", "-2")
+check("perms_3", "size(perms([1 2 3]), 1)", "6")
+check("nchoosek_scalar", "nchoosek(5, 2)", "10")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
