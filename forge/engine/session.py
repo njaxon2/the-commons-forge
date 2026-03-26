@@ -847,6 +847,111 @@ class ForgeSession:
         self._engine.functions["fsolve"] = forge_fsolve
         self._engine.functions["integral"] = forge_integral
 
+        # Fill gaps (R99)
+        import numpy as np
+        from forge.engine.types import ForgeArray
+        from forge.engine.containers import ForgeChar
+
+        def forge_cbrt(x):
+            if isinstance(x, ForgeArray): return ForgeArray(np.cbrt(x.data))
+            return ForgeArray(np.cbrt(np.float64(x)))
+
+        def forge_pow2(x):
+            if isinstance(x, ForgeArray): return ForgeArray(np.ldexp(1.0, x.data.astype(int)))
+            return ForgeArray(np.float64(2**int(float(x))))
+
+        def forge_asinh(x):
+            if isinstance(x, ForgeArray): return ForgeArray(np.arcsinh(x.data))
+            return ForgeArray(np.arcsinh(np.float64(x)))
+
+        def forge_acosh(x):
+            if isinstance(x, ForgeArray): return ForgeArray(np.arccosh(x.data))
+            return ForgeArray(np.arccosh(np.float64(x)))
+
+        def forge_atanh(x):
+            if isinstance(x, ForgeArray): return ForgeArray(np.arctanh(x.data))
+            return ForgeArray(np.arctanh(np.float64(x)))
+
+        def forge_isa(x, typename):
+            if isinstance(typename, ForgeChar): typename = typename.to_str()
+            cls = session._engine.functions.get("class")
+            if cls:
+                actual = cls(x)
+                if isinstance(actual, ForgeChar): actual = actual.to_str()
+                return ForgeArray(np.float64(1.0 if str(actual) == str(typename) else 0.0))
+            return ForgeArray(np.float64(0.0))
+
+        def forge_isreal(x):
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(1.0 if not np.iscomplexobj(x.data) else 0.0))
+            return ForgeArray(np.float64(1.0 if not isinstance(x, complex) else 0.0))
+
+        def forge_display(x):
+            return session._format_result(x)
+
+        def forge_interp2(X, Y, V, Xq, Yq, *args):
+            from scipy.interpolate import RegularGridInterpolator
+            if isinstance(X, ForgeArray): X = X.data
+            if isinstance(Y, ForgeArray): Y = Y.data
+            if isinstance(V, ForgeArray): V = V.data
+            if isinstance(Xq, ForgeArray): Xq = Xq.data
+            if isinstance(Yq, ForgeArray): Yq = Yq.data
+            # Build interpolator
+            x_vec = np.unique(X.ravel())
+            y_vec = np.unique(Y.ravel())
+            interp = RegularGridInterpolator((y_vec, x_vec), V, method='linear', bounds_error=False, fill_value=np.nan)
+            points = np.column_stack([Yq.ravel(), Xq.ravel()])
+            result = interp(points).reshape(Xq.shape)
+            return ForgeArray(result)
+
+        def forge_save(fname, *varnames):
+            """Save workspace variables to .mat-like file."""
+            import json
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            ws = session._engine.workspace
+            data = {}
+            names = [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames] if varnames else list(ws.names())
+            for name in names:
+                val = ws.get(name)
+                if isinstance(val, ForgeArray):
+                    data[name] = {"type": "array", "data": val.data.tolist(), "shape": list(val.data.shape)}
+                elif isinstance(val, ForgeChar):
+                    data[name] = {"type": "char", "data": val.to_str()}
+                elif isinstance(val, (int, float)):
+                    data[name] = {"type": "scalar", "data": float(val)}
+            with open(str(fname), 'w') as f:
+                json.dump(data, f)
+            return ''
+
+        def forge_load(fname, *varnames):
+            """Load workspace variables from saved file."""
+            import json
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            with open(str(fname), 'r') as f:
+                data = json.load(f)
+            ws = session._engine.workspace
+            for name, val_dict in data.items():
+                if varnames and name not in [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames]:
+                    continue
+                if val_dict["type"] == "array":
+                    arr = np.array(val_dict["data"], dtype=np.float64).reshape(val_dict["shape"])
+                    ws.set(name, ForgeArray(arr))
+                elif val_dict["type"] == "char":
+                    ws.set(name, ForgeChar(val_dict["data"]))
+                elif val_dict["type"] == "scalar":
+                    ws.set(name, ForgeArray(np.float64(val_dict["data"])))
+            return ''
+
+        for _n, _f in [
+            ("cbrt", forge_cbrt), ("pow2", forge_pow2),
+            ("asinh", forge_asinh), ("acosh", forge_acosh), ("atanh", forge_atanh),
+            ("isa", forge_isa), ("isreal", forge_isreal),
+            ("display", forge_display), ("interp2", forge_interp2),
+            ("save", forge_save), ("load", forge_load),
+        ]:
+            self._engine.functions[_n] = _f
+
+
 
 
 
