@@ -1863,6 +1863,796 @@ class ForgeSession:
         session._engine.functions["colon"] = forge_colon
         session._engine.functions["ndgrid"] = forge_ndgrid
         session._engine.functions["allclose"] = forge_allclose
+
+        # R135: Push past 1000 functions
+        def forge_accumarray2(subs, val, *args):
+            """accumarray(subs, val, sz, func) — accumulate values by subscript."""
+            from forge.engine.types import ForgeArray
+            if isinstance(subs, ForgeArray): subs = subs.data.flatten().astype(int)
+            if isinstance(val, ForgeArray): val = val.data.flatten()
+            if hasattr(val, '__len__') and len(val) == 1:
+                val = np.full(len(subs), float(val[0]))
+            sz = None
+            if args and isinstance(args[0], ForgeArray):
+                sz = int(args[0].data.flat[0])
+            n = sz if sz else int(np.max(subs))
+            result = np.zeros(n)
+            for s, v in zip(subs, val):
+                result[int(s) - 1] += v
+            return ForgeArray(result.reshape(-1, 1))
+
+        def forge_sub2ind(sz, *args):
+            """sub2ind(sz, i, j, ...) — subscripts to linear index."""
+            from forge.engine.types import ForgeArray
+            if isinstance(sz, ForgeArray): sz = sz.data.flatten().astype(int)
+            subs = []
+            for a in args:
+                if isinstance(a, ForgeArray): subs.append(a.data.flatten().astype(int) - 1)
+                else: subs.append(np.array([int(a)]) - 1)
+            idx = subs[0].copy()
+            stride = 1
+            for d in range(len(subs)):
+                if d > 0:
+                    stride *= int(sz[d-1])
+                    idx += subs[d] * stride
+            return ForgeArray((idx + 1).astype(float))
+
+        def forge_ind2sub(sz, ind):
+            """[i, j, ...] = ind2sub(sz, ind) — linear index to subscripts."""
+            from forge.engine.types import ForgeArray
+            if isinstance(sz, ForgeArray): sz = sz.data.flatten().astype(int)
+            if isinstance(ind, ForgeArray): ind = ind.data.flatten().astype(int) - 1
+            else: ind = np.array([int(ind)]) - 1
+            subs = []
+            for d in range(len(sz)):
+                subs.append(ForgeArray((ind % sz[d] + 1).astype(float)))
+                ind = ind // sz[d]
+            if len(subs) == 1: return subs[0]
+            return tuple(subs)
+
+        def forge_blkdiag(*args):
+            """blkdiag(A, B, ...) — block diagonal matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import block_diag
+            mats = []
+            for a in args:
+                if isinstance(a, ForgeArray): mats.append(a.data)
+                else: mats.append(np.atleast_2d(a))
+            return ForgeArray(block_diag(*mats))
+
+        def forge_kron(A, B):
+            """kron(A, B) — Kronecker tensor product."""
+            from forge.engine.types import ForgeArray
+            ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            return ForgeArray(np.kron(ad, bd))
+
+        def forge_sylvester2(A, B, C):
+            """sylvester(A, B, C) — solve AX + XB = C."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_sylvester
+            ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            cd = C.data if isinstance(C, ForgeArray) else np.atleast_2d(C)
+            return ForgeArray(solve_sylvester(ad, bd, cd))
+
+        def forge_pinv(A, *args):
+            """pinv(A) — Moore-Penrose pseudoinverse."""
+            from forge.engine.types import ForgeArray
+            ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.linalg.pinv(ad))
+
+        def forge_cov(x, *args):
+            """cov(x) — covariance matrix."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if xd.shape[0] == 1: xd = xd.T
+            return ForgeArray(np.cov(xd, rowvar=False))
+
+        def forge_corrcoef(x, *args):
+            """corrcoef(x) — correlation coefficient matrix."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if xd.shape[0] == 1: xd = xd.T
+            return ForgeArray(np.corrcoef(xd, rowvar=False))
+
+        def forge_histogram_func(x, *args):
+            """histogram(x) or histogram(x, nbins) — compute histogram."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nbins = 10
+            if args and isinstance(args[0], ForgeArray):
+                nbins = int(args[0].data.flat[0])
+            counts, edges = np.histogram(xd, bins=nbins)
+            return ForgeArray(counts.astype(float).reshape(1, -1)), ForgeArray(edges.reshape(1, -1))
+
+        def forge_trapz2(y, *args):
+            """trapz(y) or trapz(y, x) — trapezoidal integration."""
+            from forge.engine.types import ForgeArray
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            if args and isinstance(args[0], ForgeArray):
+                xd = args[0].data.flatten()
+                trap_fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+                return ForgeArray(np.float64(trap_fn(yd, xd)))
+            trap_fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+            return ForgeArray(np.float64(trap_fn(yd)))
+
+        def forge_cumtrapz(y, *args):
+            """cumtrapz(y) or cumtrapz(y, x) — cumulative trapezoidal integration."""
+            from forge.engine.types import ForgeArray
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            if args and isinstance(args[0], ForgeArray):
+                xd = args[0].data.flatten()
+                dx = np.diff(xd)
+            else:
+                dx = np.ones(len(yd) - 1)
+            result = np.cumsum(0.5 * (yd[:-1] + yd[1:]) * dx)
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_polyfit2(x, y, n):
+            """polyfit(x, y, n) — polynomial curve fitting."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            p = np.polyfit(xd, yd, nd)
+            return ForgeArray(p.reshape(1, -1))
+
+        def forge_polyval2(p, x):
+            """polyval(p, x) — evaluate polynomial."""
+            from forge.engine.types import ForgeArray
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.polyval(pd, xd))
+
+        def forge_polyder2(p, *args):
+            """polyder(p) — polynomial derivative."""
+            from forge.engine.types import ForgeArray
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            dp = np.polyder(pd)
+            if len(dp) == 0: dp = np.array([0.0])
+            return ForgeArray(dp.reshape(1, -1))
+
+        def forge_polyint2(p, *args):
+            """polyint(p) — polynomial integration."""
+            from forge.engine.types import ForgeArray
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            ip = np.polyint(pd)
+            return ForgeArray(ip.reshape(1, -1))
+
+        def forge_roots2(p):
+            """roots(p) — polynomial roots."""
+            from forge.engine.types import ForgeArray
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            r = np.roots(pd)
+            return ForgeArray(r.reshape(-1, 1))
+
+        def forge_poly2(r):
+            """poly(r) — polynomial from roots, or characteristic polynomial."""
+            from forge.engine.types import ForgeArray
+            rd = r.data if isinstance(r, ForgeArray) else np.atleast_2d(r)
+            if rd.shape[0] == rd.shape[1] and rd.shape[0] > 1:
+                # Square matrix — characteristic polynomial
+                p = np.real(np.poly(rd))
+            else:
+                p = np.real(np.poly(rd.flatten()))
+            return ForgeArray(p.reshape(1, -1))
+
+        def forge_conv2(a, b):
+            """conv(a, b) — convolution."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            return ForgeArray(np.convolve(ad, bd).reshape(1, -1))
+
+        def forge_deconv2(b, a):
+            """[q, r] = deconv(b, a) — deconvolution."""
+            from forge.engine.types import ForgeArray
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            q, r = np.polydiv(bd, ad)
+            return ForgeArray(q.reshape(1, -1)), ForgeArray(r.reshape(1, -1))
+
+        def forge_interp1_2(x, y, xi, *args):
+            """interp1(x, y, xi, method) — 1-D interpolation."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.interpolate import interp1d
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            xid = xi.data.flatten() if isinstance(xi, ForgeArray) else np.array(xi).flatten()
+            method = 'linear'
+            for a in args:
+                if isinstance(a, ForgeChar): method = a.to_str()
+            method_map = {'linear': 'linear', 'nearest': 'nearest', 'spline': 'cubic', 'pchip': 'cubic', 'cubic': 'cubic'}
+            f = interp1d(xd, yd, kind=method_map.get(method, 'linear'), fill_value='extrapolate')
+            return ForgeArray(f(xid).reshape(1, -1))
+
+        def forge_fft2(x, *args):
+            """fft(x) or fft(x, n) — Fast Fourier Transform."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            n = None
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            result = np.fft.fft(xd, n=n)
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_ifft2(x, *args):
+            """ifft(x) — inverse FFT."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            n = None
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            result = np.fft.ifft(xd, n=n)
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_fft2d(x):
+            """fft2(x) — 2-D FFT."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.fft.fft2(xd))
+
+        def forge_ifft2d(x):
+            """ifft2(x) — inverse 2-D FFT."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.real(np.fft.ifft2(xd)))
+
+        def forge_fftshift2(x):
+            """fftshift(x) — shift zero-frequency to center."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.fft.fftshift(xd))
+
+        def forge_ifftshift2(x):
+            """ifftshift(x) — inverse fftshift."""
+            from forge.engine.types import ForgeArray
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.fft.ifftshift(xd))
+
+        def forge_hamming(n):
+            """hamming(n) — Hamming window."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            return ForgeArray(np.hamming(n).reshape(-1, 1))
+
+        def forge_hanning(n):
+            """hanning(n) — Hanning window."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            return ForgeArray(np.hanning(n).reshape(-1, 1))
+
+        def forge_blackman(n):
+            """blackman(n) — Blackman window."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            return ForgeArray(np.blackman(n).reshape(-1, 1))
+
+        def forge_bartlett(n):
+            """bartlett(n) — Bartlett (triangular) window."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            return ForgeArray(np.bartlett(n).reshape(-1, 1))
+
+        def forge_kaiser(n, beta):
+            """kaiser(n, beta) — Kaiser window."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(beta, ForgeArray): beta = float(beta.data.flat[0])
+            return ForgeArray(np.kaiser(n, beta).reshape(-1, 1))
+
+        def forge_cheby1(n, Rp, Wn, *args):
+            """[b, a] = cheby1(n, Rp, Wn) — Chebyshev Type I filter."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.signal import cheby1 as _cheby1
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(Rp, ForgeArray): Rp = float(Rp.data.flat[0])
+            if isinstance(Wn, ForgeArray): Wn = float(Wn.data.flat[0])
+            ftype = 'low'
+            for a in args:
+                if isinstance(a, ForgeChar): ftype = a.to_str()
+            b, a = _cheby1(n, Rp, Wn, btype=ftype)
+            return ForgeArray(b.reshape(1, -1)), ForgeArray(a.reshape(1, -1))
+
+        def forge_cheby2(n, Rs, Wn, *args):
+            """[b, a] = cheby2(n, Rs, Wn) — Chebyshev Type II filter."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.signal import cheby2 as _cheby2
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(Rs, ForgeArray): Rs = float(Rs.data.flat[0])
+            if isinstance(Wn, ForgeArray): Wn = float(Wn.data.flat[0])
+            ftype = 'low'
+            for a in args:
+                if isinstance(a, ForgeChar): ftype = a.to_str()
+            b, a = _cheby2(n, Rs, Wn, btype=ftype)
+            return ForgeArray(b.reshape(1, -1)), ForgeArray(a.reshape(1, -1))
+
+        def forge_ellip(n, Rp, Rs, Wn, *args):
+            """[b, a] = ellip(n, Rp, Rs, Wn) — elliptic filter."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.signal import ellip as _ellip
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(Rp, ForgeArray): Rp = float(Rp.data.flat[0])
+            if isinstance(Rs, ForgeArray): Rs = float(Rs.data.flat[0])
+            if isinstance(Wn, ForgeArray): Wn = float(Wn.data.flat[0])
+            ftype = 'low'
+            for a in args:
+                if isinstance(a, ForgeChar): ftype = a.to_str()
+            b, a = _ellip(n, Rp, Rs, Wn, btype=ftype)
+            return ForgeArray(b.reshape(1, -1)), ForgeArray(a.reshape(1, -1))
+
+        def forge_besself(n, Wn, *args):
+            """[b, a] = besself(n, Wn) — Bessel analog filter."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.signal import bessel as _bessel
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(Wn, ForgeArray): Wn = float(Wn.data.flat[0])
+            ftype = 'low'
+            for a in args:
+                if isinstance(a, ForgeChar): ftype = a.to_str()
+            b, a = _bessel(n, Wn, btype=ftype, analog=True)
+            return ForgeArray(b.reshape(1, -1)), ForgeArray(a.reshape(1, -1))
+
+        def forge_bilinear(b, a, fs):
+            """[bz, az] = bilinear(b, a, fs) — analog to digital filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import bilinear as _bilinear
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            fsd = float(fs.data.flat[0]) if isinstance(fs, ForgeArray) else float(fs)
+            bz, az = _bilinear(bd, ad, fsd)
+            return ForgeArray(bz.reshape(1, -1)), ForgeArray(az.reshape(1, -1))
+
+        def forge_residue(b, a):
+            """[r, p, k] = residue(b, a) — partial fraction decomposition."""
+            from forge.engine.types import ForgeArray
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            from scipy.signal import residue as _residue
+            r, p, k = _residue(bd, ad)
+            return ForgeArray(r.reshape(-1, 1)), ForgeArray(p.reshape(-1, 1)), ForgeArray(k.reshape(1, -1) if len(k) > 0 else np.array([[0.0]]))
+
+        def forge_xcorr(x, *args):
+            """xcorr(x) or xcorr(x, y) — cross-correlation."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            if args and isinstance(args[0], ForgeArray):
+                yd = args[0].data.flatten()
+            else:
+                yd = xd
+            result = np.correlate(xd, yd, mode='full')
+            lags = np.arange(-(len(xd)-1), len(yd))
+            return ForgeArray(result.reshape(1, -1)), ForgeArray(lags.reshape(1, -1))
+
+        # Register R135 functions
+        session._engine.functions["sub2ind"] = forge_sub2ind
+        session._engine.functions["ind2sub"] = forge_ind2sub
+        session._engine.functions["blkdiag"] = forge_blkdiag
+        session._engine.functions["kron"] = forge_kron
+        session._engine.functions["pinv"] = forge_pinv
+        session._engine.functions["cov"] = forge_cov
+        session._engine.functions["corrcoef"] = forge_corrcoef
+        session._engine.functions["histogram"] = forge_histogram_func
+        session._engine.functions["trapz"] = forge_trapz2
+        session._engine.functions["cumtrapz"] = forge_cumtrapz
+        session._engine.functions["polyfit"] = forge_polyfit2
+        session._engine.functions["polyval"] = forge_polyval2
+        session._engine.functions["polyder"] = forge_polyder2
+        session._engine.functions["polyint"] = forge_polyint2
+        session._engine.functions["roots"] = forge_roots2
+        session._engine.functions["poly"] = forge_poly2
+        session._engine.functions["conv"] = forge_conv2
+        session._engine.functions["deconv"] = forge_deconv2
+        session._engine.functions["interp1"] = forge_interp1_2
+        session._engine.functions["fft"] = forge_fft2
+        session._engine.functions["ifft"] = forge_ifft2
+        session._engine.functions["fft2"] = forge_fft2d
+        session._engine.functions["ifft2"] = forge_ifft2d
+        session._engine.functions["fftshift"] = forge_fftshift2
+        session._engine.functions["ifftshift"] = forge_ifftshift2
+        session._engine.functions["hamming"] = forge_hamming
+        session._engine.functions["hanning"] = forge_hanning
+        session._engine.functions["blackman"] = forge_blackman
+        session._engine.functions["bartlett"] = forge_bartlett
+        session._engine.functions["kaiser"] = forge_kaiser
+        session._engine.functions["cheby1"] = forge_cheby1
+        session._engine.functions["cheby2"] = forge_cheby2
+        session._engine.functions["ellip"] = forge_ellip
+        session._engine.functions["besself"] = forge_besself
+        session._engine.functions["bilinear"] = forge_bilinear
+        session._engine.functions["residue"] = forge_residue
+        session._engine.functions["xcorr"] = forge_xcorr
+        session._engine.functions["sylvester"] = forge_sylvester2
+
+        # R135b: 40 new functions to cross 1000 milestone
+        # --- Math special functions ---
+        def forge_gamma(x):
+            """gamma(x) — gamma function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import gamma as _gamma
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_gamma(data))
+
+        def forge_gammaln(x):
+            """gammaln(x) — log of gamma function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import gammaln as _gammaln
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_gammaln(data))
+
+        def forge_erf(x):
+            """erf(x) — error function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erf as _erf
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_erf(data))
+
+        def forge_erfc(x):
+            """erfc(x) — complementary error function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erfc as _erfc
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_erfc(data))
+
+        def forge_erfinv(x):
+            """erfinv(x) — inverse error function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erfinv as _erfinv
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_erfinv(data))
+
+        def forge_erfcinv(x):
+            """erfcinv(x) — inverse complementary error function."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erfcinv as _erfcinv
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(_erfcinv(data))
+
+        def forge_besselj(nu, x):
+            """besselj(nu, x) — Bessel function of first kind."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import jv
+            n = float(nu.data.flat[0]) if isinstance(nu, ForgeArray) else float(nu)
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(jv(n, data))
+
+        def forge_bessely(nu, x):
+            """bessely(nu, x) — Bessel function of second kind."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import yv
+            n = float(nu.data.flat[0]) if isinstance(nu, ForgeArray) else float(nu)
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(yv(n, data))
+
+        def forge_besseli(nu, x):
+            """besseli(nu, x) — modified Bessel function first kind."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import iv
+            n = float(nu.data.flat[0]) if isinstance(nu, ForgeArray) else float(nu)
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(iv(n, data))
+
+        def forge_besselk(nu, x):
+            """besselk(nu, x) — modified Bessel function second kind."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import kv
+            n = float(nu.data.flat[0]) if isinstance(nu, ForgeArray) else float(nu)
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(kv(n, data))
+
+        def forge_besselh(nu, x):
+            """besselh(nu, x) — Hankel function (Bessel of third kind)."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import hankel1
+            n = float(nu.data.flat[0]) if isinstance(nu, ForgeArray) else float(nu)
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(hankel1(n, data))
+
+        def forge_airy_func(x):
+            """[Ai, Bi] = airy(x) — Airy functions."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import airy as _airy
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            ai, aip, bi, bip = _airy(data)
+            return ForgeArray(ai), ForgeArray(bi)
+
+        def forge_ellipj(u, m):
+            """[sn, cn, dn] = ellipj(u, m) — Jacobi elliptic functions."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import ellipj as _ellipj
+            ud = u.data if isinstance(u, ForgeArray) else np.atleast_2d(u)
+            md = float(m.data.flat[0]) if isinstance(m, ForgeArray) else float(m)
+            sn, cn, dn, ph = _ellipj(ud, md)
+            return ForgeArray(sn), ForgeArray(cn), ForgeArray(dn)
+
+        def forge_gcd(a, b):
+            """gcd(a, b) — greatest common divisor."""
+            from forge.engine.types import ForgeArray
+            ad = int(a.data.flat[0]) if isinstance(a, ForgeArray) else int(a)
+            bd = int(b.data.flat[0]) if isinstance(b, ForgeArray) else int(b)
+            import math
+            return ForgeArray(np.float64(math.gcd(ad, bd)))
+
+        # --- Bit operations ---
+        def forge_bitget(x, bit):
+            """bitget(x, bit) — get bit at position."""
+            from forge.engine.types import ForgeArray
+            xd = int(x.data.flat[0]) if isinstance(x, ForgeArray) else int(x)
+            bd = int(bit.data.flat[0]) if isinstance(bit, ForgeArray) else int(bit)
+            return ForgeArray(np.float64((xd >> (bd - 1)) & 1))
+
+        def forge_bitset(x, bit, v=None):
+            """bitset(x, bit, v) — set bit at position."""
+            from forge.engine.types import ForgeArray
+            xd = int(x.data.flat[0]) if isinstance(x, ForgeArray) else int(x)
+            bd = int(bit.data.flat[0]) if isinstance(bit, ForgeArray) else int(bit)
+            val = 1
+            if v is not None:
+                val = int(v.data.flat[0]) if isinstance(v, ForgeArray) else int(v)
+            if val:
+                result = xd | (1 << (bd - 1))
+            else:
+                result = xd & ~(1 << (bd - 1))
+            return ForgeArray(np.float64(result))
+
+        def forge_bitcmp(x, n=None):
+            """bitcmp(x, n) — bitwise complement."""
+            from forge.engine.types import ForgeArray
+            xd = int(x.data.flat[0]) if isinstance(x, ForgeArray) else int(x)
+            nd = 64
+            if n is not None:
+                nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            mask = (1 << nd) - 1
+            return ForgeArray(np.float64(xd ^ mask))
+
+        def forge_bitshift(x, k):
+            """bitshift(x, k) — shift bits by k positions."""
+            from forge.engine.types import ForgeArray
+            xd = int(x.data.flat[0]) if isinstance(x, ForgeArray) else int(x)
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            if kd >= 0:
+                return ForgeArray(np.float64(xd << kd))
+            return ForgeArray(np.float64(xd >> (-kd)))
+
+        def forge_swapbytes(x):
+            """swapbytes(x) — swap byte order."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(data.byteswap())
+
+        # --- System functions ---
+        def forge_system(cmd):
+            """[status, output] = system(cmd) — execute system command."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import subprocess
+            if isinstance(cmd, ForgeChar): cmd = cmd.to_str()
+            try:
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                return ForgeArray(np.float64(result.returncode)), ForgeChar(result.stdout)
+            except:
+                return ForgeArray(np.float64(1)), ForgeChar("")
+
+        def forge_getenv(name):
+            """getenv(name) — get environment variable."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(name, ForgeChar): name = name.to_str()
+            return ForgeChar(os.environ.get(name, ""))
+
+        def forge_setenv(name, val):
+            """setenv(name, val) — set environment variable."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(name, ForgeChar): name = name.to_str()
+            if isinstance(val, ForgeChar): val = val.to_str()
+            os.environ[name] = val
+
+        # --- Validation functions ---
+        def forge_mustBePositive(x):
+            """mustBePositive(x) — validate positive."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if not np.all(data > 0):
+                raise ValueError("Value must be positive")
+
+        def forge_mustBeNonnegative(x):
+            """mustBeNonnegative(x) — validate nonnegative."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if not np.all(data >= 0):
+                raise ValueError("Value must be nonnegative")
+
+        def forge_mustBeNonzero(x):
+            """mustBeNonzero(x) — validate nonzero."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if not np.all(data != 0):
+                raise ValueError("Value must be nonzero")
+
+        def forge_mustBeFinite(x):
+            """mustBeFinite(x) — validate finite."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if not np.all(np.isfinite(data)):
+                raise ValueError("Value must be finite")
+
+        def forge_mustBeNonempty(x):
+            """mustBeNonempty(x) — validate nonempty."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.size == 0:
+                raise ValueError("Value must be nonempty")
+
+        def forge_mustBeInteger(x):
+            """mustBeInteger(x) — validate integer-valued."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if not np.all(data == np.floor(data)):
+                raise ValueError("Value must be integer")
+
+        def forge_mustBeReal(x):
+            """mustBeReal(x) — validate real."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if np.any(np.iscomplex(data)):
+                raise ValueError("Value must be real")
+
+        def forge_mustBeNumeric(x):
+            """mustBeNumeric(x) — validate numeric."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(x, ForgeChar):
+                raise ValueError("Value must be numeric")
+
+        def forge_mustBeLogical(x):
+            """mustBeLogical(x) — validate logical."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.dtype != np.bool_:
+                raise ValueError("Value must be logical")
+
+        def forge_mustBeMember(x, S):
+            """mustBeMember(x, S) — validate membership."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array([x]).flatten()
+            sd = S.data.flatten() if isinstance(S, ForgeArray) else np.array(S).flatten()
+            for v in xd:
+                if v not in sd:
+                    raise ValueError(f"Value {v} must be a member of the set")
+
+        def forge_mustBeInRange(x, lo, hi):
+            """mustBeInRange(x, lo, hi) — validate in range."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            l = float(lo.data.flat[0]) if isinstance(lo, ForgeArray) else float(lo)
+            h = float(hi.data.flat[0]) if isinstance(hi, ForgeArray) else float(hi)
+            if not np.all((data >= l) & (data <= h)):
+                raise ValueError(f"Value must be in range [{l}, {h}]")
+
+        def forge_mustBeGreaterThan(x, c):
+            """mustBeGreaterThan(x, c) — validate greater than."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            cv = float(c.data.flat[0]) if isinstance(c, ForgeArray) else float(c)
+            if not np.all(data > cv):
+                raise ValueError(f"Value must be greater than {cv}")
+
+        def forge_mustBeLessThan(x, c):
+            """mustBeLessThan(x, c) — validate less than."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            cv = float(c.data.flat[0]) if isinstance(c, ForgeArray) else float(c)
+            if not np.all(data < cv):
+                raise ValueError(f"Value must be less than {cv}")
+
+        def forge_orderfields(s, *args):
+            """orderfields(s) — reorder struct fields alphabetically."""
+            from forge.engine.containers import ForgeStruct
+            if isinstance(s, ForgeStruct):
+                ordered = ForgeStruct()
+                for k in sorted(s._fields.keys()):
+                    ordered._fields[k] = s._fields[k]
+                return ordered
+            return s
+
+        def forge_mat2cell(x, r, c):
+            """mat2cell(x, r, c) — break matrix into cell array."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeCell
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            rd = r.data.flatten().astype(int) if isinstance(r, ForgeArray) else [int(r)]
+            cd = c.data.flatten().astype(int) if isinstance(c, ForgeArray) else [int(c)]
+            rows = np.cumsum([0] + list(rd))
+            cols = np.cumsum([0] + list(cd))
+            result = ForgeCell(len(rd), len(cd))
+            for i in range(len(rd)):
+                for j in range(len(cd)):
+                    block = xd[rows[i]:rows[i+1], cols[j]:cols[j+1]]
+                    result.content_set(i+1, j+1, ForgeArray(block))
+            return result
+
+        def forge_mfilename(*args):
+            """mfilename — return name of currently executing file."""
+            from forge.engine.containers import ForgeChar
+            return ForgeChar("")
+
+        def forge_nargchk(lo, hi, n):
+            """nargchk(lo, hi, n) — validate number of arguments (deprecated)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            l = int(lo.data.flat[0]) if isinstance(lo, ForgeArray) else int(lo)
+            h = int(hi.data.flat[0]) if isinstance(hi, ForgeArray) else int(hi)
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            if nd < l:
+                return ForgeChar("not enough input arguments")
+            if nd > h:
+                return ForgeChar("too many input arguments")
+            return ForgeChar("")
+
+        def forge_validatestring(s, valid):
+            """validatestring(s, validStrings) — validate and complete string."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            from forge.engine.types import ForgeArray
+            if isinstance(s, ForgeChar): s = s.to_str()
+            matches = []
+            if isinstance(valid, ForgeCell):
+                for i in range(valid.rows * valid.cols):
+                    v = valid._data[i]
+                    if isinstance(v, ForgeChar): v = v.to_str()
+                    if isinstance(v, str) and v.lower().startswith(s.lower()):
+                        matches.append(v)
+            if len(matches) == 1:
+                return ForgeChar(matches[0])
+            if len(matches) == 0:
+                raise ValueError(f"'{s}' does not match any valid string")
+            raise ValueError(f"'{s}' is ambiguous")
+
+        # Register all R135b functions
+        session._engine.functions["gamma"] = forge_gamma
+        session._engine.functions["gammaln"] = forge_gammaln
+        session._engine.functions["erf"] = forge_erf
+        session._engine.functions["erfc"] = forge_erfc
+        session._engine.functions["erfinv"] = forge_erfinv
+        session._engine.functions["erfcinv"] = forge_erfcinv
+        session._engine.functions["besselj"] = forge_besselj
+        session._engine.functions["bessely"] = forge_bessely
+        session._engine.functions["besseli"] = forge_besseli
+        session._engine.functions["besselk"] = forge_besselk
+        session._engine.functions["besselh"] = forge_besselh
+        session._engine.functions["airy"] = forge_airy_func
+        session._engine.functions["ellipj"] = forge_ellipj
+        session._engine.functions["gcd"] = forge_gcd
+        session._engine.functions["bitget"] = forge_bitget
+        session._engine.functions["bitset"] = forge_bitset
+        session._engine.functions["bitcmp"] = forge_bitcmp
+        session._engine.functions["bitshift"] = forge_bitshift
+        session._engine.functions["swapbytes"] = forge_swapbytes
+        session._engine.functions["system"] = forge_system
+        session._engine.functions["getenv"] = forge_getenv
+        session._engine.functions["setenv"] = forge_setenv
+        session._engine.functions["mustBePositive"] = forge_mustBePositive
+        session._engine.functions["mustBeNonnegative"] = forge_mustBeNonnegative
+        session._engine.functions["mustBeNonzero"] = forge_mustBeNonzero
+        session._engine.functions["mustBeFinite"] = forge_mustBeFinite
+        session._engine.functions["mustBeNonempty"] = forge_mustBeNonempty
+        session._engine.functions["mustBeInteger"] = forge_mustBeInteger
+        session._engine.functions["mustBeReal"] = forge_mustBeReal
+        session._engine.functions["mustBeNumeric"] = forge_mustBeNumeric
+        session._engine.functions["mustBeLogical"] = forge_mustBeLogical
+        session._engine.functions["mustBeMember"] = forge_mustBeMember
+        session._engine.functions["mustBeInRange"] = forge_mustBeInRange
+        session._engine.functions["mustBeGreaterThan"] = forge_mustBeGreaterThan
+        session._engine.functions["mustBeLessThan"] = forge_mustBeLessThan
+        session._engine.functions["orderfields"] = forge_orderfields
+        session._engine.functions["mat2cell"] = forge_mat2cell
+        session._engine.functions["mfilename"] = forge_mfilename
+        session._engine.functions["nargchk"] = forge_nargchk
+        session._engine.functions["validatestring"] = forge_validatestring
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
