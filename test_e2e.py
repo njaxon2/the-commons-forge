@@ -611,4 +611,15 @@ check("fitlm_R2", "X = [1;2;3;4;5]; y = [2;4;6;8;10]; mdl = fitlm(X, y); mdl.Rsq
 check("pca_cols", "X = randn(10, 3); [c, s, l] = pca(X); size(c, 2)", "3")
 check("nonzeros_count", "length(nonzeros([1 0 3 0 5]))", "3")
 
+
+print("\nR151 image processing, data ops, time series:")
+check("strel_disk", "SE = strel('disk', 2); size(SE, 1)", "5")
+check("strel_square", "SE = strel('square', 3); sum(sum(SE))", "9")
+check("edge_binary", "img = rand(10); E = edge(img); max(max(E)) <= 1", "1")
+check("bwlabel_count", "[L, n] = bwlabel(eye(5)); n >= 1", "1")
+check("imfill_holes", "BW = [1 1 1; 1 0 1; 1 1 1]; F = imfill(BW); F(2,2)", "1")
+check("imadjust_range", "img = rand(5); adj = imadjust(img); max(max(adj)) <= 1", "1")
+check("findgroups_len", "[G, ID] = findgroups([1 2 1 2 3]); length(ID)", "3")
+check("autocorr_1", "r = autocorr([1 2 3 4 5], 2); abs(r(1) - 1) < 1e-10", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")

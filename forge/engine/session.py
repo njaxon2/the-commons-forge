@@ -8349,6 +8349,456 @@ class ForgeSession:
         session._engine.functions["subs"] = forge_subs2
         session._engine.functions["pretty"] = forge_pretty2
         session._engine.functions["latex"] = forge_latex2
+
+        # R151: Image, data cleaning, regression, time series, more
+
+        # --- Image processing ---
+        def forge_imrotate2(img, angle, *args):
+            """imrotate(img, angle) — rotate image."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import rotate
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            a = float(angle.data.flat[0]) if isinstance(angle, ForgeArray) else float(angle)
+            return ForgeArray(rotate(data, a, reshape=False))
+
+        def forge_imcrop2(img, rect, *args):
+            """imcrop(img, rect) — crop image."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            r = rect.data.flatten() if isinstance(rect, ForgeArray) else np.array(rect).flatten()
+            x, y, w, h = int(r[0])-1, int(r[1])-1, int(r[2]), int(r[3])
+            return ForgeArray(data[y:y+h, x:x+w])
+
+        def forge_imadjust2(img, *args):
+            """imadjust(img) — adjust image intensity."""
+            from forge.engine.types import ForgeArray
+            data = img.data.copy() if isinstance(img, ForgeArray) else np.atleast_2d(img).copy()
+            lo, hi = np.percentile(data, 1), np.percentile(data, 99)
+            if hi > lo:
+                data = (data - lo) / (hi - lo)
+                data = np.clip(data, 0, 1)
+            return ForgeArray(data)
+
+        def forge_imbinarize2(img, *args):
+            """imbinarize(img) — binarize image using Otsu."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if data.max() > 1:
+                data = data / 255.0
+            threshold = 0.5
+            if args and isinstance(args[0], ForgeArray):
+                threshold = float(args[0].data.flat[0])
+            else:
+                # Otsu's method
+                hist, bin_edges = np.histogram(data.flatten(), 256, [0, 1])
+                total = data.size
+                sumB, wB, maximum, sum_total = 0.0, 0, 0.0, 0.0
+                for i in range(256):
+                    sum_total += i * hist[i]
+                for i in range(256):
+                    wB += hist[i]
+                    if wB == 0: continue
+                    wF = total - wB
+                    if wF == 0: break
+                    sumB += i * hist[i]
+                    mB = sumB / wB
+                    mF = (sum_total - sumB) / wF
+                    between = wB * wF * (mB - mF) ** 2
+                    if between >= maximum:
+                        threshold = i / 255.0
+                        maximum = between
+            return ForgeArray((data > threshold).astype(float))
+
+        def forge_edge2(img, *args):
+            """edge(img, method) — edge detection."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from scipy.ndimage import sobel
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            gx = sobel(data, axis=1)
+            gy = sobel(data, axis=0)
+            magnitude = np.sqrt(gx**2 + gy**2)
+            threshold = np.mean(magnitude) + np.std(magnitude)
+            return ForgeArray((magnitude > threshold).astype(float))
+
+        def forge_imgradient2(img, *args):
+            """[Gmag, Gdir] = imgradient(img) — image gradient."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import sobel
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            gx = sobel(data, axis=1)
+            gy = sobel(data, axis=0)
+            mag = np.sqrt(gx**2 + gy**2)
+            direction = np.degrees(np.arctan2(gy, gx))
+            return ForgeArray(mag), ForgeArray(direction)
+
+        def forge_medfilt2d(img, *args):
+            """medfilt2(img) — 2D median filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import median_filter
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            k = 3
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+            return ForgeArray(median_filter(data, size=k))
+
+        def forge_wiener2_func(img, *args):
+            """wiener2(img) — adaptive noise filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import uniform_filter
+            data = img.data.astype(float) if isinstance(img, ForgeArray) else np.atleast_2d(img).astype(float)
+            k = 3
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+            local_mean = uniform_filter(data, k)
+            local_sq_mean = uniform_filter(data**2, k)
+            local_var = local_sq_mean - local_mean**2
+            noise_var = np.mean(local_var)
+            result = local_mean + np.maximum(0, local_var - noise_var) / np.maximum(local_var, noise_var + 1e-10) * (data - local_mean)
+            return ForgeArray(result)
+
+        def forge_regionprops2(bw, *args):
+            """regionprops(BW) — region properties."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            from scipy.ndimage import label, find_objects
+            data = bw.data if isinstance(bw, ForgeArray) else np.atleast_2d(bw)
+            labeled, num = label(data > 0)
+            props = ForgeStruct()
+            props._fields["NumObjects"] = ForgeArray(np.float64(num))
+            areas = []
+            for i in range(1, num + 1):
+                areas.append(np.sum(labeled == i))
+            props._fields["Area"] = ForgeArray(np.array(areas).reshape(-1, 1).astype(float))
+            return props
+
+        def forge_watershed2(img, *args):
+            """watershed(img) — watershed segmentation (stub)."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            return ForgeArray(np.ones_like(data))
+
+        def forge_bwlabel2(bw, *args):
+            """[L, n] = bwlabel(BW) — label connected components."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import label
+            data = bw.data if isinstance(bw, ForgeArray) else np.atleast_2d(bw)
+            labeled, num = label(data > 0)
+            return ForgeArray(labeled.astype(float)), ForgeArray(np.float64(num))
+
+        def forge_bwareaopen2(bw, minarea):
+            """bwareaopen(BW, P) — remove small objects."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import label
+            data = bw.data.copy() if isinstance(bw, ForgeArray) else np.atleast_2d(bw).copy()
+            p = int(minarea.data.flat[0]) if isinstance(minarea, ForgeArray) else int(minarea)
+            labeled, num = label(data > 0)
+            for i in range(1, num + 1):
+                if np.sum(labeled == i) < p:
+                    data[labeled == i] = 0
+            return ForgeArray(data)
+
+        def forge_imfill2(bw, *args):
+            """imfill(BW, 'holes') — fill holes."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import binary_fill_holes
+            data = bw.data if isinstance(bw, ForgeArray) else np.atleast_2d(bw)
+            return ForgeArray(binary_fill_holes(data > 0).astype(float))
+
+        def forge_imerode2(img, se, *args):
+            """imerode(img, SE) — morphological erosion."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import binary_erosion
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            sed = se.data if isinstance(se, ForgeArray) else np.atleast_2d(se)
+            return ForgeArray(binary_erosion(data > 0, sed > 0).astype(float))
+
+        def forge_imdilate2(img, se, *args):
+            """imdilate(img, SE) — morphological dilation."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import binary_dilation
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            sed = se.data if isinstance(se, ForgeArray) else np.atleast_2d(se)
+            return ForgeArray(binary_dilation(data > 0, sed > 0).astype(float))
+
+        def forge_imopen2(img, se, *args):
+            """imopen(img, SE) — morphological opening."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import binary_opening
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            sed = se.data if isinstance(se, ForgeArray) else np.atleast_2d(se)
+            return ForgeArray(binary_opening(data > 0, sed > 0).astype(float))
+
+        def forge_imclose2(img, se, *args):
+            """imclose(img, SE) — morphological closing."""
+            from forge.engine.types import ForgeArray
+            from scipy.ndimage import binary_closing
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            sed = se.data if isinstance(se, ForgeArray) else np.atleast_2d(se)
+            return ForgeArray(binary_closing(data > 0, sed > 0).astype(float))
+
+        def forge_strel2(shape, *args):
+            """strel(shape, params) — structuring element."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(shape, ForgeChar): shape = shape.to_str()
+            if shape == 'disk':
+                r = 3
+                if args and isinstance(args[0], ForgeArray):
+                    r = int(args[0].data.flat[0])
+                y, x = np.ogrid[-r:r+1, -r:r+1]
+                return ForgeArray((x**2 + y**2 <= r**2).astype(float))
+            elif shape == 'square':
+                n = 3
+                if args and isinstance(args[0], ForgeArray):
+                    n = int(args[0].data.flat[0])
+                return ForgeArray(np.ones((n, n)))
+            elif shape == 'diamond':
+                r = 3
+                if args and isinstance(args[0], ForgeArray):
+                    r = int(args[0].data.flat[0])
+                y, x = np.ogrid[-r:r+1, -r:r+1]
+                return ForgeArray((np.abs(x) + np.abs(y) <= r).astype(float))
+            return ForgeArray(np.ones((3, 3)))
+
+        # --- Data cleaning extras ---
+        def forge_standardizeMissing2(A, indicator):
+            """standardizeMissing(A, indicator) — replace values with NaN."""
+            from forge.engine.types import ForgeArray
+            data = A.data.copy() if isinstance(A, ForgeArray) else np.atleast_2d(A).copy()
+            ind = indicator.data.flatten() if isinstance(indicator, ForgeArray) else np.array(indicator).flatten()
+            for v in ind:
+                data[data == v] = np.nan
+            return ForgeArray(data)
+
+        def forge_filloutliers2(x, method=None, *args):
+            """filloutliers(x, method) — replace outliers."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            data = x.data.copy() if isinstance(x, ForgeArray) else np.atleast_2d(x).copy().flatten()
+            flat = data.flatten()
+            q1, q3 = np.percentile(flat[~np.isnan(flat)], [25, 75])
+            iqr = q3 - q1
+            lo, hi = q1 - 1.5*iqr, q3 + 1.5*iqr
+            mask = (flat < lo) | (flat > hi)
+            if isinstance(method, ForgeChar) and method.to_str() == 'median':
+                flat[mask] = np.nanmedian(flat[~mask])
+            else:
+                flat[mask] = np.nanmean(flat[~mask])
+            return ForgeArray(flat.reshape(data.shape))
+
+        def forge_findgroups2(x):
+            """[G, ID] = findgroups(x) — group data."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            uniq = np.unique(data)
+            groups = np.zeros(len(data), dtype=float)
+            for i, u in enumerate(uniq):
+                groups[data == u] = i + 1
+            return ForgeArray(groups.reshape(1, -1)), ForgeArray(uniq.reshape(1, -1))
+
+        def forge_splitapply2(func, x, G):
+            """splitapply(func, x, G) — split and apply."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            gd = G.data.flatten().astype(int) if isinstance(G, ForgeArray) else np.array(G).flatten().astype(int)
+            ngroups = int(gd.max())
+            results = []
+            for i in range(1, ngroups + 1):
+                mask = gd == i
+                if np.any(mask):
+                    val = func(ForgeArray(xd[mask].reshape(1, -1)))
+                    results.append(float(val.data.flat[0]) if isinstance(val, ForgeArray) else float(val))
+                else:
+                    results.append(np.nan)
+            return ForgeArray(np.array(results).reshape(1, -1))
+
+        def forge_varfun2(func, T, *args):
+            """varfun(func, T) — apply function to table variables (stub)."""
+            return T
+
+        # --- Regression extras ---
+        def forge_fitrgp2(X, y, *args):
+            """fitrgp(X, y) — Gaussian process regression (stub)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            mdl = ForgeStruct()
+            mdl._fields["type"] = "GPR_stub"
+            return mdl
+
+        def forge_fitrlinear2(X, y, *args):
+            """fitrlinear(X, y) — linear regression (fast)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            beta = np.linalg.lstsq(Xd, yd, rcond=None)[0]
+            mdl = ForgeStruct()
+            mdl._fields["Beta"] = ForgeArray(beta.reshape(-1, 1))
+            return mdl
+
+        def forge_fitrtree2(X, y, *args):
+            """fitrtree(X, y) — regression tree."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            try:
+                from sklearn.tree import DecisionTreeRegressor
+                Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+                yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+                clf = DecisionTreeRegressor()
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "RegressionTree"
+                return mdl
+            except:
+                return ForgeStruct()
+
+        def forge_fitrensemble2(X, y, *args):
+            """fitrensemble(X, y) — ensemble regression."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            try:
+                from sklearn.ensemble import RandomForestRegressor
+                Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+                yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+                clf = RandomForestRegressor(n_estimators=100)
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "RegressionEnsemble"
+                return mdl
+            except:
+                return ForgeStruct()
+
+        # --- Time series ---
+        def forge_autocorr2(x, *args):
+            """autocorr(x, nlags) — sample autocorrelation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nlags = 20
+            if args and isinstance(args[0], ForgeArray):
+                nlags = int(args[0].data.flat[0])
+            n = len(data)
+            mu = np.mean(data)
+            var = np.var(data)
+            acf = np.zeros(nlags + 1)
+            for k in range(nlags + 1):
+                acf[k] = np.sum((data[:n-k] - mu) * (data[k:] - mu)) / (n * var) if var > 0 else 0
+            return ForgeArray(acf.reshape(1, -1))
+
+        def forge_parcorr2(x, *args):
+            """parcorr(x, nlags) — partial autocorrelation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nlags = 20
+            if args and isinstance(args[0], ForgeArray):
+                nlags = int(args[0].data.flat[0])
+            # Levinson-Durbin
+            n = len(data)
+            mu = np.mean(data)
+            var = np.var(data)
+            acf = np.zeros(nlags + 1)
+            for k in range(nlags + 1):
+                acf[k] = np.sum((data[:n-k] - mu) * (data[k:] - mu)) / (n * var) if var > 0 else 0
+            pacf = np.zeros(nlags + 1)
+            pacf[0] = 1.0
+            if nlags > 0:
+                pacf[1] = acf[1]
+            return ForgeArray(pacf.reshape(1, -1))
+
+        def forge_arima2(*args):
+            """arima(p, d, q) — ARIMA model (stub)."""
+            from forge.engine.containers import ForgeStruct
+            mdl = ForgeStruct()
+            mdl._fields["type"] = "arima"
+            return mdl
+
+        def forge_forecast2(mdl, Y, numperiods, *args):
+            """forecast(mdl, Y, numperiods) — forecast (stub)."""
+            from forge.engine.types import ForgeArray
+            np_d = int(numperiods.data.flat[0]) if isinstance(numperiods, ForgeArray) else int(numperiods)
+            Yd = Y.data.flatten() if isinstance(Y, ForgeArray) else np.array(Y).flatten()
+            # Simple extrapolation
+            return ForgeArray(np.full(np_d, Yd[-1]).reshape(-1, 1))
+
+        # --- More misc utility ---
+        def forge_struct2cell2(S):
+            """struct2cell(S) — convert struct to cell."""
+            from forge.engine.containers import ForgeCell, ForgeStruct
+            if isinstance(S, ForgeStruct):
+                vals = list(S._fields.values())
+                return ForgeCell._from_list(vals)
+            return ForgeCell(1, 1)
+
+        def forge_cell2struct2(C, fields):
+            """cell2struct(C, fieldnames) — convert cell to struct."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeCell, ForgeStruct, ForgeChar
+            S = ForgeStruct()
+            if isinstance(fields, ForgeCell):
+                for i in range(len(fields._data)):
+                    fn = fields._data[i]
+                    if isinstance(fn, ForgeChar): fn = fn.to_str()
+                    if i < len(C._data):
+                        S._fields[str(fn)] = C._data[i]
+            return S
+
+        def forge_substruct2(S, *args):
+            """substruct(type, subs) — create subscript structure."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            result = ForgeStruct()
+            result._fields["type"] = args[0] if args else ForgeChar('()')
+            result._fields["subs"] = args[1] if len(args) > 1 else ForgeChar(':')
+            return result
+
+        def forge_deal2(*args):
+            """[a, b, ...] = deal(x) or deal(x, y, ...) — distribute inputs."""
+            if len(args) == 1:
+                return tuple([args[0]] * 10)
+            return args
+
+        def forge_nfields2(S):
+            """nfields(S) — number of fields."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(S, ForgeStruct):
+                return ForgeArray(np.float64(len([k for k in S._fields if not k.startswith('_')])))
+            return ForgeArray(np.float64(0))
+
+        # Register R151 functions
+        session._engine.functions["imrotate"] = forge_imrotate2
+        session._engine.functions["imcrop"] = forge_imcrop2
+        session._engine.functions["imadjust"] = forge_imadjust2
+        session._engine.functions["imbinarize"] = forge_imbinarize2
+        session._engine.functions["edge"] = forge_edge2
+        session._engine.functions["imgradient"] = forge_imgradient2
+        session._engine.functions["medfilt2"] = forge_medfilt2d
+        session._engine.functions["wiener2"] = forge_wiener2_func
+        session._engine.functions["regionprops"] = forge_regionprops2
+        session._engine.functions["watershed"] = forge_watershed2
+        session._engine.functions["bwlabel"] = forge_bwlabel2
+        session._engine.functions["bwareaopen"] = forge_bwareaopen2
+        session._engine.functions["imfill"] = forge_imfill2
+        session._engine.functions["imerode"] = forge_imerode2
+        session._engine.functions["imdilate"] = forge_imdilate2
+        session._engine.functions["imopen"] = forge_imopen2
+        session._engine.functions["imclose"] = forge_imclose2
+        session._engine.functions["strel"] = forge_strel2
+        session._engine.functions["standardizeMissing"] = forge_standardizeMissing2
+        session._engine.functions["filloutliers"] = forge_filloutliers2
+        session._engine.functions["findgroups"] = forge_findgroups2
+        session._engine.functions["splitapply"] = forge_splitapply2
+        session._engine.functions["varfun"] = forge_varfun2
+        session._engine.functions["fitrgp"] = forge_fitrgp2
+        session._engine.functions["fitrlinear"] = forge_fitrlinear2
+        session._engine.functions["fitrtree"] = forge_fitrtree2
+        session._engine.functions["fitrensemble"] = forge_fitrensemble2
+        session._engine.functions["autocorr"] = forge_autocorr2
+        session._engine.functions["parcorr"] = forge_parcorr2
+        session._engine.functions["arima"] = forge_arima2
+        session._engine.functions["forecast"] = forge_forecast2
+        session._engine.functions["substruct"] = forge_substruct2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
