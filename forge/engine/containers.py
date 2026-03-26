@@ -150,18 +150,18 @@ class ForgeCell:
 
     def _linear_index(self, idx):
         """Convert 1-based index to 0-based linear index."""
-        if isinstance(idx, int):
-            if idx < 1:
-                raise IndexError(f"Cell index {idx} out of range (1-based)")
-            return idx - 1
-        idx = int(idx)  # auto-convert float to int
+        if not isinstance(idx, int):
+            idx = int(idx)  # auto-convert float/numpy to int
+        if idx < 1:
+            raise IndexError(f"Cell index {idx} out of range (1-based)")
+        return idx - 1
 
     def content_get(self, *indices):
         """Get cell content: C{i} or C{i,j}."""
         if len(indices) == 1:
             return self._data[self._linear_index(indices[0])]
         elif len(indices) == 2:
-            r, c = indices
+            r, c = int(indices[0]), int(indices[1])
             idx = (r - 1) * self._shape[1] + (c - 1)
             return self._data[idx]
         raise IndexError("Too many indices for cell")
@@ -175,7 +175,7 @@ class ForgeCell:
                 self._shape = (1, len(self._data))
             self._data[idx] = value
         elif len(indices) == 2:
-            r, c = indices
+            r, c = int(indices[0]), int(indices[1])
             idx = (r - 1) * self._shape[1] + (c - 1)
             self._data[idx] = value
 

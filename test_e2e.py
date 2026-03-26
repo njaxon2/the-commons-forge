@@ -195,4 +195,77 @@ function y = sq(x); y = x^2; end
 sq(7)
 """, "49")
 
+
+print("\nR113 type predicates:")
+check("ischar_true", "ischar('hello')", "1")
+check("isnumeric_true", "isnumeric(3.14)", "1")
+check("islogical_true", "islogical(true)", "1")
+check("ischar_false", "ischar(42)", "0")
+check("exist_sin", "exist('sin') > 0", "1")
+check("class_double", "class(3.14)", "double")
+check("class_char", "class('hello')", "char")
+check("fieldnames_struct", """
+s.x = 1; s.y = 2;
+f = fieldnames(s);
+f{1}
+""", "x")
+
+print("\nR115 LA decompositions:")
+check("schur_basic", """
+A = [1 2; 3 4];
+[T, U] = schur(A);
+err = norm(U*T*U' - A);
+err < 1e-10
+""", "1")
+check("hess_basic", """
+A = [1 2 3; 4 5 6; 7 8 9];
+[P, H] = hess(A);
+err = norm(P*H*P' - A);
+err < 1e-10
+""", "1")
+check("expm_basic", """
+A = zeros(2);
+B = expm(A);
+norm(B - eye(2)) < 1e-10
+""", "1")
+check("condest_basic", """
+A = eye(3);
+c = condest(A);
+c == 1
+""", "1")
+check("conv2_basic", """
+A = ones(3);
+B = ones(2);
+C = conv2(A, B, 'valid');
+size(C, 1) == 2 && C(1,1) == 4
+""", "1")
+
+print("\nR118 help/date/time:")
+check("version_str", "version()", contains="Forge")
+check("date_format", "d = date(); length(d) > 5", "1")
+check("clock_vec", "c = clock(); length(c) == 6", "1")
+check("now_positive", "now() > 0", "1")
+check("help_basic", "h = help('sin'); ischar(h)", "1")
+check("lookfor_basic", "r = lookfor('sin'); ischar(r)", "1")
+
+print("\nString operations:")
+check("strcmp_true", "strcmp('abc', 'abc')", "1")
+check("strcmp_false", "strcmp('abc', 'xyz')", "0")
+check("sprintf_format", "sprintf('%d + %d = %d', 1, 2, 3)", "1 + 2 = 3")
+check("char_concat", "['hello', ' ', 'world']", "hello world")
+
+print("\nAdditional math:")
+check("mod_op", "mod(10, 3)", "1")
+check("rem_op", "rem(10, 3)", "1")
+check("sign_neg", "sign(-5)", "-1")
+check("fix_pos", "fix(3.7)", "3")
+check("fix_neg", "fix(-3.7)", "-3")
+
+
+print("\nCell assignment (R119 fix):")
+check("cell_assign_scalar", "c = cell(1,3); c{1} = 42; c{1}", "42")
+check("cell_assign_modify", "c = {1, 2, 3}; c{2} = 99; c{2}", "99")
+check("cell_2d_assign", "c = cell(2,3); c{1,2} = 7; c{1,2}", "7")
+check("cell_loop_build", "c = cell(1,4); for i=1:4; c{i} = i^2; end; c{3}", "9")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")

@@ -1668,8 +1668,10 @@ class ForgeSession:
                 name = name.to_str()
             if name in session._engine.functions:
                 func = session._engine.functions[name]
-                doc = func.__doc__ if func.__doc__ else f"{name} — no documentation available"
+                doc = func.__doc__ if func.__doc__ else f"{name} - no documentation available"
                 import sys
+                # Sanitize to ASCII-safe for ForgeChar (uint8)
+                doc = doc.encode('ascii', 'replace').decode('ascii')
                 print(doc)
                 return ForgeChar(doc)
             msg = f"No help available for '{name}'"
