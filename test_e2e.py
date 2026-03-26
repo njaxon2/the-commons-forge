@@ -622,4 +622,12 @@ check("imadjust_range", "img = rand(5); adj = imadjust(img); max(max(adj)) <= 1"
 check("findgroups_len", "[G, ID] = findgroups([1 2 1 2 3]); length(ID)", "3")
 check("autocorr_1", "r = autocorr([1 2 3 4 5], 2); abs(r(1) - 1) < 1e-10", "1")
 
+
+print("\nR152 deep learning stubs, financial, optimization:")
+check("irr_basic", "irr([-100 30 40 50 60]) > 0.1", "1")
+check("pvvar_basic", "abs(pvvar([100 100 100], 0.1) - 273.55) < 1", "1")
+check("pmt_basic", "abs(pmt(0.05/12, 360, 100000) + 536.82) < 1", "1")
+check("fvfix_basic", "fvfix(0.05, 10, 100) > 1200", "1")
+check("pvfix_basic", "pvfix(0.05, 10, 100) > 700", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")

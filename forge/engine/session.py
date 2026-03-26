@@ -8799,6 +8799,216 @@ class ForgeSession:
         session._engine.functions["arima"] = forge_arima2
         session._engine.functions["forecast"] = forge_forecast2
         session._engine.functions["substruct"] = forge_substruct2
+
+        # R152: Deep learning stubs, financial, optimization extras
+
+        # --- Deep learning stubs ---
+        def forge_dlarray2(data, *args):
+            """dlarray(data) — deep learning array (stub)."""
+            from forge.engine.types import ForgeArray
+            if isinstance(data, ForgeArray): return data
+            return ForgeArray(np.atleast_2d(data))
+
+        def forge_dlnetwork2(*args):
+            """dlnetwork(layers) — deep learning network (stub)."""
+            from forge.engine.containers import ForgeStruct
+            mdl = ForgeStruct()
+            mdl._fields["type"] = "dlnetwork"
+            return mdl
+
+        def forge_fullyConnectedLayer2(n, *args):
+            """fullyConnectedLayer(n) — FC layer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            from forge.engine.types import ForgeArray
+            layer = ForgeStruct()
+            layer._fields["type"] = "fullyConnected"
+            layer._fields["OutputSize"] = ForgeArray(np.float64(int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)))
+            return layer
+
+        def forge_reluLayer2(*args):
+            """reluLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_softmaxLayer2(*args):
+            """softmaxLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_classificationLayer2(*args):
+            """classificationLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_regressionLayer2(*args):
+            """regressionLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_convolution2dLayer2(sz, nf, *args):
+            """convolution2dLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_maxPooling2dLayer2(sz, *args):
+            """maxPooling2dLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_batchNormalizationLayer2(*args):
+            """batchNormalizationLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_dropoutLayer2(*args):
+            """dropoutLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_lstmLayer2(n, *args):
+            """lstmLayer (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_trainingOptions2(*args):
+            """trainingOptions (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_trainNetwork2(*args):
+            """trainNetwork (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        # --- Financial ---
+        def forge_pvvar2(cf, rate):
+            """pvvar(cf, rate) — present value of varying cash flows."""
+            from forge.engine.types import ForgeArray
+            cfd = cf.data.flatten() if isinstance(cf, ForgeArray) else np.array(cf).flatten()
+            rd = float(rate.data.flat[0]) if isinstance(rate, ForgeArray) else float(rate)
+            pv = sum(c / (1 + rd)**i for i, c in enumerate(cfd))
+            return ForgeArray(np.float64(pv))
+
+        def forge_irr2(cf):
+            """irr(cf) — internal rate of return."""
+            from forge.engine.types import ForgeArray
+            cfd = cf.data.flatten() if isinstance(cf, ForgeArray) else np.array(cf).flatten()
+            r = 0.1
+            for _ in range(100):
+                npv = sum(c / (1 + r)**i for i, c in enumerate(cfd))
+                dnpv = sum(-i * c / (1 + r)**(i+1) for i, c in enumerate(cfd))
+                if abs(dnpv) < 1e-12: break
+                r -= npv / dnpv
+            return ForgeArray(np.float64(r))
+
+        def forge_fvfix2(rate, nper, pmt):
+            """fvfix(rate, nper, pmt) — future value."""
+            from forge.engine.types import ForgeArray
+            rd = float(rate.data.flat[0]) if isinstance(rate, ForgeArray) else float(rate)
+            nd = float(nper.data.flat[0]) if isinstance(nper, ForgeArray) else float(nper)
+            pd = float(pmt.data.flat[0]) if isinstance(pmt, ForgeArray) else float(pmt)
+            return ForgeArray(np.float64(pd * ((1 + rd)**nd - 1) / rd))
+
+        def forge_pvfix2(rate, nper, pmt):
+            """pvfix(rate, nper, pmt) — present value."""
+            from forge.engine.types import ForgeArray
+            rd = float(rate.data.flat[0]) if isinstance(rate, ForgeArray) else float(rate)
+            nd = float(nper.data.flat[0]) if isinstance(nper, ForgeArray) else float(nper)
+            pd = float(pmt.data.flat[0]) if isinstance(pmt, ForgeArray) else float(pmt)
+            return ForgeArray(np.float64(pd * (1 - (1 + rd)**(-nd)) / rd))
+
+        def forge_pmt2(rate, nper, pv, fv=None):
+            """pmt(rate, nper, pv) — payment amount."""
+            from forge.engine.types import ForgeArray
+            rd = float(rate.data.flat[0]) if isinstance(rate, ForgeArray) else float(rate)
+            nd = float(nper.data.flat[0]) if isinstance(nper, ForgeArray) else float(nper)
+            pvd = float(pv.data.flat[0]) if isinstance(pv, ForgeArray) else float(pv)
+            fvd = 0.0
+            if fv is not None:
+                fvd = float(fv.data.flat[0]) if isinstance(fv, ForgeArray) else float(fv)
+            if rd == 0:
+                return ForgeArray(np.float64(-(pvd + fvd) / nd))
+            return ForgeArray(np.float64(-rd * (pvd * (1+rd)**nd + fvd) / ((1+rd)**nd - 1)))
+
+        def forge_nper2(rate, pmt, pv, fv=None):
+            """nper(rate, pmt, pv) — number of periods."""
+            from forge.engine.types import ForgeArray
+            rd = float(rate.data.flat[0]) if isinstance(rate, ForgeArray) else float(rate)
+            pd = float(pmt.data.flat[0]) if isinstance(pmt, ForgeArray) else float(pmt)
+            pvd = float(pv.data.flat[0]) if isinstance(pv, ForgeArray) else float(pv)
+            if rd == 0:
+                return ForgeArray(np.float64(-pvd / pd))
+            return ForgeArray(np.float64(np.log((-pd) / (pvd*rd + pd)) / np.log(1 + rd)))
+
+        def forge_xirr2(cf, dates):
+            """xirr(cf, dates) — IRR for irregular dates (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(0.1))
+
+        def forge_xnpv2(rate, cf, dates):
+            """xnpv(rate, cf, dates) — NPV for irregular dates (stub)."""
+            from forge.engine.types import ForgeArray
+            cfd = cf.data.flatten() if isinstance(cf, ForgeArray) else np.array(cf).flatten()
+            return ForgeArray(np.float64(sum(cfd)))
+
+        # --- More optimization ---
+        def forge_fmincon2(fun, x0, A, b, *args):
+            """fmincon(fun, x0, A, b) — constrained minimization."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import minimize
+            x0d = x0.data.flatten() if isinstance(x0, ForgeArray) else np.array(x0).flatten()
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            constraints = [{'type': 'ineq', 'fun': lambda x, i=i: bd[i] - Ad[i] @ x} for i in range(len(bd))]
+            def obj(x):
+                r = fun(ForgeArray(x.reshape(1, -1)))
+                return float(r.data.flat[0]) if isinstance(r, ForgeArray) else float(r)
+            res = minimize(obj, x0d, constraints=constraints, method='SLSQP')
+            return ForgeArray(res.x.reshape(-1, 1))
+
+        def forge_ga2(fun, nvars, *args):
+            """ga(fun, nvars) — genetic algorithm (stub)."""
+            from forge.engine.types import ForgeArray
+            nd = int(nvars.data.flat[0]) if isinstance(nvars, ForgeArray) else int(nvars)
+            return ForgeArray(np.zeros((nd, 1)))
+
+        def forge_particleswarm2(fun, nvars, *args):
+            """particleswarm(fun, nvars) — particle swarm (stub)."""
+            from forge.engine.types import ForgeArray
+            nd = int(nvars.data.flat[0]) if isinstance(nvars, ForgeArray) else int(nvars)
+            return ForgeArray(np.zeros((1, nd)))
+
+        def forge_simulannealbnd2(fun, x0, *args):
+            """simulannealbnd(fun, x0) — simulated annealing (stub)."""
+            return x0
+
+        # Register R152 functions
+        session._engine.functions["dlarray"] = forge_dlarray2
+        session._engine.functions["dlnetwork"] = forge_dlnetwork2
+        session._engine.functions["fullyConnectedLayer"] = forge_fullyConnectedLayer2
+        session._engine.functions["reluLayer"] = forge_reluLayer2
+        session._engine.functions["softmaxLayer"] = forge_softmaxLayer2
+        session._engine.functions["classificationLayer"] = forge_classificationLayer2
+        session._engine.functions["regressionLayer"] = forge_regressionLayer2
+        session._engine.functions["convolution2dLayer"] = forge_convolution2dLayer2
+        session._engine.functions["maxPooling2dLayer"] = forge_maxPooling2dLayer2
+        session._engine.functions["batchNormalizationLayer"] = forge_batchNormalizationLayer2
+        session._engine.functions["dropoutLayer"] = forge_dropoutLayer2
+        session._engine.functions["lstmLayer"] = forge_lstmLayer2
+        session._engine.functions["trainingOptions"] = forge_trainingOptions2
+        session._engine.functions["trainNetwork"] = forge_trainNetwork2
+        session._engine.functions["pvvar"] = forge_pvvar2
+        session._engine.functions["irr"] = forge_irr2
+        session._engine.functions["fvfix"] = forge_fvfix2
+        session._engine.functions["pvfix"] = forge_pvfix2
+        session._engine.functions["pmt"] = forge_pmt2
+        session._engine.functions["nper"] = forge_nper2
+        session._engine.functions["xirr"] = forge_xirr2
+        session._engine.functions["xnpv"] = forge_xnpv2
+        session._engine.functions["fmincon"] = forge_fmincon2
+        session._engine.functions["ga"] = forge_ga2
+        session._engine.functions["particleswarm"] = forge_particleswarm2
+        session._engine.functions["simulannealbnd"] = forge_simulannealbnd2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
