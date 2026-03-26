@@ -54,6 +54,12 @@ class ForgeMainWindow(QMainWindow):
         self.workspace_widget.variable_delete_requested.connect(
             self._delete_variable
         )
+        self.workspace_widget.variable_inspect_requested.connect(
+            self._inspect_variable
+        )
+        self.workspace_widget.variable_inspect_requested.connect(
+            self._inspect_variable
+        )
         # When search path changes in file browser, sync to session
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
 
@@ -72,6 +78,29 @@ class ForgeMainWindow(QMainWindow):
             if ws.has(name):
                 ws.delete(name)
             self._update_workspace()
+
+    def _inspect_variable(self, name):
+        """Open variable editor dialog for the named variable."""
+        try:
+            if self.session is None:
+                return
+            ws = self.session.workspace
+            if ws.has(name):
+                value = ws.get(name)
+                from forge.gui.variable_editor import VariableEditorDialog
+                dlg = VariableEditorDialog(name, value, parent=self)
+                dlg.value_changed.connect(self._on_variable_edited)
+                dlg.show()
+        except Exception as e:
+            self.command_widget.append_output(f"Error inspecting {name}: {e}")
+
+    def _on_variable_edited(self, name, value):
+        """Handle variable edit from variable editor."""
+        try:
+            self.session.workspace.set(name, value)
+            self._update_workspace()
+        except Exception as e:
+            self.command_widget.append_output(f"Error updating {name}: {e}")
 
     def _run_file(self, path):
         if self.session is None:
