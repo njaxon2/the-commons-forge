@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""End-to-end test of Forge features."""
+import sys
+sys.path.insert(0, "/home/ubuntu/forge")
+import os
+os.environ.setdefault("DISPLAY", ":99")
+
+from forge.engine.session import ForgeSession
+s = ForgeSession()
+s.eval('addpath("ForgeHome/tiga")')
+
+passed = 0
+failed = 0
+
+def check(name, code, expected=None, contains=None):
+    global passed, failed
+    try:
+        r = s.eval(code).strip()
+        if expected is not None:
+            if r == expected:
+                print(f"  PASS: {name}")
+                passed += 1
+            else:
+                print(f"  FAIL: {name}: got '{r}' expected '{expected}'")
+                failed += 1
+        elif contains is not None:
+            if contains in r:
+                print(f"  PASS: {name}")
+                passed += 1
+            else:
+                print(f"  FAIL: {name}: '{contains}' not in '{r}'")
+                failed += 1
+        else:
+            print(f"  PASS: {name} => {r[:50]}")
+            passed += 1
+    except Exception as e:
+        print(f"  FAIL: {name}: {e}")
+        failed += 1
+
+print("=== Forge E2E Test Suite ===\n")
+
+# --- Math ---
+print("Math builtins:")
+check("abs", "abs(-5)", "5")
+check("sqrt", "sqrt(16)", "4")
+check("sin", "sin(0)", "0")
+check("cos", "cos(0)", "1")
+check("exp", "exp(0)", "1")
+check("log", "log(1)", "0")
+check("mod", "mod(10,3)", "1")
+check("ceil", "ceil(3.2)", "4")
+check("floor", "floor(3.8)", "3")
+check("round", "round(3.5)", "4")
+
+# --- Linear Algebra ---
+print("\nLinear algebra:")
+check("eye", "eye(3)", contains="1")
+check("zeros", "zeros(2)", contains="0")
+check("ones", "ones(2)", contains="1")
+check("det", "det([1 0; 0 1])", "1")
+check("inv", "inv([2 0; 0 2])", contains="0.5000")
+check("eig", "eig([2 0; 0 3])", contains="2")
+check("norm", "norm([3 4])", "5")
+check("cross", "cross([1 0 0], [0 1 0])", contains="1")
+check("dot", "dot([1 2 3], [4 5 6])", "32")
+
+# --- Strings ---
+print("\nStrings:")
+check("chr", "chr(65)", "A")
+check("upper", 'upper("hello")', "HELLO")
+check("lower", 'lower("HELLO")', "hello")
+check("num2str", "num2str(42)", "42")
+check("strcat", 'strcat("a", "b", "c")', "abc")
+check("strtrim", 'strtrim("  hi  ")', "hi")
+check("sprintf", 'sprintf("x=%d", 42)', "x=42")
+
+# --- Types ---
+print("\nType system:")
+check("class double", "class(3.14)", "double")
+check("class char", 'class("hi")', "char")
+check("class logical", "class(true)", "logical")
+check("class cell", "class({1,2})", "cell")
+check("class struct", 'class(struct("a",1))', "struct")
+check("ischar", 'ischar("hello")', "1")
+check("isnumeric", "isnumeric(42)", "1")
+check("islogical", "islogical(true)", "1")
+check("isfield", 'isfield(struct("x",1), "x")', "1")
+check("isscalar", "isscalar(42)", "1")
+check("isvector", "isvector([1 2 3])", "1")
+
+# --- Control flow ---
+print("\nControl flow:")
+check("for loop", "x=0; for i=1:5; x=x+i; end; x", "15")
+check("while loop", "x=1; while x<10; x=x*2; end; x", "16")
+check("if/else", "if 3>2; x=1; else; x=0; end; x", "1")
+check("switch", "x=2; switch x; case 1; y=10; case 2; y=20; end; y", "20")
+
+# --- TIGA ---
+print("\nTIGA functions:")
+check("findspan", "findspan(2, 2, 0.5, [0 0 0 1 1 1])", "2")
+check("gaussQuad", "[p,w]=gaussQuad(3); length(p)", "3")
+check("basisfun", "basisfun(2, 0.5, 2, [0 0 0 1 1 1])", contains="0")
+
+# --- Plotting ---
+print("\nPlotting:")
+check("figure", "figure(99);", "")
+check("plot", 'plot([1 2 3], [1 4 9]);', "")
+check("title", 'title("Test", "FontSize", 14);', "")
+check("xlabel", 'xlabel("X");', "")
+check("legend", 'legend("data", "Location", "northeast");', "")
+check("saveas", 'saveas(99, "/tmp/e2e_test.png");', "")
+
+# --- Workspace ---
+print("\nWorkspace:")
+check("whos", "whos", contains="double")
+check("who", "who", contains="x")
+
+print(f"\n=== Results: {passed} passed, {failed} failed ===")
