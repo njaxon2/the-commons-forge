@@ -108,19 +108,35 @@ class ForgeSession:
         if isinstance(v, (bool, _np.bool_)):
             return '1' if v else '0'
         if isinstance(v, (complex, _np.complexfloating)):
-            return str(v)
+            r, i = v.real, v.imag
+            rs = self._format_scalar(r)
+            if i >= 0:
+                return f'{rs} + {self._format_scalar(abs(i))}i'
+            else:
+                return f'{rs} - {self._format_scalar(abs(i))}i'
         if isinstance(v, (int, _np.integer)):
             return str(int(v))
-        # float
-        if self.format == 'long':
+        # float — use _format attribute (set by format command)
+        fmt = getattr(self, '_format', getattr(self, 'format', 'short'))
+        if fmt == 'long':
             return f'{v:.15g}'
-        elif self.format == 'short e':
+        elif fmt in ('shortE', 'short e', 'shorte', 'shortEng'):
             return f'{v:.4e}'
-        elif self.format == 'long e':
+        elif fmt in ('longE', 'long e', 'longe', 'longEng'):
             return f'{v:.15e}'
         else:  # short
+            if not _np.isfinite(v):
+                if _np.isnan(v):
+                    return 'NaN'
+                return 'Inf' if v > 0 else '-Inf'
+            av = abs(v)
+            if av == 0:
+                return '0'
             if _np.isfinite(v) and v == int(v) and abs(v) < 1e15:
                 return str(int(v))
+            # Use scientific notation for very small or very large
+            if av < 1e-3 or av >= 1e7:
+                return f'{v:.4e}'
             return f'{v:.4f}'
 
     def _format_matrix(self, data):
