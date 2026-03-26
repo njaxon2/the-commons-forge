@@ -382,3 +382,222 @@ class ForgeSession:
         self._engine.functions["rmfield"] = _rmfield_builtin
         self._engine.functions["cat"] = _cat_builtin
 
+        # File I/O system (R94)
+        session._file_handles = {}  # fid -> file object
+        session._next_fid = 3  # 0=stdin, 1=stdout, 2=stderr
+
+        def forge_fopen(*args):
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
+            if len(args) < 1:
+                raise ValueError("fopen requires at least a filename")
+            fname = args[0]
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            fname = str(fname)
+            mode = "r"
+            if len(args) >= 2:
+                m = args[1]
+                if isinstance(m, ForgeChar): m = m.to_str()
+                mode = str(m)
+            mode_map = {"r": "r", "w": "w", "a": "a", "r+": "r+", "w+": "w+", "a+": "a+",
+                        "rb": "rb", "wb": "wb", "ab": "ab"}
+            py_mode = mode_map.get(mode, mode)
+            try:
+                fh = open(fname, py_mode)
+                fid = session._next_fid
+                session._next_fid += 1
+                session._file_handles[fid] = fh
+                return ForgeArray(np.float64(fid))
+            except:
+                return ForgeArray(np.float64(-1))
+
+        def forge_fclose(fid=None):
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
+            if fid is None or (isinstance(fid, ForgeChar) and fid.to_str() == "all"):
+                for f in session._file_handles.values():
+                    try: f.close()
+                    except: pass
+                session._file_handles.clear()
+                return ForgeArray(np.float64(0))
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if fid_val in session._file_handles:
+                session._file_handles[fid_val].close()
+                del session._file_handles[fid_val]
+                return ForgeArray(np.float64(0))
+            return ForgeArray(np.float64(-1))
+
+        def forge_fprintf_file(fid, fmt, *args):
+            """fprintf to file handle."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
+            fmt = str(fmt)
+            # Convert args
+            py_args = []
+            for a in args:
+                if isinstance(a, ForgeChar): py_args.append(a.to_str())
+                elif isinstance(a, ForgeArray): py_args.append(a.data.flat[0])
+                else: py_args.append(a)
+            try:
+                text = fmt % tuple(py_args) if py_args else fmt
+            except:
+                text = fmt
+            if fid_val == 1:
+                return text  # stdout
+            elif fid_val == 2:
+                import sys; sys.stderr.write(text)
+                return ''
+            elif fid_val in session._file_handles:
+                session._file_handles[fid_val].write(text)
+                return ''
+            return ''
+
+        def forge_fgets(fid, nchar=None):
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if fid_val not in session._file_handles:
+                return ForgeArray(np.float64(-1))
+            fh = session._file_handles[fid_val]
+            if nchar is not None:
+                nchar = int(float(nchar.data.flat[0]) if isinstance(nchar, ForgeArray) else float(nchar))
+                line = fh.read(nchar)
+            else:
+                line = fh.readline()
+            if not line:
+                return ForgeArray(np.float64(-1))
+            return ForgeChar(line)
+
+        def forge_fgetl(fid):
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if fid_val not in session._file_handles:
+                return ForgeArray(np.float64(-1))
+            line = session._file_handles[fid_val].readline()
+            if not line:
+                return ForgeArray(np.float64(-1))
+            return ForgeChar(line.rstrip('\n').rstrip('\r'))
+
+        def forge_feof(fid):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if fid_val not in session._file_handles:
+                return ForgeArray(np.float64(1))
+            fh = session._file_handles[fid_val]
+            pos = fh.tell()
+            ch = fh.read(1)
+            if not ch:
+                return ForgeArray(np.float64(1))
+            fh.seek(pos)
+            return ForgeArray(np.float64(0))
+
+        def forge_ftell(fid):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            if fid_val not in session._file_handles:
+                return ForgeArray(np.float64(-1))
+            return ForgeArray(np.float64(session._file_handles[fid_val].tell()))
+
+        def forge_fseek(fid, offset, origin=None):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
+            offset = int(float(offset.data.flat[0]) if isinstance(offset, ForgeArray) else float(offset))
+            whence = 0
+            if origin is not None:
+                ov = int(float(origin.data.flat[0]) if isinstance(origin, ForgeArray) else float(origin))
+                whence = {-1: 0, 0: 1, 1: 2}.get(ov, ov)
+            if fid_val in session._file_handles:
+                session._file_handles[fid_val].seek(offset, whence)
+                return ForgeArray(np.float64(0))
+            return ForgeArray(np.float64(-1))
+
+        def forge_frewind(fid):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            return forge_fseek(fid, ForgeArray(np.float64(0)))
+
+        def forge_fileread(fname):
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            with open(str(fname), 'r') as f:
+                return ForgeChar(f.read())
+
+        def forge_dlmread(fname, delim=None, *args):
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            if isinstance(delim, ForgeChar): delim = delim.to_str()
+            if delim is None or delim == "": delim = None
+            data = np.loadtxt(str(fname), delimiter=delim)
+            return ForgeArray(data)
+
+        def forge_dlmwrite(fname, data, delim=None):
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            if isinstance(delim, ForgeChar): delim = delim.to_str()
+            if isinstance(data, ForgeArray): data = data.data
+            if delim is None: delim = ","
+            np.savetxt(str(fname), np.atleast_2d(data), delimiter=delim, fmt='%.6g')
+            return ''
+
+        def forge_csvread(fname, *args):
+            from forge.engine.containers import ForgeChar
+            return forge_dlmread(fname, ForgeChar(","), *args)
+
+        def forge_csvwrite(fname, data):
+            from forge.engine.containers import ForgeChar
+            return forge_dlmwrite(fname, data, ForgeChar(","))
+
+        def forge_tempname():
+            import tempfile
+            from forge.engine.containers import ForgeChar
+            return ForgeChar(tempfile.mktemp())
+
+        def forge_tempdir():
+            import tempfile
+            from forge.engine.containers import ForgeChar
+            return ForgeChar(tempfile.gettempdir())
+
+        for _name, _func in [
+            ("fopen", forge_fopen), ("fclose", forge_fclose),
+            ("fgets", forge_fgets), ("fgetl", forge_fgetl),
+            ("feof", forge_feof), ("ftell", forge_ftell),
+            ("fseek", forge_fseek), ("frewind", forge_frewind),
+            ("fileread", forge_fileread),
+            ("dlmread", forge_dlmread), ("dlmwrite", forge_dlmwrite),
+            ("csvread", forge_csvread), ("csvwrite", forge_csvwrite),
+            ("tempname", forge_tempname), ("tempdir", forge_tempdir),
+        ]:
+            self._engine.functions[_name] = _func
+
+        # Override fprintf to handle file handles
+        _orig_fprintf = self._engine.functions.get("fprintf")
+        def forge_fprintf_dispatch(*args):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            if args and isinstance(args[0], ForgeArray):
+                v = args[0].data.flat[0]
+                if isinstance(v, (int, float, np.integer, np.floating)) and float(v) == int(float(v)):
+                    fid_val = int(float(v))
+                    if fid_val in session._file_handles or fid_val in (1, 2):
+                        return forge_fprintf_file(*args)
+            # Fall through to original fprintf (stdout)
+            if _orig_fprintf:
+                return _orig_fprintf(*args)
+            raise ValueError("fprintf requires arguments")
+        self._engine.functions["fprintf"] = forge_fprintf_dispatch
+
