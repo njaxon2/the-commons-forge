@@ -699,3 +699,184 @@ def forge_regexpi(s, pattern, *args):
         return ForgeArray._from_list([])
     starts = [m.start() + 1 for m in matches]  # 1-based
     return ForgeArray._from_list(starts)
+
+@_tb("chr")
+def forge_chr(n):
+    """Convert integer to character. chr(65) -> 'A'."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(n, ForgeArray):
+        vals = n.data.ravel().astype(int)
+        return ForgeChar(''.join(chr(v) for v in vals))
+    return ForgeChar(chr(int(n)))
+
+
+@_tb("char")
+def forge_char_func(*args):
+    """Convert to character array. char(65) -> 'A', char('hello') -> 'hello'."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if len(args) == 1:
+        a = args[0]
+        if isinstance(a, ForgeChar):
+            return a
+        if isinstance(a, ForgeArray):
+            vals = a.data.ravel().astype(int)
+            return ForgeChar(''.join(chr(v) for v in vals))
+        if isinstance(a, str):
+            return ForgeChar(a)
+        return ForgeChar(chr(int(a)))
+    # Multiple args: stack as rows (each becomes a char row)
+    rows = []
+    for a in args:
+        if isinstance(a, ForgeChar):
+            rows.append(a.to_str())
+        elif isinstance(a, ForgeArray):
+            vals = a.data.ravel().astype(int)
+            rows.append(''.join(chr(v) for v in vals))
+        elif isinstance(a, str):
+            rows.append(a)
+        else:
+            rows.append(chr(int(a)))
+    # Pad to same length
+    maxlen = max(len(r) for r in rows)
+    rows = [r.ljust(maxlen) for r in rows]
+    return ForgeChar(rows[0] if len(rows) == 1 else rows)
+
+
+@_tb("double")
+def forge_double_from_char(x):
+    """Convert char to double (ASCII values). double('A') -> 65."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(x, ForgeChar):
+        s = x.to_str()
+        return ForgeArray(np.array([ord(c) for c in s], dtype=np.float64))
+    if isinstance(x, ForgeArray):
+        return ForgeArray(x.data.astype(np.float64))
+    return ForgeArray(np.float64(x))
+
+
+@_tb("num2str")
+def forge_num2str(x, fmt=None):
+    """Convert number to string."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(fmt, ForgeChar):
+        fmt = fmt.to_str()
+    if isinstance(x, ForgeArray):
+        val = x.data.flat[0]
+        if fmt:
+            return ForgeChar(fmt % val)
+        if val == int(val):
+            return ForgeChar(str(int(val)))
+        return ForgeChar(str(val))
+    if fmt:
+        return ForgeChar(fmt % float(x))
+    return ForgeChar(str(x))
+
+
+@_tb("str2num")
+def forge_str2num(s):
+    """Convert string to number."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    try:
+        return ForgeArray(np.float64(float(s)))
+    except ValueError:
+        return ForgeArray(np.array([]))
+
+
+@_tb("str2double")
+def forge_str2double(s):
+    """Convert string to double."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    try:
+        return ForgeArray(np.float64(float(s)))
+    except ValueError:
+        return ForgeArray(np.float64(np.nan))
+
+
+@_tb("strtrim")
+def forge_strtrim(s):
+    """Remove leading and trailing whitespace."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        return ForgeChar(s.to_str().strip())
+    return ForgeChar(str(s).strip())
+
+
+@_tb("strsplit")
+def forge_strsplit(s, delim=None):
+    """Split string into cell array of strings."""
+    from forge.engine.containers import ForgeChar, ForgeCell
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(delim, ForgeChar):
+        delim = delim.to_str()
+    if delim:
+        parts = str(s).split(delim)
+    else:
+        parts = str(s).split()
+    return ForgeCell([ForgeChar(p) for p in parts])
+
+
+@_tb("strjoin")
+def forge_strjoin(parts, delim=None):
+    """Join cell array of strings."""
+    from forge.engine.containers import ForgeChar, ForgeCell
+    if isinstance(delim, ForgeChar):
+        delim = delim.to_str()
+    elif delim is None:
+        delim = " "
+    strs = []
+    if isinstance(parts, ForgeCell):
+        for p in parts.data.flat:
+            if isinstance(p, ForgeChar):
+                strs.append(p.to_str())
+            else:
+                strs.append(str(p))
+    return ForgeChar(delim.join(strs))
+
+
+@_tb("lower")
+def forge_lower(s):
+    """Convert to lowercase."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        return ForgeChar(s.to_str().lower())
+    return ForgeChar(str(s).lower())
+
+
+@_tb("upper")
+def forge_upper(s):
+    """Convert to uppercase."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        return ForgeChar(s.to_str().upper())
+    return ForgeChar(str(s).upper())
+
+
+@_tb("strcat")
+def forge_strcat(*args):
+    """Concatenate strings."""
+    from forge.engine.containers import ForgeChar
+    result = ""
+    for a in args:
+        if isinstance(a, ForgeChar):
+            result += a.to_str()
+        else:
+            result += str(a)
+    return ForgeChar(result)
+

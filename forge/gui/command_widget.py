@@ -29,6 +29,10 @@ class CommandWidget(QWidget):
         # Multi-line accumulation
         self._accumulator: list[str] = []
 
+        # Tab completion
+        self._completion_candidates: list[str] = []
+        self._completion_index: int = 0
+
         # Prompt tracking
         self._prompt_pos: int = 0  # character position where editable input starts
 
@@ -178,6 +182,16 @@ class CommandWidget(QWidget):
             QPlainTextEdit.keyPressEvent(self.console, event)
             return
 
+        # --- Tab: completion ---
+        if key == Qt.Key_Tab:
+            self._tab_complete()
+            return
+
+        # --- Escape: dismiss completion ---
+        if key == Qt.Key_Escape:
+            self._completion_candidates = []
+            return
+
         # --- All other printable keys ---
         if event.text() and not modifiers & Qt.ControlModifier:
             self._ensure_cursor_editable()
@@ -228,6 +242,118 @@ class CommandWidget(QWidget):
         else:
             self.history_index = -1
             self._set_input_text(self._history_tmp)
+
+    # ------------------------------------------------------------------
+    # Tab completion
+    # ------------------------------------------------------------------
+
+    def _get_completion_prefix(self):
+        """Get the word fragment before cursor for completion."""
+        text = self._get_input_text()
+        cursor = self.console.textCursor()
+        pos_in_input = cursor.position() - self._prompt_pos
+        if pos_in_input < 0:
+            return "", 0
+        left = text[:pos_in_input]
+        # Walk backwards to find start of identifier
+        i = len(left) - 1
+        while i >= 0 and (left[i].isalnum() or left[i] == '_'):
+            i -= 1
+        prefix = left[i+1:]
+        return prefix, len(prefix)
+
+    def _get_completions(self, prefix):
+        """Get list of matching completions for prefix."""
+        if not prefix:
+            return []
+        matches = []
+        # 1. Workspace variables
+        if self.engine:
+            try:
+                ws_names = self.engine._engine.workspace.names()
+                matches.extend(n for n in ws_names if n.startswith(prefix) and not n.startswith('_'))
+            except Exception:
+                pass
+            # 2. Registered functions
+            try:
+                func_names = list(self.engine._engine.functions.keys())
+                matches.extend(n for n in func_names if n.startswith(prefix) and n not in matches)
+            except Exception:
+                pass
+        # 3. Keywords
+        keywords = ['break', 'case', 'catch', 'continue', 'do', 'else', 'elseif',
+                     'end', 'endfor', 'endif', 'endwhile', 'endswitch', 'endtry',
+                     'for', 'function', 'global', 'if', 'otherwise', 'persistent',
+                     'return', 'switch', 'try', 'until', 'while']
+        matches.extend(k for k in keywords if k.startswith(prefix) and k not in matches)
+        return sorted(set(matches))
+
+    def _tab_complete(self):
+        """Handle tab key press for completion."""
+        prefix, prefix_len = self._get_completion_prefix()
+        if not prefix:
+            # Just insert spaces if no prefix
+            self._ensure_cursor_editable()
+            cursor = self.console.textCursor()
+            cursor.insertText("    ")
+            return
+
+        # If we have ongoing completion candidates, cycle through them
+        if self._completion_candidates and prefix == self._completion_candidates[self._completion_index][:len(prefix)]:
+            self._completion_index = (self._completion_index + 1) % len(self._completion_candidates)
+        else:
+            self._completion_candidates = self._get_completions(prefix)
+            self._completion_index = 0
+
+        if not self._completion_candidates:
+            return
+
+        if len(self._completion_candidates) == 1:
+            # Unique match — complete it
+            completion = self._completion_candidates[0]
+            self._replace_prefix(prefix_len, completion)
+            self._completion_candidates = []
+        else:
+            # Multiple matches
+            # First: complete common prefix
+            common = self._common_prefix(self._completion_candidates)
+            if len(common) > len(prefix):
+                self._replace_prefix(prefix_len, common)
+            else:
+                # Show candidates below
+                candidate = self._completion_candidates[self._completion_index]
+                self._replace_prefix(prefix_len, candidate)
+                # Show all matches as hint
+                if self._completion_index == 0:
+                    matches_str = "  ".join(self._completion_candidates[:20])
+                    if len(self._completion_candidates) > 20:
+                        matches_str += "  ..."
+                    # Show in output area temporarily
+                    cursor = self.console.textCursor()
+                    pos = cursor.position()
+                    self._append_text("\n" + matches_str + "\n")
+                    # Move cursor back to input
+                    self._write_prompt()
+                    self._set_input_text(candidate)
+
+    def _replace_prefix(self, prefix_len, replacement):
+        """Replace the prefix at cursor with replacement text."""
+        cursor = self.console.textCursor()
+        for _ in range(prefix_len):
+            cursor.deletePreviousChar()
+        cursor.insertText(replacement)
+
+    def _common_prefix(self, strings):
+        """Find longest common prefix of a list of strings."""
+        if not strings:
+            return ""
+        prefix = strings[0]
+        for s in strings[1:]:
+            while not s.startswith(prefix):
+                prefix = prefix[:-1]
+                if not prefix:
+                    return ""
+        return prefix
 
     # ------------------------------------------------------------------
     # Execution
