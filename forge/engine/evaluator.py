@@ -582,6 +582,13 @@ class Session:
         b.update(BUILTIN_REGISTRY)
 
     def _builtin_size(self, x, *args):
+        from forge.engine.containers import ForgeCell
+        if isinstance(x, ForgeCell):
+            shape = x._shape
+            if args:
+                dim = int(_to_py(args[0]))
+                return ForgeArray(np.array(shape[dim-1] if dim <= len(shape) else 1))
+            return ForgeArray(np.array(list(shape)))
         if not isinstance(x, ForgeArray):
             return ForgeArray(np.array([1, 1]))
         if args:
