@@ -2078,6 +2078,230 @@ class ForgeSession:
         session._engine.functions["movstd"] = forge_movstd
         session._engine.functions["table"] = forge_table
 
+        # R121: del2, divergence, special matrices, string utils
+        def forge_del2(U, *args):
+            """del2(U) — discrete Laplacian (5-point stencil)."""
+            from forge.engine.types import ForgeArray
+            data = U.data if isinstance(U, ForgeArray) else np.atleast_2d(U)
+            is_row = data.ndim == 2 and data.shape[0] == 1
+            is_col = data.ndim == 2 and data.shape[1] == 1
+            if is_row:
+                data = data.flatten()
+            elif is_col:
+                data = data.flatten()
+            if data.ndim == 1:
+                n = len(data)
+                h = args[0].data.flat[0] if args and isinstance(args[0], ForgeArray) else 1.0
+                L = np.zeros(n)
+                L[1:-1] = (data[:-2] - 2*data[1:-1] + data[2:]) / (4 * h**2)
+                L[0] = L[1]
+                L[-1] = L[-2]
+                if is_row:
+                    return ForgeArray(L.reshape(1, -1))
+                elif is_col:
+                    return ForgeArray(L.reshape(-1, 1))
+                return ForgeArray(L)
+            else:
+                m, n = data.shape
+                hx = args[0].data.flat[0] if len(args) > 0 and isinstance(args[0], ForgeArray) else 1.0
+                hy = args[1].data.flat[0] if len(args) > 1 and isinstance(args[1], ForgeArray) else hx
+                L = np.zeros_like(data, dtype=np.float64)
+                # Interior
+                L[1:-1, 1:-1] = (data[:-2, 1:-1] + data[2:, 1:-1] +
+                                  data[1:-1, :-2] + data[1:-1, 2:] -
+                                  4*data[1:-1, 1:-1]) / 4
+                # Boundary: copy from interior
+                L[0, :] = L[1, :]
+                L[-1, :] = L[-2, :]
+                L[:, 0] = L[:, 1]
+                L[:, -1] = L[:, -2]
+                return ForgeArray(L)
+
+        def forge_divergence(Fx, Fy, *args):
+            """divergence(Fx, Fy) — numerical divergence of 2D vector field."""
+            from forge.engine.types import ForgeArray
+            fx = Fx.data if isinstance(Fx, ForgeArray) else np.atleast_2d(Fx)
+            fy = Fy.data if isinstance(Fy, ForgeArray) else np.atleast_2d(Fy)
+            # Use central differences
+            dFx_dx = np.zeros_like(fx)
+            dFy_dy = np.zeros_like(fy)
+            if fx.ndim == 2:
+                dFx_dx[:, 1:-1] = (fx[:, 2:] - fx[:, :-2]) / 2
+                dFx_dx[:, 0] = fx[:, 1] - fx[:, 0]
+                dFx_dx[:, -1] = fx[:, -1] - fx[:, -2]
+                dFy_dy[1:-1, :] = (fy[2:, :] - fy[:-2, :]) / 2
+                dFy_dy[0, :] = fy[1, :] - fy[0, :]
+                dFy_dy[-1, :] = fy[-1, :] - fy[-2, :]
+            return ForgeArray(dFx_dx + dFy_dy)
+
+        def forge_narginchk(minargs, maxargs):
+            """narginchk(min, max) — check number of input arguments."""
+            from forge.engine.types import ForgeArray
+            if isinstance(minargs, ForgeArray):
+                minargs = int(minargs.data.flat[0])
+            if isinstance(maxargs, ForgeArray):
+                maxargs = int(maxargs.data.flat[0])
+            return ForgeArray(np.array(0.0))
+
+        def forge_nargoutchk(minargs, maxargs):
+            """nargoutchk(min, max) — check number of output arguments."""
+            from forge.engine.types import ForgeArray
+            if isinstance(minargs, ForgeArray):
+                minargs = int(minargs.data.flat[0])
+            if isinstance(maxargs, ForgeArray):
+                maxargs = int(maxargs.data.flat[0])
+            return ForgeArray(np.array(0.0))
+
+        def forge_rosser():
+            """rosser — classic test matrix for eigenvalue routines."""
+            from forge.engine.types import ForgeArray
+            R = np.array([
+                [611, 196, -192, 407, -8, -52, -49, 29],
+                [196, 899, 113, -192, -71, -43, -8, -44],
+                [-192, 113, 899, 196, 61, 49, 8, 52],
+                [407, -192, 196, 611, 8, 44, 59, -23],
+                [-8, -71, 61, 8, 411, -599, 208, 208],
+                [-52, -43, 49, 44, -599, 411, 208, 208],
+                [-49, -8, 8, 59, 208, 208, 99, -911],
+                [29, -44, 52, -23, 208, 208, -911, 99]
+            ], dtype=np.float64)
+            return ForgeArray(R)
+
+        def forge_wilkinson(n):
+            """wilkinson(n) — Wilkinson's tridiagonal test matrix."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            m = (n - 1) // 2
+            d = np.abs(np.arange(-m, m + 1, dtype=np.float64))
+            e = np.ones(n - 1, dtype=np.float64)
+            W = np.diag(d) + np.diag(e, 1) + np.diag(e, -1)
+            return ForgeArray(W)
+
+        def forge_compan(p):
+            """compan(p) — companion matrix for polynomial."""
+            from forge.engine.types import ForgeArray
+            if isinstance(p, ForgeArray):
+                p = p.data.flatten()
+            n = len(p) - 1
+            if n < 1:
+                return ForgeArray(np.array([]).reshape(0, 0))
+            C = np.zeros((n, n))
+            C[0, :] = -p[1:] / p[0]
+            C[np.arange(1, n), np.arange(0, n-1)] = 1
+            return ForgeArray(C)
+
+        def forge_strtrim(s):
+            """strtrim(s) — strip leading/trailing whitespace."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                return ForgeChar(s.to_str().strip())
+            return s
+
+        def forge_deblank(s):
+            """deblank(s) — strip trailing blanks."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                return ForgeChar(s.to_str().rstrip())
+            return s
+
+        def forge_fliplr(A):
+            """fliplr(A) — flip matrix left-right."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.fliplr(data if data.ndim >= 2 else data.reshape(1, -1)))
+
+        def forge_flipud(A):
+            """flipud(A) — flip matrix up-down."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.flipud(data if data.ndim >= 2 else data.reshape(-1, 1)))
+
+        def forge_rot90(A, *args):
+            """rot90(A, k) — rotate matrix 90 degrees counterclockwise."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            k = 1
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+            return ForgeArray(np.rot90(data, k))
+
+        def forge_circshift(A, k, *args):
+            """circshift(A, k) — circular shift."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if isinstance(k, ForgeArray):
+                k_val = k.data.flatten().astype(int)
+                if k_val.size == 1:
+                    # For row vectors, shift along columns (axis=1)
+                    ax = 1 if (data.ndim == 2 and data.shape[0] == 1) else 0
+                    return ForgeArray(np.roll(data, int(k_val[0]), axis=ax))
+                shifts = tuple(int(x) for x in k_val)
+                result = data
+                for ax, sh in enumerate(shifts):
+                    result = np.roll(result, sh, axis=ax)
+                return ForgeArray(result)
+            ax = 1 if (data.ndim == 2 and data.shape[0] == 1) else 0
+            return ForgeArray(np.roll(data, int(k), axis=ax))
+
+        def forge_shiftdim(A, n=None):
+            """shiftdim(A, n) — shift dimensions."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if n is None or (isinstance(n, ForgeArray) and n.data.flat[0] == 0):
+                # Remove leading singleton dims
+                while data.ndim > 2 and data.shape[0] == 1:
+                    data = data.reshape(data.shape[1:])
+                return ForgeArray(data)
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            axes = list(range(data.ndim))
+            axes = axes[n:] + axes[:n]
+            return ForgeArray(np.transpose(data, axes))
+
+        def forge_squeeze(A):
+            """squeeze(A) — remove singleton dimensions."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.squeeze(data))
+
+        def forge_permute(A, order):
+            """permute(A, order) — rearrange dimensions."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if isinstance(order, ForgeArray):
+                order = tuple(int(x) - 1 for x in order.data.flatten())
+            return ForgeArray(np.transpose(data, order))
+
+        def forge_ipermute(A, order):
+            """ipermute(A, order) — inverse permute dimensions."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if isinstance(order, ForgeArray):
+                order = [int(x) - 1 for x in order.data.flatten()]
+            inv_order = [0] * len(order)
+            for i, o in enumerate(order):
+                inv_order[o] = i
+            return ForgeArray(np.transpose(data, inv_order))
+
+        session._engine.functions["del2"] = forge_del2
+        session._engine.functions["divergence"] = forge_divergence
+        session._engine.functions["narginchk"] = forge_narginchk
+        session._engine.functions["nargoutchk"] = forge_nargoutchk
+        session._engine.functions["rosser"] = forge_rosser
+        session._engine.functions["wilkinson"] = forge_wilkinson
+        session._engine.functions["compan"] = forge_compan
+        session._engine.functions["strtrim"] = forge_strtrim
+        session._engine.functions["deblank"] = forge_deblank
+        session._engine.functions["fliplr"] = forge_fliplr
+        session._engine.functions["flipud"] = forge_flipud
+        session._engine.functions["rot90"] = forge_rot90
+        session._engine.functions["circshift"] = forge_circshift
+        session._engine.functions["shiftdim"] = forge_shiftdim
+        session._engine.functions["squeeze"] = forge_squeeze
+        session._engine.functions["permute"] = forge_permute
+        session._engine.functions["ipermute"] = forge_ipermute
+
 
 
 
