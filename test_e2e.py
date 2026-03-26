@@ -584,4 +584,15 @@ check("jsonencode_num", "length(jsonencode([1 2 3])) > 0", "1")
 check("base64enc_dec", "base64decode(base64encode('hello'))", "hello")
 check("linprog_basic", "x = linprog([-1; -1], [1 1], [1]); abs(x(1) + x(2) - 1) < 1e-6", "1")
 
+
+print("\nR149 control, hash, date, FIR:")
+check("ctrb_rank", "A = [0 1; -2 -3]; B = [0; 1]; rank(ctrb(A, B))", "2")
+check("obsv_rank", "A = [0 1; -2 -3]; C = [1 0]; rank(obsv(A, C))", "2")
+check("md5_hello", "length(md5('hello'))", "32")
+check("sha256_hello", "length(sha256('hello'))", "64")
+check("calendar_rows", "size(calendar(2024, 3), 1)", "6")
+check("date_length", "length(date()) > 5", "1")
+check("regexpi_ci", "length(regexpi('Hello World', 'hello')) > 0", "1")
+check("fir1_len", "length(fir1(10, 0.5))", "11")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")

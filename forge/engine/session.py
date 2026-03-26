@@ -7402,6 +7402,485 @@ class ForgeSession:
         session._engine.functions["urlwrite"] = forge_urlwrite2
         session._engine.functions["assignin"] = forge_assignin2
         session._engine.functions["evalin"] = forge_evalin2
+
+        # R149: Control stubs, FIR, hash, containers, misc
+
+        # --- Control system extras ---
+        def forge_d2c2(sys, *args):
+            """d2c(sys) — discrete to continuous (stub)."""
+            return sys
+
+        def forge_series2(sys1, sys2, *args):
+            """series(sys1, sys2) — series connection (stub)."""
+            return sys1
+
+        def forge_parallel2(sys1, sys2, *args):
+            """parallel(sys1, sys2) — parallel connection (stub)."""
+            return sys1
+
+        def forge_feedback2(sys1, sys2=None, *args):
+            """feedback(sys1, sys2) — feedback connection (stub)."""
+            return sys1
+
+        def forge_bode2(*args):
+            """bode(sys) — Bode plot (stub)."""
+            pass
+
+        def forge_nyquist2(*args):
+            """nyquist(sys) — Nyquist plot (stub)."""
+            pass
+
+        def forge_rlocus2(*args):
+            """rlocus(sys) — root locus (stub)."""
+            pass
+
+        def forge_step2_ctrl(*args):
+            """step(sys) — step response (stub)."""
+            pass
+
+        def forge_impulse2(*args):
+            """impulse(sys) — impulse response (stub)."""
+            pass
+
+        def forge_lsim2(*args):
+            """lsim(sys, u, t) — simulate response (stub)."""
+            pass
+
+        def forge_margin2(*args):
+            """margin(sys) — gain/phase margins (stub)."""
+            pass
+
+        def forge_pole2(sys, *args):
+            """pole(sys) — system poles."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(sys, ForgeStruct) and 'den' in sys._fields:
+                den = sys._fields['den']
+                if isinstance(den, ForgeArray):
+                    return ForgeArray(np.roots(den.data.flatten()).reshape(-1, 1))
+            return ForgeArray(np.array([[]]))
+
+        def forge_zero2(sys, *args):
+            """zero(sys) — system zeros."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(sys, ForgeStruct) and 'num' in sys._fields:
+                num = sys._fields['num']
+                if isinstance(num, ForgeArray):
+                    return ForgeArray(np.roots(num.data.flatten()).reshape(-1, 1))
+            return ForgeArray(np.array([[]]))
+
+        def forge_dcgain2(sys, *args):
+            """dcgain(sys) — DC gain."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(sys, ForgeStruct):
+                if 'num' in sys._fields and 'den' in sys._fields:
+                    num = sys._fields['num'].data.flatten() if isinstance(sys._fields['num'], ForgeArray) else [1]
+                    den = sys._fields['den'].data.flatten() if isinstance(sys._fields['den'], ForgeArray) else [1]
+                    return ForgeArray(np.float64(num[-1] / den[-1]))
+            return ForgeArray(np.float64(1))
+
+        def forge_minreal2(sys, *args):
+            """minreal(sys) — minimal realization (stub)."""
+            return sys
+
+        def forge_gram2(A, B):
+            """gram(A, B) — controllability/observability Gramian."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_continuous_lyapunov
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            W = solve_continuous_lyapunov(Ad, -Bd @ Bd.T)
+            return ForgeArray(W)
+
+        def forge_obsv2(A, C):
+            """obsv(A, C) — observability matrix."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Cd = C.data if isinstance(C, ForgeArray) else np.atleast_2d(C)
+            n = Ad.shape[0]
+            O = Cd.copy()
+            CA = Cd.copy()
+            for i in range(1, n):
+                CA = CA @ Ad
+                O = np.vstack([O, CA])
+            return ForgeArray(O)
+
+        def forge_ctrb2(A, B):
+            """ctrb(A, B) — controllability matrix."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            n = Ad.shape[0]
+            C = Bd.copy()
+            AB = Bd.copy()
+            for i in range(1, n):
+                AB = Ad @ AB
+                C = np.hstack([C, AB])
+            return ForgeArray(C)
+
+        def forge_acker2(A, B, p):
+            """acker(A, B, p) — Ackermann pole placement."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import place_poles
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            result = place_poles(Ad, Bd, pd)
+            return ForgeArray(result.gain_matrix)
+
+        def forge_lqe2(A, G, C, Qn, Rn):
+            """[L, P, E] = lqe(A, G, C, Qn, Rn) — Kalman estimator gain."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_continuous_are
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Gd = G.data if isinstance(G, ForgeArray) else np.atleast_2d(G)
+            Cd = C.data if isinstance(C, ForgeArray) else np.atleast_2d(C)
+            Qnd = Qn.data if isinstance(Qn, ForgeArray) else np.atleast_2d(Qn)
+            Rnd = Rn.data if isinstance(Rn, ForgeArray) else np.atleast_2d(Rn)
+            P = solve_continuous_are(Ad.T, Cd.T, Gd @ Qnd @ Gd.T, Rnd)
+            L = P @ Cd.T @ np.linalg.inv(Rnd)
+            E = np.linalg.eigvals(Ad - L @ Cd)
+            return ForgeArray(L), ForgeArray(P), ForgeArray(E.reshape(-1, 1))
+
+        # --- Hashing ---
+        def forge_md5_func(data):
+            """md5(data) — MD5 hash."""
+            import hashlib
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(data, ForgeChar): data = data.to_str()
+            elif isinstance(data, ForgeArray): data = str(data.data.tolist())
+            return ForgeChar(hashlib.md5(data.encode()).hexdigest())
+
+        def forge_sha256_func(data):
+            """sha256(data) — SHA-256 hash."""
+            import hashlib
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(data, ForgeChar): data = data.to_str()
+            elif isinstance(data, ForgeArray): data = str(data.data.tolist())
+            return ForgeChar(hashlib.sha256(data.encode()).hexdigest())
+
+        # --- Timer ---
+        def forge_timer_func(*args):
+            """timer (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(0))
+
+        # --- XML ---
+        def forge_xmlread2(fname):
+            """xmlread(filename) — read XML file."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            try:
+                with open(fname) as f:
+                    return ForgeChar(f.read())
+            except:
+                return ForgeChar('')
+
+        def forge_xmlwrite2(fname, content):
+            """xmlwrite(filename, content) — write XML file."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            if isinstance(content, ForgeChar): content = content.to_str()
+            with open(fname, 'w') as f:
+                f.write(content)
+
+        # --- FIR design extras ---
+        def forge_fir2_2(n, f, a, *args):
+            """fir2(n, f, a) — FIR with arbitrary frequency response."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import firwin2
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            fd = f.data.flatten() if isinstance(f, ForgeArray) else np.array(f).flatten()
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            b = firwin2(nd + 1, fd, ad)
+            return ForgeArray(b.reshape(1, -1))
+
+        def forge_firls2(n, f, a, *args):
+            """firls(n, f, a) — least-squares FIR design."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import firls as _firls
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            fd = f.data.flatten() if isinstance(f, ForgeArray) else np.array(f).flatten()
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            b = _firls(nd + 1, fd, ad)
+            return ForgeArray(b.reshape(1, -1))
+
+        def forge_impz2(b, a=None, *args):
+            """[h, t] = impz(b, a) — impulse response of digital filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import dimpulse, dlti
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            ad = np.array([1.0])
+            if a is not None and isinstance(a, ForgeArray):
+                ad = a.data.flatten()
+            n = 50
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            sys = dlti(bd, ad, dt=1)
+            t, h = dimpulse(sys, n=n)
+            return ForgeArray(h[0].flatten().reshape(1, -1)), ForgeArray(t.reshape(1, -1))
+
+        def forge_stepz2(b, a=None, *args):
+            """[h, t] = stepz(b, a) — step response of digital filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import dstep, dlti
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            ad = np.array([1.0])
+            if a is not None and isinstance(a, ForgeArray):
+                ad = a.data.flatten()
+            n = 50
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            sys = dlti(bd, ad, dt=1)
+            t, h = dstep(sys, n=n)
+            return ForgeArray(h[0].flatten().reshape(1, -1)), ForgeArray(t.reshape(1, -1))
+
+        def forge_zplane2(b, a=None, *args):
+            """zplane(b, a) — zero-pole plot (stub)."""
+            pass
+
+        # --- More string/char ---
+        def forge_native2unicode(x, *args):
+            """native2unicode(bytes) — bytes to unicode string."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten().astype(np.uint8)
+                return ForgeChar(bytes(data).decode('utf-8', errors='replace'))
+            return ForgeChar(str(x))
+
+        def forge_unicode2native(s, *args):
+            """unicode2native(str) — string to byte array."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            return ForgeArray(np.array(list(s.encode('utf-8')), dtype=float).reshape(1, -1))
+
+        def forge_regexpi2(s, pat, *args):
+            """regexpi(s, pattern) — case-insensitive regexp."""
+            import re
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            matches = [m.start() + 1 for m in re.finditer(pat, s, re.IGNORECASE)]
+            if not matches:
+                return ForgeArray(np.array([[]]))
+            return ForgeArray(np.array(matches, dtype=float).reshape(1, -1))
+
+        def forge_regexptranslate2(op, pat):
+            """regexptranslate(op, pattern) — translate pattern."""
+            import re
+            from forge.engine.containers import ForgeChar
+            if isinstance(op, ForgeChar): op = op.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            if op == 'escape':
+                return ForgeChar(re.escape(pat))
+            elif op == 'wildcard':
+                return ForgeChar(pat.replace('*', '.*').replace('?', '.'))
+            return ForgeChar(pat)
+
+        # --- Date/time extras ---
+        def forge_calendar2(*args):
+            """calendar(year, month) — monthly calendar matrix."""
+            from forge.engine.types import ForgeArray
+            import calendar
+            import datetime
+            if len(args) >= 2:
+                y = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                m = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+            else:
+                now = datetime.datetime.now()
+                y, m = now.year, now.month
+            cal = calendar.monthcalendar(y, m)
+            # Pad to 6 rows
+            while len(cal) < 6:
+                cal.append([0]*7)
+            return ForgeArray(np.array(cal, dtype=float))
+
+        def forge_date2(x=None):
+            """date — current date string."""
+            from forge.engine.containers import ForgeChar
+            import datetime
+            return ForgeChar(datetime.datetime.now().strftime('%d-%b-%Y'))
+
+        def forge_addtodate2(d, n, unit):
+            """addtodate(datenum, n, unit) — add to date."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            dd = float(d.data.flat[0]) if isinstance(d, ForgeArray) else float(d)
+            nd = float(n.data.flat[0]) if isinstance(n, ForgeArray) else float(n)
+            if isinstance(unit, ForgeChar): unit = unit.to_str()
+            if unit == 'day':
+                return ForgeArray(np.float64(dd + nd))
+            elif unit == 'month':
+                return ForgeArray(np.float64(dd + nd * 30))
+            elif unit == 'year':
+                return ForgeArray(np.float64(dd + nd * 365))
+            elif unit == 'hour':
+                return ForgeArray(np.float64(dd + nd / 24))
+            return ForgeArray(np.float64(dd + nd))
+
+        # --- Miscellaneous ---
+        def forge_onCleanup2(func):
+            """onCleanup(func) — cleanup object (stub)."""
+            pass
+
+        def forge_nargchk2(minargs, maxargs, nargs):
+            """nargchk(min, max, n) — check argument count (deprecated)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            mi = int(minargs.data.flat[0]) if isinstance(minargs, ForgeArray) else int(minargs)
+            ma = int(maxargs.data.flat[0]) if isinstance(maxargs, ForgeArray) else int(maxargs)
+            n = int(nargs.data.flat[0]) if isinstance(nargs, ForgeArray) else int(nargs)
+            if n < mi:
+                return ForgeChar('Not enough input arguments.')
+            elif n > ma:
+                return ForgeChar('Too many input arguments.')
+            return ForgeChar('')
+
+        def forge_validateattributes2(A, classes, attributes):
+            """validateattributes(A, classes, attributes) — validate input."""
+            pass  # No-op for compatibility
+
+        def forge_comet2(x, y=None, *args):
+            """comet(x, y) — animated plot (stub)."""
+            pass
+
+        def forge_comet3_func(x, y, z, *args):
+            """comet3(x, y, z) — 3D animated plot (stub)."""
+            pass
+
+        def forge_fplot2(func, limits=None, *args):
+            """fplot(func, [a b]) — function plot (stub)."""
+            pass
+
+        def forge_ezplot2(*args):
+            """ezplot(func) — easy function plot (stub)."""
+            pass
+
+        def forge_isocaps2(*args):
+            """isocaps(V, val) — isosurface end caps (stub)."""
+            pass
+
+        def forge_isosurface2(*args):
+            """isosurface(V, val) — isosurface (stub)."""
+            pass
+
+        def forge_isonormals2(*args):
+            """isonormals(V, p) — isosurface normals (stub)."""
+            pass
+
+        def forge_streamline2(*args):
+            """streamline(X, Y, U, V) — streamlines (stub)."""
+            pass
+
+        def forge_view2(*args):
+            """view(az, el) — set view angle (stub)."""
+            pass
+
+        def forge_rotate3d2(*args):
+            """rotate3d on/off — toggle rotation (stub)."""
+            pass
+
+        def forge_zoom2(*args):
+            """zoom on/off — toggle zoom (stub)."""
+            pass
+
+        def forge_pan2(*args):
+            """pan on/off — toggle pan (stub)."""
+            pass
+
+        def forge_datacursormode2(*args):
+            """datacursormode on/off (stub)."""
+            pass
+
+        def forge_linkaxes2(*args):
+            """linkaxes(ax, option) (stub)."""
+            pass
+
+        def forge_shading2(*args):
+            """shading flat/interp/faceted (stub)."""
+            pass
+
+        def forge_lighting2(*args):
+            """lighting flat/gouraud/phong (stub)."""
+            pass
+
+        def forge_material2(*args):
+            """material shiny/dull/metal (stub)."""
+            pass
+
+        def forge_camlight2(*args):
+            """camlight(direction) (stub)."""
+            pass
+
+        def forge_light2(*args):
+            """light(property, value) (stub)."""
+            pass
+
+        # Register R149 functions
+        session._engine.functions["d2c"] = forge_d2c2
+        session._engine.functions["series"] = forge_series2
+        session._engine.functions["parallel"] = forge_parallel2
+        session._engine.functions["feedback"] = forge_feedback2
+        session._engine.functions["bode"] = forge_bode2
+        session._engine.functions["nyquist"] = forge_nyquist2
+        session._engine.functions["rlocus"] = forge_rlocus2
+        session._engine.functions["impulse"] = forge_impulse2
+        session._engine.functions["lsim"] = forge_lsim2
+        session._engine.functions["margin"] = forge_margin2
+        session._engine.functions["pole"] = forge_pole2
+        session._engine.functions["zero"] = forge_zero2
+        session._engine.functions["dcgain"] = forge_dcgain2
+        session._engine.functions["minreal"] = forge_minreal2
+        session._engine.functions["gram"] = forge_gram2
+        session._engine.functions["obsv"] = forge_obsv2
+        session._engine.functions["ctrb"] = forge_ctrb2
+        session._engine.functions["acker"] = forge_acker2
+        session._engine.functions["lqe"] = forge_lqe2
+        session._engine.functions["md5"] = forge_md5_func
+        session._engine.functions["sha256"] = forge_sha256_func
+        session._engine.functions["timer"] = forge_timer_func
+        session._engine.functions["xmlread"] = forge_xmlread2
+        session._engine.functions["xmlwrite"] = forge_xmlwrite2
+        session._engine.functions["fir2"] = forge_fir2_2
+        session._engine.functions["firls"] = forge_firls2
+        session._engine.functions["impz"] = forge_impz2
+        session._engine.functions["stepz"] = forge_stepz2
+        session._engine.functions["zplane"] = forge_zplane2
+        session._engine.functions["native2unicode"] = forge_native2unicode
+        session._engine.functions["unicode2native"] = forge_unicode2native
+        session._engine.functions["regexpi"] = forge_regexpi2
+        session._engine.functions["regexptranslate"] = forge_regexptranslate2
+        session._engine.functions["calendar"] = forge_calendar2
+        session._engine.functions["date"] = forge_date2
+        session._engine.functions["addtodate"] = forge_addtodate2
+        session._engine.functions["onCleanup"] = forge_onCleanup2
+        session._engine.functions["validateattributes"] = forge_validateattributes2
+        session._engine.functions["comet"] = forge_comet2
+        session._engine.functions["comet3"] = forge_comet3_func
+        session._engine.functions["fplot"] = forge_fplot2
+        session._engine.functions["ezplot"] = forge_ezplot2
+        session._engine.functions["isocaps"] = forge_isocaps2
+        session._engine.functions["isosurface"] = forge_isosurface2
+        session._engine.functions["isonormals"] = forge_isonormals2
+        session._engine.functions["streamline"] = forge_streamline2
+        session._engine.functions["view"] = forge_view2
+        session._engine.functions["rotate3d"] = forge_rotate3d2
+        session._engine.functions["zoom"] = forge_zoom2
+        session._engine.functions["pan"] = forge_pan2
+        session._engine.functions["datacursormode"] = forge_datacursormode2
+        session._engine.functions["linkaxes"] = forge_linkaxes2
+        session._engine.functions["shading"] = forge_shading2
+        session._engine.functions["lighting"] = forge_lighting2
+        session._engine.functions["material"] = forge_material2
+        session._engine.functions["camlight"] = forge_camlight2
+        session._engine.functions["light"] = forge_light2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
