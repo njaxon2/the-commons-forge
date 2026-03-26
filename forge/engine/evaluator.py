@@ -1433,6 +1433,12 @@ class Session:
     def _call_function(self, funcdef: FunctionDef, args: list, caller_ws: Workspace) -> Any:
         """Call a user-defined function."""
         local_ws = Workspace()
+        # Copy constants from base workspace into local workspace
+        _CONSTANTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
+                      "realmin", "realmax", "i", "j", "true", "false"}
+        for const in _CONSTANTS:
+            if self.workspace.has(const):
+                local_ws.set(const, self.workspace.get(const))
         # Set nargin/nargout
         local_ws.set("nargin", ForgeArray(np.array(float(len(args)))))
         local_ws.set("nargout", ForgeArray(np.array(float(len(funcdef.returns)))))

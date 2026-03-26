@@ -1433,6 +1433,125 @@ class ForgeSession:
             return ForgeArray(K), ForgeArray(np.zeros(n_2d)), ForgeArray(np.array(free_dofs, dtype=float) + 1)  # 1-based
 
         session._engine.functions["tiga_assemble_2d"] = forge_tiga_assemble_2d
+        # Register TIGA primitive functions as fast Python builtins
+        # (These override the .m file versions with faster Python implementations)
+        def forge_findspan_builtin(n, p, u, U):
+            """findspan(n, p, u, U) — find knot span index."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            if isinstance(p, ForgeArray): p = int(p.data.flat[0])
+            if isinstance(u, ForgeArray): u = float(u.data.flat[0])
+            if isinstance(U, ForgeArray): U = U.data.flatten()
+            else: U = np.array(U).flatten()
+            if u >= U[n + 1]:
+                return ForgeArray(np.float64(n))
+            if u <= U[p]:
+                return ForgeArray(np.float64(p))
+            low, high = p, n + 1
+            mid = (low + high) // 2
+            while u < U[mid] or u >= U[mid + 1]:
+                if u < U[mid]:
+                    high = mid
+                else:
+                    low = mid
+                mid = (low + high) // 2
+            return ForgeArray(np.float64(mid))
+
+        def forge_basisfun_builtin(i, u, p, U):
+            """basisfun(i, u, p, U) — compute B-spline basis functions."""
+            from forge.engine.types import ForgeArray
+            if isinstance(i, ForgeArray): i = int(i.data.flat[0])
+            if isinstance(u, ForgeArray): u = float(u.data.flat[0])
+            if isinstance(p, ForgeArray): p = int(p.data.flat[0])
+            if isinstance(U, ForgeArray): U = U.data.flatten()
+            else: U = np.array(U).flatten()
+            N = np.zeros(p + 1)
+            left = np.zeros(p + 1)
+            right = np.zeros(p + 1)
+            N[0] = 1.0
+            for j in range(1, p + 1):
+                left[j] = u - U[i + 1 - j]
+                right[j] = U[i + j] - u
+                saved = 0.0
+                for r in range(j):
+                    temp = N[r] / (right[r + 1] + left[j - r])
+                    N[r] = saved + right[r + 1] * temp
+                    saved = left[j - r] * temp
+                N[j] = saved
+            return ForgeArray(N.reshape(1, -1))
+
+        def forge_derbasisfun_builtin(i_span, u, p, *args):
+            """derbasisfun(i, u, p, Xi) or derbasisfun(i, u, p, n_deriv, Xi)"""
+            from forge.engine.types import ForgeArray
+            if isinstance(i_span, ForgeArray): i_span = int(i_span.data.flat[0])
+            if isinstance(u, ForgeArray): u = float(u.data.flat[0])
+            if isinstance(p, ForgeArray): p = int(p.data.flat[0])
+            if len(args) == 1:
+                Xi_arr = args[0]; nd = 1
+            elif len(args) == 2:
+                nd_a = args[0]; Xi_arr = args[1]
+                nd = int(nd_a.data.flat[0]) if isinstance(nd_a, ForgeArray) else int(nd_a)
+            else:
+                raise ValueError("derbasisfun requires 4 or 5 arguments")
+            Xi = Xi_arr.data.flatten() if isinstance(Xi_arr, ForgeArray) else np.array(Xi_arr).flatten()
+            ders = np.zeros((nd + 1, p + 1))
+            ndu = np.zeros((p + 1, p + 1))
+            left_a = np.zeros(p + 1)
+            right_a = np.zeros(p + 1)
+            a_m = np.zeros((2, p + 1))
+            ndu[0, 0] = 1.0
+            for j in range(1, p + 1):
+                left_a[j] = u - Xi[i_span + 1 - j]
+                right_a[j] = Xi[i_span + j] - u
+                saved = 0.0
+                for r in range(j):
+                    denom = right_a[r + 1] + left_a[j - r]
+                    ndu[j, r] = denom if abs(denom) > 1e-30 else 1e-30
+                    temp = ndu[r, j - 1] / ndu[j, r]
+                    ndu[r, j] = saved + right_a[r + 1] * temp
+                    saved = left_a[j - r] * temp
+                ndu[j, j] = saved
+            for j in range(p + 1):
+                ders[0, j] = ndu[j, p]
+            for r in range(p + 1):
+                s1, s2 = 0, 1
+                a_m[0, 0] = 1.0
+                for k in range(1, nd + 1):
+                    d = 0.0
+                    rk, pk = r - k, p - k
+                    if r >= k:
+                        a_m[s2, 0] = a_m[s1, 0] / ndu[pk + 1, rk]
+                        d = a_m[s2, 0] * ndu[rk, pk]
+                    j1 = 1 if rk >= -1 else -rk
+                    j2 = k - 1 if r - 1 <= pk else p - r
+                    for jj in range(j1, j2 + 1):
+                        a_m[s2, jj] = (a_m[s1, jj] - a_m[s1, jj - 1]) / ndu[pk + 1, rk + jj]
+                        d += a_m[s2, jj] * ndu[rk + jj, pk]
+                    if r <= pk:
+                        a_m[s2, k] = -a_m[s1, k - 1] / ndu[pk + 1, r]
+                        d += a_m[s2, k] * ndu[r, pk]
+                    ders[k, r] = d
+                    s1, s2 = s2, s1
+            rv = p
+            for k in range(1, nd + 1):
+                ders[k, :] *= rv
+                rv *= (p - k)
+            if len(args) == 1:
+                return ForgeArray(ders[1, :].reshape(1, -1))
+            return ForgeArray(ders)
+
+        def forge_gaussQuad_builtin(n):
+            """gaussQuad(n) — Gauss-Legendre quadrature points and weights."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray): n = int(n.data.flat[0])
+            points, weights = np.polynomial.legendre.leggauss(n)
+            return ForgeArray(points.reshape(1, -1)), ForgeArray(weights.reshape(1, -1))
+
+        session._engine.functions["findspan"] = forge_findspan_builtin
+        session._engine.functions["basisfun"] = forge_basisfun_builtin
+        session._engine.functions["derbasisfun"] = forge_derbasisfun_builtin
+        session._engine.functions["gaussQuad"] = forge_gaussQuad_builtin
+
 
         # R113: Utility functions
         def forge_fieldnames(s):
