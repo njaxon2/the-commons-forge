@@ -5,8 +5,77 @@ input live together.  The user types after the '>> ' prompt at the bottom.
 """
 
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat
+from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat, QSyntaxHighlighter, QTextDocument
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
+
+
+import re as _re
+
+
+class _MCodeHighlighter(QSyntaxHighlighter):
+    """Minimal M-code syntax highlighting for the input line."""
+
+    KEYWORDS = {
+        "for", "end", "if", "else", "elseif", "while", "do", "until",
+        "switch", "case", "otherwise", "try", "catch", "function",
+        "return", "break", "continue", "global", "persistent",
+        "endfor", "endif", "endwhile", "endswitch", "endtry",
+        "true", "false",
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Format: keywords
+        self._kw_fmt = QTextCharFormat()
+        self._kw_fmt.setForeground(QColor("#569cd6"))  # blue
+        self._kw_fmt.setFontWeight(QFont.Bold)
+        # Format: strings
+        self._str_fmt = QTextCharFormat()
+        self._str_fmt.setForeground(QColor("#ce9178"))  # orange
+        # Format: numbers
+        self._num_fmt = QTextCharFormat()
+        self._num_fmt.setForeground(QColor("#b5cea8"))  # green
+        # Format: comments
+        self._cmt_fmt = QTextCharFormat()
+        self._cmt_fmt.setForeground(QColor("#6a9955"))  # green
+        self._cmt_fmt.setFontItalic(True)
+        # Format: operators
+        self._op_fmt = QTextCharFormat()
+        self._op_fmt.setForeground(QColor("#d4d4d4"))  # light gray
+        # Format: functions (built-in calls)
+        self._fn_fmt = QTextCharFormat()
+        self._fn_fmt.setForeground(QColor("#dcdcaa"))  # yellow
+
+        # Compiled patterns
+        self._rules = [
+            # Comments (% to end of line)
+            (_re.compile(r"%.*$"), self._cmt_fmt),
+            # Strings (double-quoted)
+            (_re.compile(r'"(?:[^"\\]|\\.)*"'), self._str_fmt),
+            # Strings (single-quoted, but not transpose)
+            (_re.compile(r"(?<![\w\)\]\.])'[^']*'"), self._str_fmt),
+            # Numbers (integer, float, scientific)
+            (_re.compile(r"\b\d+\.?\d*(?:[eE][+-]?\d+)?\b"), self._num_fmt),
+        ]
+
+    def highlightBlock(self, text):
+        # Only highlight the input line (after prompt)
+        # The prompt position tracking is in the widget, not accessible here easily
+        # So just highlight everything — output lines won't match patterns anyway
+
+        # Keywords
+        for match in _re.finditer(r"\b(\w+)\b", text):
+            word = match.group(1)
+            if word in self.KEYWORDS:
+                self.setFormat(match.start(), match.end() - match.start(), self._kw_fmt)
+            elif _re.match(r"\w+(?=\s*\()", text[match.start():]):
+                # Word followed by ( is a function call
+                self.setFormat(match.start(), match.end() - match.start(), self._fn_fmt)
+
+        # Apply pattern rules
+        for pattern, fmt in self._rules:
+            for match in pattern.finditer(text):
+                self.setFormat(match.start(), match.end() - match.start(), fmt)
 
 
 class CommandWidget(QWidget):
@@ -60,6 +129,9 @@ class CommandWidget(QWidget):
         )
         self.console.setUndoRedoEnabled(False)
         layout.addWidget(self.console)
+
+        # Syntax highlighting
+        self._highlighter = _MCodeHighlighter(self.console.document())
 
         # Intercept key presses
         self.console.keyPressEvent = self._key_press
