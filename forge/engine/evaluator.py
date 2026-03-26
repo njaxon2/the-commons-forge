@@ -1126,9 +1126,26 @@ class Session:
     def _eval_matrix(self, node: MatrixLiteral, ws: Workspace) -> ForgeArray:
         if not node.rows:
             return ForgeArray(np.array([]).reshape(0, 0))
-        rows = []
+        # Check if all elements are ForgeChar (string/char concatenation)
+        raw_vals = []
+        all_char = True
         for row in node.rows:
-            vals = [_unwrap(self._eval_expr(e, ws)) for e in row]
+            row_raw = [self._eval_expr(e, ws) for e in row]
+            raw_vals.append(row_raw)
+            for v in row_raw:
+                if not isinstance(v, ForgeChar):
+                    all_char = False
+        if all_char and raw_vals:
+            # Concatenate as char arrays (MATLAB: ['hello', ' ', 'world'] => 'hello world')
+            result_str = ""
+            for row_raw in raw_vals:
+                for v in row_raw:
+                    result_str += v.to_str()
+            return ForgeChar(result_str)
+        # Standard numeric concatenation
+        rows = []
+        for row_raw in raw_vals:
+            vals = [_unwrap(v) for v in row_raw]
             vals = [np.atleast_2d(v) if np.asarray(v).ndim < 2 else v for v in vals]
             # Filter out empty arrays (MATLAB skips [] in concatenation)
             vals = [v for v in vals if v.size > 0]

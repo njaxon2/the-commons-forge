@@ -1080,6 +1080,162 @@ class ForgeSession:
         session._engine.functions["nargout"] = forge_nargout_func
         session._engine.functions["strjoin"] = forge_strjoin
 
+        # R108: sprintf, error, warning, assert, inputname, class
+        def forge_sprintf(fmt, *args):
+            """sprintf(fmt, args...) - format string."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            fmt_str = fmt.to_str() if isinstance(fmt, ForgeChar) else (str(fmt) if not isinstance(fmt, str) else fmt)
+            # Convert ForgeArray args to Python scalars
+            conv_args = []
+            for a in args:
+                if isinstance(a, ForgeArray):
+                    v = a.data.flat[0]
+                    if isinstance(v, (np.integer,)):
+                        conv_args.append(int(v))
+                    elif isinstance(v, (np.floating,)):
+                        conv_args.append(float(v))
+                    else:
+                        conv_args.append(v)
+                elif isinstance(a, ForgeChar):
+                    conv_args.append(a.to_str())
+                else:
+                    conv_args.append(a)
+            # Process escape sequences
+            fmt_str = fmt_str.replace("\\n", "\n").replace("\\t", "\t")
+            try:
+                result = fmt_str % tuple(conv_args)
+            except TypeError:
+                result = fmt_str
+            return ForgeChar(result)
+
+        def forge_error(msg, *args):
+            """error(msg, args...) - throw error."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(msg, ForgeChar):
+                msg = msg.to_str()
+            if args:
+                conv_args = []
+                for a in args:
+                    if isinstance(a, ForgeArray):
+                        conv_args.append(a.data.flat[0])
+                    elif isinstance(a, ForgeChar):
+                        conv_args.append(a.to_str())
+                    else:
+                        conv_args.append(a)
+                msg = msg.replace("\\n", "\n") % tuple(conv_args)
+            raise RuntimeError(msg)
+
+        def forge_warning(msg, *args):
+            """warning(msg) - print warning."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            import warnings
+            if isinstance(msg, ForgeChar):
+                msg = msg.to_str()
+            if args:
+                conv_args = []
+                for a in args:
+                    if isinstance(a, ForgeArray):
+                        conv_args.append(a.data.flat[0])
+                    elif isinstance(a, ForgeChar):
+                        conv_args.append(a.to_str())
+                    else:
+                        conv_args.append(a)
+                msg = msg % tuple(conv_args)
+            import sys
+            print(f"warning: {msg}", file=sys.stderr)
+            return ForgeArray(np.array(0.0))
+
+        def forge_assert(*args):
+            """assert(cond) or assert(obs, exp) or assert(obs, exp, tol)."""
+            from forge.engine.types import ForgeArray
+            if len(args) == 1:
+                cond = args[0]
+                if isinstance(cond, ForgeArray):
+                    if not np.all(cond.data):
+                        raise AssertionError("assertion failed")
+                elif not cond:
+                    raise AssertionError("assertion failed")
+            elif len(args) == 2:
+                obs, exp = args
+                if isinstance(obs, ForgeArray): obs = obs.data
+                if isinstance(exp, ForgeArray): exp = exp.data
+                if not np.allclose(obs, exp):
+                    raise AssertionError(f"assert ({obs}) != ({exp})")
+            elif len(args) >= 3:
+                obs, exp, tol = args[0], args[1], args[2]
+                if isinstance(obs, ForgeArray): obs = obs.data
+                if isinstance(exp, ForgeArray): exp = exp.data
+                if isinstance(tol, ForgeArray): tol = float(tol.data.flat[0])
+                if not np.allclose(obs, exp, atol=tol, rtol=0):
+                    raise AssertionError(f"assert ({obs}) != ({exp}) within tol={tol}")
+            return ForgeArray(np.array(1.0))
+
+        def forge_inputname(n):
+            """inputname(n) - name of nth input argument (placeholder)."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            return ForgeChar(f"arg{n}")
+
+        def forge_class(obj):
+            """class(obj) - return class name."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+            if isinstance(obj, ForgeChar):
+                return ForgeChar("char")
+            if isinstance(obj, ForgeCell):
+                return ForgeChar("cell")
+            if isinstance(obj, ForgeStruct):
+                return ForgeChar("struct")
+            if isinstance(obj, ForgeArray):
+                dt = obj.data.dtype
+                if dt == np.float64: return ForgeChar("double")
+                if dt == np.float32: return ForgeChar("single")
+                if dt == np.int32: return ForgeChar("int32")
+                if dt == np.int64: return ForgeChar("int64")
+                if dt == np.bool_: return ForgeChar("logical")
+                if dt == np.complex128: return ForgeChar("double")
+                return ForgeChar(str(dt))
+            if isinstance(obj, (int, float)):
+                return ForgeChar("double")
+            if isinstance(obj, str):
+                return ForgeChar("char")
+            if isinstance(obj, bool):
+                return ForgeChar("logical")
+            return ForgeChar(type(obj).__name__)
+
+        def forge_typecast_val(x, typename):
+            """typecast to named type."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(typename, ForgeChar):
+                typename = typename.to_str()
+            if isinstance(x, ForgeArray):
+                data = x.data
+            else:
+                data = np.atleast_1d(x)
+            type_map = {
+                "double": np.float64, "single": np.float32,
+                "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
+                "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
+                "logical": np.bool_,
+            }
+            if typename in type_map:
+                return ForgeArray(data.astype(type_map[typename]))
+            return ForgeArray(data)
+
+        session._engine.functions["sprintf"] = forge_sprintf
+        session._engine.functions["error"] = forge_error
+        session._engine.functions["warning"] = forge_warning
+        session._engine.functions["assert"] = forge_assert
+        session._engine.functions["inputname"] = forge_inputname
+        session._engine.functions["class"] = forge_class
+        session._engine.functions["typecast"] = forge_typecast_val
+
 
 
 
