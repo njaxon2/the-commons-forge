@@ -1,185 +1,86 @@
 # Forge MEMORY.md — Session Continuity
 
-## Current State (R99)
-- **Last commit**: R99 — 890 registered functions, ODE/optimization/file I/O
+## Current State (R115)
+- **Last commit**: R115 — 917 registered functions
 - **VPS**: ubuntu@15.204.8.77 (NOT 34.32.100.183 which is production)
 - **Display**: :99 port 5900 (GUI), :98 port 5901 (testing)
 - **Git branch**: master
+- **E2E tests**: 76/76 passing
+- **Single-quote strings**: Work correctly (tested R115)
 
-## Recent Commits (R89-R99)
-- R89: MATLAB-style types and previews in workspace browser GUI
-- R90: regexp/strrep/strfind + cellfun/arrayfun/cat/rmfield/cell2mat/num2cell
-- R91: basisfunder wrapper + E2E test suite expanded to 59 tests
-- R92: MATLAB-style display for cell arrays and structs
-- R93: Update MEMORY.md
-- R94: File I/O — fopen/fclose/fprintf/fgetl/feof/fileread/dlmwrite/dlmread
-- R95: E2E test suite expanded to 62 tests
-- R96: deal, structfun, deblank, mat2str, blanks
-- R97: ODE solvers — ode45, ode23, ode15s
-- R98: Optimization — fzero, fminbnd, fminsearch, fsolve, integral
-- R99: Fill gaps — cbrt, pow2, asinh/acosh/atanh, isa, isreal, interp2, save/load
+## Recent Commits (R103-R115)
+- R103: Thesis Fig 5 — multi-order h-convergence (p=2,3,4)
+- R103b: Thesis Figs 3,4,6 — basis functions, solution, weight-conditioning
+- R104: xline, yline, meshgrid (906 funcs)
+- R105: eval, feval, nargin, nargout, strjoin (910 funcs)
+- R106: Updated MEMORY.md
+- R107: Thesis Figs 7,8 — p-refinement and k-refinement
+- R108: sprintf, error, warning, assert, class + char concat fix (911 funcs)
+- R109: Thesis Figs 9,10 — NURBS geometry + eigenvalue spectrum
+- R110: Fast TIGA 2D assembly built-in (225x speedup)
+- R111: TIGA weight-conditioning demo (0.8s from M-code)
+- R112: E2E tests expanded to 76
+- R113: Type predicates and introspection (913 funcs)
+- R114: Thesis Figs 11,12 + GUI screenshot
+- R115: schur, hess, balance, conv2, eigs fix, expm/logm/funm (917 funcs)
 
-## NOVEL FINDING: Complete Thesis Arc
+## Thesis Figures (12 total in thesis_figures/)
+1. fig1_weight_tradeoff.png — Main tradeoff curve
+2. fig2_preconditioning.png — Bar chart, mesh independence
+3. fig3_arc_angle.png — Arc angle dependence
+4. fig3_basis_functions.png — B-spline basis p=1,2,3
+5. fig4_ellipse.png — Elliptical geometry
+6. fig4_solution_comparison.png — IGA vs exact + error
+7. fig5_h_convergence.png — Multi-order h-convergence
+8. fig6_weight_conditioning.png — Novel 4-panel weight study
+9. fig7_p_refinement.png — p-refinement exponential convergence
+10. fig8_k_refinement.png — h vs p vs k strategies
+11. fig9_nurbs_geometry.png — Control net + physical mesh
+12. fig10_eigenspectrum.png — Eigenvalue spectra
+13. fig11_weight_function.png — W(eta) analysis
+14. fig12_summary.png — Comprehensive 4-panel summary
 
-### Problem: NURBS Weight-Conditioning Tradeoff
-- Geometric weight (w=1/√2 for quarter circle) gives exact circle but worsens conditioning
-- Conditioning penalty factor: cond(K;w_geo)/cond(K;w=1) ≈ 1.44 (constant across mesh sizes)
+## Novel Finding: NURBS Weight-Conditioning
 
-### Analysis: Scaling Law
-- cond(K;w)/cond(K;1) = (W_max/W_min)^α where W(η) = 1 + 2(w-1)η(1-η)
-- α converges to ~2.32 for quarter circle as h→0
-- The weight effect is purely spectral: λ_min drops while λ_max unchanged
+### Key Results (Verified R110-R111)
+| nel | B-spline κ | NURBS κ | Extreme κ | NURBS/BS | Precond ratio |
+|-----|-----------|---------|-----------|----------|--------------|
+| 4 | 1.20e+01 | 1.79e+01 | 1.00e+03 | 1.49 | 1.23 |
+| 8 | 4.14e+01 | 5.98e+01 | 1.86e+03 | 1.44 | 1.21 |
+| 16 | 1.64e+02 | 2.37e+02 | 6.70e+03 | 1.44 | 1.21 |
+| 32 | 6.60e+02 | 9.53e+02 | 2.69e+04 | 1.44 | 1.21 |
 
-### Solution: Diagonal Preconditioning
-- **D^{-1/2} K D^{-1/2} with D=diag(K) eliminates the entire penalty**
-- Preconditioned ratio prec/bsp = 0.93-1.07 across all configurations
-- Works for all mesh sizes (nel=2..8) and all arc angles (30°..120°)
-- **Generalizes to elliptical geometries** (R80): prec/bsp = 0.76-1.04
+### h-Convergence (1D Poisson)
+| p | Theory | Verified |
+|---|--------|----------|
+| 2 | O(h³) | ✓ ratio 8.0 |
+| 3 | O(h⁴) | ✓ ratio 16.1 |
+| 4 | O(h⁵) | ✓ ratio 31.3 |
 
-### Thesis Figures (in thesis_figures/)
-- fig1_weight_tradeoff.png: Main tradeoff curve
-- fig2_preconditioning.png: Bar chart, mesh independence
-- fig3_arc_angle.png: Arc angle dependence with scaling model
-- fig4_ellipse.png: Elliptical geometry generalization
-
-### Key Data Tables
-
-**Mesh independence (R1=0.5, R2=1.5, quarter circle):**
-| nel | w* | opt/bsp | geo/bsp | prec/bsp |
-|-----|------|---------|---------|----------|
-| 2 | 2.158 | 0.685 | 1.513 | 1.033 |
-| 4 | 2.368 | 0.672 | 1.491 | 1.035 |
-| 8 | 2.306 | 0.686 | 1.444 | 0.968 |
-
-**Arc angle dependence (nel=4):**
-| θ | w_geo | geo/bsp | prec/bsp |
-|---|-------|---------|----------|
-| 30° | 0.966 | 1.035 | 0.941 |
-| 60° | 0.866 | 1.174 | 0.932 |
-| 90° | 0.707 | 1.491 | 1.035 |
-| 120° | 0.500 | 2.313 | 1.065 |
-
-**Elliptical geometries (nel=4):**
-| Geometry | geo/bsp | prec/bsp |
-|----------|---------|----------|
-| Circle | 1.491 | 1.035 |
-| Ellipse 2:1 | 1.455 | 0.921 |
-| Ellipse 4:1 | 1.345 | 0.763 |
-| Non-conformal | 1.427 | 0.800 |
-
-## Forge Features Added (R79-R92)
-
-### Plotting (R81-R82)
-- bar(): Full MATLAB calling convention (x, y, width, color)
-- legend(): MATLAB keyword args (Location, FontSize), correct handle ordering
-- title/xlabel/ylabel: MATLAB keyword args (FontSize, Color, etc.)
-- set(gca, "FontSize"): Applies to title, labels, ticks
-- xlim/ylim: Accept [lo hi] array form
-- text(): Keyword args support
-- saveas/print: Working PNG/SVG/PDF export at 150 DPI
-
-### Command Widget (R79, R83)
-- Single-pane terminal design (R72 original)
-- Tab completion: workspace vars, functions, keywords
-- Welcome message and Ctrl+C prompt fix
-- History navigation (up/down arrows)
-
-### String Builtins (R83)
-- chr(), char(): integer to character
-- num2str(), str2num(), str2double()
-- lower(), upper(), strtrim()
-- strsplit(), strjoin(), strcat()
-
-### Type System (R84-R85)
-- class(): Returns MATLAB names (double, single, logical, char, cell, struct)
-- whos: Shows MATLAB type names
-- ischar(), isfield(), isscalar(), isvector(), ismatrix(), issquare()
-
-### Syntax Highlighting (R88)
-- VS Code-style M-code highlighting in command widget
-- Keywords (blue bold), strings (orange), numbers (green), comments (green italic), functions (yellow)
-
-### Workspace Browser (R89)
-- Shows MATLAB type names: double, char, cell, struct (not numpy names)
-- Better value previews for ForgeArray, ForgeChar, ForgeCell, ForgeStruct
-
-### String Operations (R90)
-- regexp(), regexpi(), regexprep(): Full regex support with match/tokens/names modes
-- strrep(), strfind(): String search and replace
-
-### Container Utilities (R90)
-- cellfun(), arrayfun(): Apply functions to cell/array elements
-- cat(), num2cell(), cell2mat(), rmfield(): Container manipulation
-
-### Display Formatting (R92)
-- Cell arrays: indexed display {[1] val, [2] val, ...}
-- Structs: field: value pairs with nested type summaries
-- 59/59 E2E tests passing
-
-### Syntax Highlighting (R88)
-- VS Code-style M-code highlighting in command widget
-- Keywords (blue bold), strings (orange), numbers (green), comments (green italic), functions (yellow)
-
-### Workspace Browser (R89)
-- Shows MATLAB type names: double, char, cell, struct (not numpy names)
-- Better value previews for ForgeArray, ForgeChar, ForgeCell, ForgeStruct
-
-### String Operations (R90)
-- regexp(), regexpi(), regexprep(): Full regex support with match/tokens/names modes
-- strrep(), strfind(): String search and replace
-
-### Container Utilities (R90)
-- cellfun(), arrayfun(): Apply functions to cell/array elements
-- cat(), num2cell(), cell2mat(), rmfield(): Container manipulation
-
-### Display Formatting (R92)
-- Cell arrays: indexed display {[1] val, [2] val, ...}
-- Structs: field: value pairs with nested type summaries
-
-### File I/O (R94)
-- fopen, fclose, fprintf (to file handles), fgets, fgetl, feof, ftell, fseek
-- fileread, dlmwrite, dlmread, csvread, csvwrite
-- tempname, tempdir
-- fprintf dispatches to file or stdout based on first argument
-
-### ODE Solvers (R97)
-- ode45 (Dormand-Prince RK45), ode23 (Bogacki-Shampine RK23), ode15s (BDF for stiff)
-- Full MATLAB calling convention: [t,y] = ode45(@f, tspan, y0)
-- Anonymous function handles as RHS, scipy.integrate backend
-
-### Optimization (R98)
-- fzero: root finding (bracket or initial guess)
-- fminbnd: bounded scalar minimization
-- fminsearch: unconstrained multivariable (Nelder-Mead)
-- fsolve: nonlinear equation system
-- integral: numerical integration (quad)
-
-### Function Coverage (R99)
-- 890 total registered functions
-- 226/226 commonly-used MATLAB functions available
-- 62/62 E2E tests passing
-- IGA assembly: 31ms (nel=2), 61ms (nel=4)
-
-## GUI State
-- Single-pane command widget with tab completion
-- saveas/print fixed for MATLAB calling convention
-- source() command as alias for run()
-- noVNC available on port 6080 (websockify installed)
-
-## User Feedback Log
-- Command window must operate like a single command prompt — FIXED R72
-- Model user characterization in docs/forge_model_user.md (never summarize)
+## Forge Capabilities (917 functions)
+- **Core LA**: eig, svd, lu, qr, chol, schur, hess, balance, inv, det, norm, rank
+- **Special LA**: expm, logm, funm, sqrtm, condest, eigs
+- **Set ops**: unique, setdiff, union, intersect, ismember
+- **Polynomials**: polyval, polyfit, roots, poly, conv, deconv
+- **ODE**: ode45, ode23, ode15s
+- **Optimization**: fzero, fminbnd, fminsearch, fsolve, integral
+- **File I/O**: fopen/fclose/fprintf/fgets/fileread/dlmwrite/csvread
+- **Strings**: sprintf, regexp, strsplit, strjoin, num2str, str2num
+- **Plotting**: plot, loglog, semilogx, semilogy, subplot, scatter, bar, stem,
+                contour, contourf, surf, mesh, xline, yline, meshgrid, peaks
+- **Types**: class, fieldnames, isfield, isstruct, iscell, ischar, isnumeric
+- **Meta**: eval, feval, exist, which, nargin, nargout
+- **TIGA**: findspan, basisfun, derbasisfun, gaussQuad, tiga_assemble_2d
 
 ## Known Issues
-- p>2 on mapped geometry needs order elevation support
-- 3D array display shows type info instead of values
-- Plot window focus stealing in GUI
+- Cell assignment via {} indexing has deeper evaluator bug
+- repmat with char input returns numeric codes (cosmetic)
+- Interpreter slow for deeply nested loops (use tiga_assemble_2d for speed)
 - No subfunction support in scripts
-- IGA assembly: 31ms (nel=2), 61ms (nel=4) — good performance
 
 ## Next Steps
-1. **Thesis production**: Document with Forge-exported figures (complete)
-2. **Forge features**: Syntax highlighting, more plotting options
-3. Build order elevation for p>2 on mapped geometry
-4. Improve interpreter performance for nested loops
-5. Variable editor (double-click workspace variable to inspect)
+1. Continue thesis figure generation if needed
+2. Build 2D solution visualization (annulus contour plots)
+3. Performance optimization for nested loops
+4. Variable editor in GUI
+5. More comprehensive E2E test coverage
