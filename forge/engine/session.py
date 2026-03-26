@@ -986,6 +986,100 @@ class ForgeSession:
         self._engine.functions["rcond"] = forge_rcond
         self._engine.functions["blkdiag"] = forge_blkdiag
 
+        # R105: eval, feval, nargin, nargout, strjoin
+        def forge_eval_str(code_str):
+            """eval(str) - evaluate string as code."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(code_str, ForgeChar):
+                code_str = code_str.to_str()
+            elif isinstance(code_str, str):
+                pass
+            else:
+                code_str = str(code_str)
+            result = session._engine.eval(code_str)
+            return result
+
+        def forge_feval(fname, *args):
+            """feval(fname, args...) - call function by name."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar):
+                fname = fname.to_str()
+            if fname in session._engine.functions:
+                return session._engine.functions[fname](*args)
+            raise NameError(f"Undefined function: {fname}")
+
+        def forge_nargin_func(fname):
+            """nargin(fname) - number of input arguments."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import inspect
+            if isinstance(fname, ForgeChar):
+                fname = fname.to_str()
+            if fname in session._engine.functions:
+                func = session._engine.functions[fname]
+                try:
+                    sig = inspect.signature(func)
+                    # Count params without defaults that aren't *args/**kwargs
+                    count = 0
+                    has_var = False
+                    for p in sig.parameters.values():
+                        if p.kind == p.VAR_POSITIONAL:
+                            has_var = True
+                        elif p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
+                            count += 1
+                    if has_var:
+                        return ForgeArray(np.float64(-1))  # variable args
+                    return ForgeArray(np.float64(count))
+                except (ValueError, TypeError):
+                    return ForgeArray(np.float64(-1))
+            return ForgeArray(np.float64(0))
+
+        def forge_nargout_func(fname):
+            """nargout(fname) - number of output arguments."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar):
+                fname = fname.to_str()
+            # Most functions return 1 output; some special cases
+            multi_out = {"size": 2, "eig": 2, "svd": 3, "lu": 3, "qr": 2,
+                         "min": 2, "max": 2, "sort": 2, "find": 3,
+                         "meshgrid": 2, "cart2pol": 2, "pol2cart": 2}
+            if fname in multi_out:
+                return ForgeArray(np.float64(multi_out[fname]))
+            return ForgeArray(np.float64(1))
+
+        def forge_strjoin(cell_arr, delim=None):
+            """strjoin(C, delim) - join cell array of strings."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            from forge.engine.containers import ForgeCell
+            if delim is None:
+                delim = " "
+            elif isinstance(delim, ForgeChar):
+                delim = delim.to_str()
+            elif isinstance(delim, str):
+                pass
+            parts = []
+            if isinstance(cell_arr, ForgeCell):
+                data = cell_arr._data
+                items = data if isinstance(data, list) else data.flat
+                for item in items:
+                    if isinstance(item, ForgeChar):
+                        parts.append(item.to_str())
+                    elif isinstance(item, str):
+                        parts.append(item)
+                    elif item is not None:
+                        parts.append(str(item))
+            result = delim.join(parts)
+            return ForgeChar(result)
+
+        session._engine.functions["eval"] = forge_eval_str
+        session._engine.functions["feval"] = forge_feval
+        session._engine.functions["nargin"] = forge_nargin_func
+        session._engine.functions["nargout"] = forge_nargout_func
+        session._engine.functions["strjoin"] = forge_strjoin
+
 
 
 
