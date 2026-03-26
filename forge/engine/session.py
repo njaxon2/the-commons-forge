@@ -2598,6 +2598,209 @@ class ForgeSession:
         session._engine.functions["datasample"] = forge_datasample
         session._engine.functions["bootstrp"] = forge_bootstrp
 
+        # R126: Misc functions to reach 950+
+        def forge_inpolygon(xq, yq, xv, yv):
+            """inpolygon(xq, yq, xv, yv) — test if points inside polygon."""
+            from forge.engine.types import ForgeArray
+            from matplotlib.path import Path
+            xq_d = xq.data.flatten() if isinstance(xq, ForgeArray) else np.array(xq).flatten()
+            yq_d = yq.data.flatten() if isinstance(yq, ForgeArray) else np.array(yq).flatten()
+            xv_d = xv.data.flatten() if isinstance(xv, ForgeArray) else np.array(xv).flatten()
+            yv_d = yv.data.flatten() if isinstance(yv, ForgeArray) else np.array(yv).flatten()
+            polygon = Path(np.column_stack([xv_d, yv_d]))
+            points = np.column_stack([xq_d, yq_d])
+            inside = polygon.contains_points(points)
+            return ForgeArray(inside.astype(np.float64))
+
+        def forge_convhull(x, y=None):
+            """convhull(x, y) — convex hull."""
+            from forge.engine.types import ForgeArray
+            from scipy.spatial import ConvexHull
+            if isinstance(x, ForgeArray):
+                xd = x.data
+            else:
+                xd = np.array(x)
+            if y is not None:
+                if isinstance(y, ForgeArray):
+                    yd = y.data.flatten()
+                else:
+                    yd = np.array(y).flatten()
+                points = np.column_stack([xd.flatten(), yd])
+            else:
+                points = xd
+            hull = ConvexHull(points)
+            # Return 1-based vertex indices
+            idx = np.concatenate([hull.vertices, [hull.vertices[0]]]) + 1
+            return ForgeArray(idx.astype(np.float64))
+
+        def forge_delaunay(x, y=None):
+            """delaunay(x, y) — Delaunay triangulation."""
+            from forge.engine.types import ForgeArray
+            from scipy.spatial import Delaunay
+            if isinstance(x, ForgeArray):
+                xd = x.data
+            else:
+                xd = np.array(x)
+            if y is not None:
+                if isinstance(y, ForgeArray):
+                    yd = y.data.flatten()
+                else:
+                    yd = np.array(y).flatten()
+                points = np.column_stack([xd.flatten(), yd])
+            else:
+                points = xd
+            tri = Delaunay(points)
+            # Return 1-based indices
+            return ForgeArray((tri.simplices + 1).astype(np.float64))
+
+        def forge_voronoi(x, y):
+            """voronoi(x, y) — Voronoi diagram (returns vertices, regions)."""
+            from forge.engine.types import ForgeArray
+            from scipy.spatial import Voronoi
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            points = np.column_stack([xd, yd])
+            vor = Voronoi(points)
+            return ForgeArray(vor.vertices)
+
+        def forge_polyarea(x, y):
+            """polyarea(x, y) — area of polygon."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            # Shoelace formula
+            area = 0.5 * abs(np.dot(xd, np.roll(yd, 1)) - np.dot(yd, np.roll(xd, 1)))
+            return ForgeArray(np.float64(area))
+
+        def forge_str2double(s):
+            """str2double(s) — convert string to double."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            try:
+                return ForgeArray(np.float64(float(s)))
+            except (ValueError, TypeError):
+                return ForgeArray(np.float64(np.nan))
+
+        def forge_int2str(n):
+            """int2str(n) — convert integer to string."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            return ForgeChar(str(int(n)))
+
+        def forge_mat2str(A, *args):
+            """mat2str(A) — convert matrix to evaluable string."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(A, ForgeArray):
+                data = A.data
+            else:
+                data = np.atleast_2d(A)
+            if data.ndim == 1:
+                data = data.reshape(1, -1)
+            rows = []
+            for r in range(data.shape[0]):
+                rows.append(' '.join(str(v) for v in data[r, :]))
+            return ForgeChar('[' + '; '.join(rows) + ']')
+
+        def forge_blanks(n):
+            """blanks(n) — string of n spaces."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            return ForgeChar(' ' * n)
+
+        def forge_pad(s, n, *args):
+            """pad(s, n) — pad string to length n."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(n, ForgeArray):
+                n = int(n.data.flat[0])
+            side = 'right'
+            fill = ' '
+            for a in args:
+                if isinstance(a, ForgeChar):
+                    t = a.to_str()
+                    if t in ('left', 'right', 'both'):
+                        side = t
+                    else:
+                        fill = t
+            if side == 'right':
+                return ForgeChar(s.ljust(n, fill[0]))
+            elif side == 'left':
+                return ForgeChar(s.rjust(n, fill[0]))
+            else:
+                return ForgeChar(s.center(n, fill[0]))
+
+        def forge_contains(s, pattern):
+            """contains(s, pattern) — test if string contains pattern."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(pattern, ForgeChar):
+                pattern = pattern.to_str()
+            return ForgeArray(np.float64(1 if pattern in s else 0))
+
+        def forge_startsWith(s, prefix):
+            """startsWith(s, prefix) — test if string starts with prefix."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(prefix, ForgeChar):
+                prefix = prefix.to_str()
+            return ForgeArray(np.float64(1 if s.startswith(prefix) else 0))
+
+        def forge_endsWith(s, suffix):
+            """endsWith(s, suffix) — test if string ends with suffix."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(suffix, ForgeChar):
+                suffix = suffix.to_str()
+            return ForgeArray(np.float64(1 if s.endswith(suffix) else 0))
+
+        def forge_extractBetween(s, start, stop):
+            """extractBetween(s, start, stop) — extract substring between delimiters."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar):
+                s = s.to_str()
+            if isinstance(start, ForgeChar):
+                start = start.to_str()
+            if isinstance(stop, ForgeChar):
+                stop = stop.to_str()
+            i = s.find(start)
+            if i == -1:
+                return ForgeChar('')
+            i += len(start)
+            j = s.find(stop, i)
+            if j == -1:
+                return ForgeChar('')
+            return ForgeChar(s[i:j])
+
+        session._engine.functions["inpolygon"] = forge_inpolygon
+        session._engine.functions["convhull"] = forge_convhull
+        session._engine.functions["delaunay"] = forge_delaunay
+        session._engine.functions["voronoi"] = forge_voronoi
+        session._engine.functions["polyarea"] = forge_polyarea
+        session._engine.functions["str2double"] = forge_str2double
+        session._engine.functions["int2str"] = forge_int2str
+        session._engine.functions["mat2str"] = forge_mat2str
+        session._engine.functions["blanks"] = forge_blanks
+        session._engine.functions["pad"] = forge_pad
+        session._engine.functions["contains"] = forge_contains
+        session._engine.functions["startsWith"] = forge_startsWith
+        session._engine.functions["endsWith"] = forge_endsWith
+        session._engine.functions["extractBetween"] = forge_extractBetween
+
 
 
 
