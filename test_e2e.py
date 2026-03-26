@@ -630,4 +630,12 @@ check("pmt_basic", "abs(pmt(0.05/12, 360, 100000) + 536.82) < 1", "1")
 check("fvfix_basic", "fvfix(0.05, 10, 100) > 1200", "1")
 check("pvfix_basic", "pvfix(0.05, 10, 100) > 700", "1")
 
+
+print("\nR153 communications, parallel, text:")
+check("awgn_noisy", "x = ones(1, 100); y = awgn(x, 20); abs(mean(y) - 1) < 0.5", "1")
+check("pskmod_unit", "y = pskmod([0 1 2 3], 4); abs(abs(y(1)) - 1) < 1e-10", "1")
+check("biterr_zero", "[n, r] = biterr([1 0 1], [1 0 1]); n", "0")
+check("gpuArray_pass", "x = gpuArray([1 2 3]); x(1)", "1")
+check("gather_pass", "x = gather([1 2 3]); x(2)", "2")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")

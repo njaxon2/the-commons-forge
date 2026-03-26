@@ -9009,6 +9009,254 @@ class ForgeSession:
         session._engine.functions["ga"] = forge_ga2
         session._engine.functions["particleswarm"] = forge_particleswarm2
         session._engine.functions["simulannealbnd"] = forge_simulannealbnd2
+
+        # R153: Communications, database, parallel, text analytics
+
+        # --- Communications ---
+        def forge_awgn2(x, snr, *args):
+            """awgn(x, snr) — add white Gaussian noise."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            snrd = float(snr.data.flat[0]) if isinstance(snr, ForgeArray) else float(snr)
+            sig_power = np.mean(np.abs(data)**2)
+            noise_power = sig_power / (10**(snrd/10))
+            noise = np.sqrt(noise_power) * np.random.randn(*data.shape)
+            return ForgeArray(data + noise)
+
+        def forge_qammod2(x, M, *args):
+            """qammod(x, M) — QAM modulation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten().astype(int) if isinstance(x, ForgeArray) else np.array(x).flatten().astype(int)
+            md = int(M.data.flat[0]) if isinstance(M, ForgeArray) else int(M)
+            k = int(np.sqrt(md))
+            I = 2*(data % k) - k + 1
+            Q = 2*(data // k) - k + 1
+            return ForgeArray((I + 1j*Q).reshape(1, -1))
+
+        def forge_qamdemod2(x, M, *args):
+            """qamdemod(x, M) — QAM demodulation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            md = int(M.data.flat[0]) if isinstance(M, ForgeArray) else int(M)
+            k = int(np.sqrt(md))
+            I = np.round((np.real(data) + k - 1) / 2).astype(int)
+            Q = np.round((np.imag(data) + k - 1) / 2).astype(int)
+            I = np.clip(I, 0, k-1)
+            Q = np.clip(Q, 0, k-1)
+            return ForgeArray((Q * k + I).astype(float).reshape(1, -1))
+
+        def forge_pskmod2(x, M, *args):
+            """pskmod(x, M) — PSK modulation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten().astype(int) if isinstance(x, ForgeArray) else np.array(x).flatten().astype(int)
+            md = int(M.data.flat[0]) if isinstance(M, ForgeArray) else int(M)
+            phase = 2 * np.pi * data / md
+            return ForgeArray(np.exp(1j * phase).reshape(1, -1))
+
+        def forge_pskdemod2(x, M, *args):
+            """pskdemod(x, M) — PSK demodulation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            md = int(M.data.flat[0]) if isinstance(M, ForgeArray) else int(M)
+            phase = np.angle(data)
+            phase[phase < 0] += 2*np.pi
+            return ForgeArray(np.round(phase * md / (2*np.pi)).astype(float).reshape(1, -1) % md)
+
+        def forge_biterr2(x, y, *args):
+            """biterr(x, y) — bit error rate."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten().astype(int) if isinstance(x, ForgeArray) else np.array(x).flatten().astype(int)
+            yd = y.data.flatten().astype(int) if isinstance(y, ForgeArray) else np.array(y).flatten().astype(int)
+            errors = np.sum(xd != yd)
+            return ForgeArray(np.float64(errors)), ForgeArray(np.float64(errors / len(xd)))
+
+        def forge_symerr2(x, y, *args):
+            """symerr(x, y) — symbol error rate."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            errors = np.sum(xd != yd)
+            return ForgeArray(np.float64(errors)), ForgeArray(np.float64(errors / len(xd)))
+
+        def forge_huffmandict2(symbols, probs):
+            """huffmandict(symbols, probs) — Huffman dictionary (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_convenc2(msg, trellis, *args):
+            """convenc(msg, trellis) — convolutional encode (stub)."""
+            return msg
+
+        def forge_vitdec2(code, trellis, *args):
+            """vitdec(code, trellis) — Viterbi decode (stub)."""
+            return code
+
+        def forge_crc_gen2(msg, poly, *args):
+            """crcgen(msg, poly) — CRC generator (stub)."""
+            return msg
+
+        def forge_eyediagram2(*args):
+            """eyediagram(x, n) — eye diagram (stub)."""
+            pass
+
+        def forge_scatterplot2(*args):
+            """scatterplot(x) — constellation diagram (stub)."""
+            pass
+
+        # --- Database stubs ---
+        def forge_database2(*args):
+            """database(driver, url) — database connection (stub)."""
+            from forge.engine.containers import ForgeStruct
+            conn = ForgeStruct()
+            conn._fields["type"] = "database"
+            return conn
+
+        def forge_fetch2(conn, query, *args):
+            """fetch(conn, query) — execute SQL query (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_exec_sql2(conn, query, *args):
+            """exec(conn, query) — execute SQL (stub)."""
+            pass
+
+        def forge_close_db2(conn, *args):
+            """close(conn) — close database (stub)."""
+            pass
+
+        # --- Parallel stubs ---
+        def forge_parpool2(*args):
+            """parpool(n) — create parallel pool (stub)."""
+            from forge.engine.containers import ForgeStruct
+            pool = ForgeStruct()
+            pool._fields["NumWorkers"] = args[0] if args else 4
+            return pool
+
+        def forge_parfeval2(*args):
+            """parfeval(pool, func, nout, args) — parallel evaluation (stub)."""
+            pass
+
+        def forge_parfor2(*args):
+            """parfor — parallel for (stub, uses serial)."""
+            pass
+
+        def forge_spmd2(*args):
+            """spmd — single program multiple data (stub)."""
+            pass
+
+        def forge_gcp2(*args):
+            """gcp — get current parallel pool (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_gpuArray2(x, *args):
+            """gpuArray(x) — GPU array (stub, returns input)."""
+            return x
+
+        def forge_gather2(x, *args):
+            """gather(x) — gather GPU/distributed data (stub)."""
+            return x
+
+        # --- Text analytics ---
+        def forge_tokenizedDocument2(text, *args):
+            """tokenizedDocument(text) — tokenize text."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            if isinstance(text, ForgeChar): text = text.to_str()
+            tokens = text.split()
+            return ForgeCell._from_list([ForgeChar(t) for t in tokens])
+
+        def forge_bagOfWords2(docs, *args):
+            """bagOfWords(docs) — bag of words (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_wordcloud2(*args):
+            """wordcloud(text) — word cloud (stub)."""
+            pass
+
+        def forge_erasePunctuation2(text):
+            """erasePunctuation(text) — remove punctuation."""
+            import re
+            from forge.engine.containers import ForgeChar
+            if isinstance(text, ForgeChar): text = text.to_str()
+            return ForgeChar(re.sub(r'[^\w\s]', '', text))
+
+        def forge_lower2(text):
+            """lower(text) — lowercase."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(text, ForgeChar): text = text.to_str()
+            return ForgeChar(text.lower())
+
+        def forge_upper2(text):
+            """upper(text) — uppercase."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(text, ForgeChar): text = text.to_str()
+            return ForgeChar(text.upper())
+
+        # --- More utility ---
+        def forge_validatestring2(s, valid):
+            """validatestring(s, validStrings) — validate string."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(valid, ForgeCell):
+                for i in range(valid._shape[0] * valid._shape[1]):
+                    v = valid._data[i]
+                    if isinstance(v, ForgeChar) and v.to_str().startswith(s):
+                        return v
+            return ForgeChar(s)
+
+        def forge_inputParser2(*args):
+            """inputParser — create input parser (stub)."""
+            from forge.engine.containers import ForgeStruct
+            p = ForgeStruct()
+            p._fields["type"] = "inputParser"
+            return p
+
+        def forge_addRequired2(p, name, *args):
+            """addRequired(p, name) — add required arg (stub)."""
+            pass
+
+        def forge_addOptional2(p, name, default, *args):
+            """addOptional(p, name, default) — add optional arg (stub)."""
+            pass
+
+        def forge_addParameter2(p, name, default, *args):
+            """addParameter(p, name, default) — add parameter (stub)."""
+            pass
+
+        def forge_parse2(p, *args):
+            """parse(p, args) — parse input (stub)."""
+            pass
+
+        # Register R153 functions
+        session._engine.functions["awgn"] = forge_awgn2
+        session._engine.functions["qammod"] = forge_qammod2
+        session._engine.functions["qamdemod"] = forge_qamdemod2
+        session._engine.functions["pskmod"] = forge_pskmod2
+        session._engine.functions["pskdemod"] = forge_pskdemod2
+        session._engine.functions["biterr"] = forge_biterr2
+        session._engine.functions["symerr"] = forge_symerr2
+        session._engine.functions["huffmandict"] = forge_huffmandict2
+        session._engine.functions["convenc"] = forge_convenc2
+        session._engine.functions["vitdec"] = forge_vitdec2
+        session._engine.functions["crcgen"] = forge_crc_gen2
+        session._engine.functions["eyediagram"] = forge_eyediagram2
+        session._engine.functions["scatterplot"] = forge_scatterplot2
+        session._engine.functions["database"] = forge_database2
+        session._engine.functions["fetch"] = forge_fetch2
+        session._engine.functions["parpool"] = forge_parpool2
+        session._engine.functions["parfeval"] = forge_parfeval2
+        session._engine.functions["gcp"] = forge_gcp2
+        session._engine.functions["gpuArray"] = forge_gpuArray2
+        session._engine.functions["gather"] = forge_gather2
+        session._engine.functions["tokenizedDocument"] = forge_tokenizedDocument2
+        session._engine.functions["bagOfWords"] = forge_bagOfWords2
+        session._engine.functions["wordcloud"] = forge_wordcloud2
+        session._engine.functions["erasePunctuation"] = forge_erasePunctuation2
+        session._engine.functions["inputParser"] = forge_inputParser2
+        session._engine.functions["addRequired"] = forge_addRequired2
+        session._engine.functions["addOptional"] = forge_addOptional2
+        session._engine.functions["addParameter"] = forge_addParameter2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
