@@ -3699,6 +3699,280 @@ class ForgeSession:
         session._engine.functions["bench"] = forge_bench
         session._engine.functions["open"] = forge_open_func
         session._engine.functions["waitbar"] = forge_waitbar
+
+        # R140: Control, image, more math
+        # --- Control system stubs ---
+        def forge_tf_func(num, den):
+            """tf(num, den) — create transfer function (struct-based)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            s = ForgeStruct()
+            s._fields["num"] = num if isinstance(num, ForgeArray) else ForgeArray(np.atleast_2d(num))
+            s._fields["den"] = den if isinstance(den, ForgeArray) else ForgeArray(np.atleast_2d(den))
+            s._fields["type"] = ForgeArray(np.float64(1))  # continuous
+            return s
+
+        def forge_ss_func(A, B, C, D):
+            """ss(A, B, C, D) — create state-space model (struct-based)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            s = ForgeStruct()
+            s._fields["A"] = A if isinstance(A, ForgeArray) else ForgeArray(np.atleast_2d(A))
+            s._fields["B"] = B if isinstance(B, ForgeArray) else ForgeArray(np.atleast_2d(B))
+            s._fields["C"] = C if isinstance(C, ForgeArray) else ForgeArray(np.atleast_2d(C))
+            s._fields["D"] = D if isinstance(D, ForgeArray) else ForgeArray(np.atleast_2d(D))
+            return s
+
+        def forge_c2d_func(sys_s, Ts, *args):
+            """c2d(sys, Ts) — continuous to discrete conversion."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            from scipy.signal import cont2discrete
+            if isinstance(sys_s, ForgeStruct) and "A" in sys_s._fields:
+                A = sys_s._fields["A"].data
+                B = sys_s._fields["B"].data
+                C = sys_s._fields["C"].data
+                D = sys_s._fields["D"].data
+                ts = float(Ts.data.flat[0]) if isinstance(Ts, ForgeArray) else float(Ts)
+                Ad, Bd, Cd, Dd, dt = cont2discrete((A, B, C, D), ts)
+                result = ForgeStruct()
+                result._fields["A"] = ForgeArray(Ad)
+                result._fields["B"] = ForgeArray(Bd)
+                result._fields["C"] = ForgeArray(Cd)
+                result._fields["D"] = ForgeArray(Dd)
+                result._fields["Ts"] = ForgeArray(np.float64(ts))
+                return result
+            return sys_s
+
+        def forge_lqr_func(A, B, Q, R):
+            """[K, S, e] = lqr(A, B, Q, R) — LQR controller design."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_continuous_are
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            Qd = Q.data if isinstance(Q, ForgeArray) else np.atleast_2d(Q)
+            Rd = R.data if isinstance(R, ForgeArray) else np.atleast_2d(R)
+            S = solve_continuous_are(Ad, Bd, Qd, Rd)
+            K = np.linalg.solve(Rd, Bd.T @ S)
+            e = np.linalg.eigvals(Ad - Bd @ K)
+            return ForgeArray(K), ForgeArray(S), ForgeArray(e.reshape(-1, 1))
+
+        def forge_dlqr_func(A, B, Q, R):
+            """[K, S, e] = dlqr(A, B, Q, R) — discrete LQR."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_discrete_are
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            Qd = Q.data if isinstance(Q, ForgeArray) else np.atleast_2d(Q)
+            Rd = R.data if isinstance(R, ForgeArray) else np.atleast_2d(R)
+            S = solve_discrete_are(Ad, Bd, Qd, Rd)
+            K = np.linalg.solve(Rd + Bd.T @ S @ Bd, Bd.T @ S @ Ad)
+            e = np.linalg.eigvals(Ad - Bd @ K)
+            return ForgeArray(K), ForgeArray(S), ForgeArray(e.reshape(-1, 1))
+
+        def forge_care_func(A, B, Q, R=None):
+            """[X, L, G] = care(A, B, Q, R) — continuous algebraic Riccati."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_continuous_are
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            Qd = Q.data if isinstance(Q, ForgeArray) else np.atleast_2d(Q)
+            Rd = R.data if R is not None and isinstance(R, ForgeArray) else np.eye(Bd.shape[1])
+            X = solve_continuous_are(Ad, Bd, Qd, Rd)
+            G = np.linalg.solve(Rd, Bd.T @ X)
+            L = np.linalg.eigvals(Ad - Bd @ G)
+            return ForgeArray(X), ForgeArray(L.reshape(-1, 1)), ForgeArray(G)
+
+        def forge_dare_func(A, B, Q, R=None):
+            """[X, L, G] = dare(A, B, Q, R) — discrete algebraic Riccati."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import solve_discrete_are
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            Qd = Q.data if isinstance(Q, ForgeArray) else np.atleast_2d(Q)
+            Rd = R.data if R is not None and isinstance(R, ForgeArray) else np.eye(Bd.shape[1])
+            X = solve_discrete_are(Ad, Bd, Qd, Rd)
+            G = np.linalg.solve(Rd + Bd.T @ X @ Bd, Bd.T @ X @ Ad)
+            L = np.linalg.eigvals(Ad - Bd @ G)
+            return ForgeArray(X), ForgeArray(L.reshape(-1, 1)), ForgeArray(G)
+
+        def forge_place_func(A, B, p):
+            """K = place(A, B, p) — pole placement."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import place_poles
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            result = place_poles(Ad, Bd, pd)
+            return ForgeArray(result.gain_matrix)
+
+        # --- Image basics ---
+        def forge_rgb2gray(img):
+            """rgb2gray(img) — convert RGB to grayscale."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if data.ndim == 3 and data.shape[2] == 3:
+                gray = 0.2989 * data[:,:,0] + 0.5870 * data[:,:,1] + 0.1140 * data[:,:,2]
+                return ForgeArray(gray)
+            return ForgeArray(data)
+
+        def forge_im2double(img):
+            """im2double(img) — convert image to double [0,1]."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if data.max() > 1:
+                return ForgeArray(data.astype(float) / 255.0)
+            return ForgeArray(data.astype(float))
+
+        def forge_im2uint8(img):
+            """im2uint8(img) — convert image to uint8."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if data.max() <= 1:
+                return ForgeArray((data * 255).astype(np.uint8))
+            return ForgeArray(data.astype(np.uint8))
+
+        def forge_imresize(img, scale):
+            """imresize(img, scale) — resize image."""
+            from forge.engine.types import ForgeArray
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if isinstance(scale, ForgeArray):
+                s = scale.data.flatten()
+                if len(s) == 1:
+                    new_h = int(data.shape[0] * s[0])
+                    new_w = int(data.shape[1] * s[0])
+                else:
+                    new_h, new_w = int(s[0]), int(s[1])
+            else:
+                new_h = int(data.shape[0] * float(scale))
+                new_w = int(data.shape[1] * float(scale))
+            from scipy.ndimage import zoom
+            if data.ndim == 3:
+                factors = (new_h/data.shape[0], new_w/data.shape[1], 1)
+            else:
+                factors = (new_h/data.shape[0], new_w/data.shape[1])
+            return ForgeArray(zoom(data.astype(float), factors))
+
+        # --- More math ---
+        def forge_cospi(x):
+            """cospi(x) — cos(pi*x) without rounding error."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.cos(np.pi * data))
+
+        def forge_sinpi(x):
+            """sinpi(x) — sin(pi*x) without rounding error."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.sin(np.pi * data))
+
+        def forge_atan2d(y, x):
+            """atan2d(y, x) — four-quadrant arctangent in degrees."""
+            from forge.engine.types import ForgeArray
+            yd = y.data if isinstance(y, ForgeArray) else np.atleast_2d(y)
+            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.degrees(np.arctan2(yd, xd)))
+
+        def forge_cot(x):
+            """cot(x) — cotangent."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.tan(data))
+
+        def forge_coth(x):
+            """coth(x) — hyperbolic cotangent."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.tanh(data))
+
+        def forge_csc_func(x):
+            """csc(x) — cosecant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.sin(data))
+
+        def forge_csch(x):
+            """csch(x) — hyperbolic cosecant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.sinh(data))
+
+        def forge_sec_func(x):
+            """sec(x) — secant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.cos(data))
+
+        def forge_sech(x):
+            """sech(x) — hyperbolic secant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.cosh(data))
+
+        def forge_acot(x):
+            """acot(x) — inverse cotangent."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arctan(1.0 / data))
+
+        def forge_acoth(x):
+            """acoth(x) — inverse hyperbolic cotangent."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arctanh(1.0 / data))
+
+        def forge_acsc(x):
+            """acsc(x) — inverse cosecant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arcsin(1.0 / data))
+
+        def forge_acsch(x):
+            """acsch(x) — inverse hyperbolic cosecant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arcsinh(1.0 / data))
+
+        def forge_asec(x):
+            """asec(x) — inverse secant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arccos(1.0 / data))
+
+        def forge_asech(x):
+            """asech(x) — inverse hyperbolic secant."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.arccosh(1.0 / data))
+
+        # Register all R140 functions
+        session._engine.functions["tf"] = forge_tf_func
+        session._engine.functions["ss"] = forge_ss_func
+        session._engine.functions["c2d"] = forge_c2d_func
+        session._engine.functions["lqr"] = forge_lqr_func
+        session._engine.functions["dlqr"] = forge_dlqr_func
+        session._engine.functions["care"] = forge_care_func
+        session._engine.functions["dare"] = forge_dare_func
+        session._engine.functions["place"] = forge_place_func
+        session._engine.functions["rgb2gray"] = forge_rgb2gray
+        session._engine.functions["im2double"] = forge_im2double
+        session._engine.functions["im2uint8"] = forge_im2uint8
+        session._engine.functions["imresize"] = forge_imresize
+        session._engine.functions["cospi"] = forge_cospi
+        session._engine.functions["sinpi"] = forge_sinpi
+        session._engine.functions["atan2d"] = forge_atan2d
+        session._engine.functions["cot"] = forge_cot
+        session._engine.functions["coth"] = forge_coth
+        session._engine.functions["csc"] = forge_csc_func
+        session._engine.functions["csch"] = forge_csch
+        session._engine.functions["sec"] = forge_sec_func
+        session._engine.functions["sech"] = forge_sech
+        session._engine.functions["acot"] = forge_acot
+        session._engine.functions["acoth"] = forge_acoth
+        session._engine.functions["acsc"] = forge_acsc
+        session._engine.functions["acsch"] = forge_acsch
+        session._engine.functions["asec"] = forge_asec
+        session._engine.functions["asech"] = forge_asech
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

@@ -448,4 +448,17 @@ check("isdefinite_eye", "isdefinite(eye(3))", "1")
 check("rcond_eye", "abs(rcond(eye(3)) - 1) < 0.1", "1")
 check("sqrtm_4eye", "S = sqrtm(4*eye(2)); abs(S(1,1) - 2) < 1e-10", "1")
 
+
+print("\nR140 control, image, trig:")
+check("lqr_basic", "A = [0 1; 0 -1]; B = [0; 1]; Q = eye(2); R = 1; [K, S, e] = lqr(A, B, Q, R); size(K, 2)", "2")
+check("care_basic", "A = [0 1; 0 -1]; B = [0; 1]; Q = eye(2); R = 1; [X, L, G] = care(A, B, Q, R); issymmetric(X)", "1")
+check("place_basic", "A = [0 1; 0 0]; B = [0; 1]; K = place(A, B, [-1 -2]); size(K, 2)", "2")
+check("cot_pi4", "abs(cot(pi/4) - 1) < 1e-10", "1")
+check("sec_0", "abs(sec(0) - 1) < 1e-10", "1")
+check("csc_pi2", "abs(csc(pi/2) - 1) < 1e-10", "1")
+check("cospi_half", "abs(cospi(0.5)) < 1e-15", "1")
+check("sinpi_1", "abs(sinpi(1)) < 1e-15", "1")
+check("acot_1", "abs(acot(1) - pi/4) < 1e-10", "1")
+check("im2double_scale", "x = im2double(255*ones(2)); abs(x(1,1) - 1) < 1e-10", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
