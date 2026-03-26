@@ -61,22 +61,75 @@ class WorkspaceBrowserWidget(QWidget):
     # Helpers
     # ------------------------------------------------------------------
 
+    _DTYPE_MAP = {
+        "float64": "double", "float32": "single",
+        "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
+        "uint8": "uint8", "uint16": "uint16", "uint32": "uint32", "uint64": "uint64",
+        "bool": "logical", "complex128": "double complex", "complex64": "single complex",
+    }
+
     @staticmethod
     def _size_str(val) -> str:
+        from forge.engine.types import ForgeArray
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        if isinstance(val, ForgeChar):
+            return f"1x{len(val.to_str())}"
+        if isinstance(val, ForgeArray):
+            return "x".join(str(d) for d in val.data.shape)
+        if isinstance(val, ForgeCell):
+            return "x".join(str(d) for d in val.shape)
         if isinstance(val, np.ndarray):
             return "x".join(str(d) for d in val.shape)
         if isinstance(val, (list, tuple)):
             return str(len(val))
         return "1x1"
 
-    @staticmethod
-    def _class_str(val) -> str:
+    @classmethod
+    def _class_str(cls, val) -> str:
+        from forge.engine.types import ForgeArray
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        if isinstance(val, ForgeChar):
+            return "char"
+        if isinstance(val, ForgeArray):
+            dtype_name = str(val.data.dtype)
+            return cls._DTYPE_MAP.get(dtype_name, dtype_name)
+        if isinstance(val, ForgeCell):
+            return "cell"
+        if isinstance(val, ForgeStruct):
+            return "struct"
         if isinstance(val, np.ndarray):
-            return str(val.dtype)
+            return cls._DTYPE_MAP.get(str(val.dtype), str(val.dtype))
+        if isinstance(val, bool):
+            return "logical"
+        if isinstance(val, (int, float)):
+            return "double"
         return type(val).__name__
 
     @staticmethod
     def _preview(val) -> str:
+        from forge.engine.types import ForgeArray
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        if isinstance(val, ForgeChar):
+            s = val.to_str()
+            return repr(s) if len(s) <= 60 else repr(s[:57]) + "..."
+        if isinstance(val, ForgeArray):
+            d = val.data
+            if d.size == 0:
+                return "[]"
+            if d.size == 1:
+                v = d.flat[0]
+                if isinstance(v, (bool, np.bool_)):
+                    return "true" if v else "false"
+                return str(v)
+            if d.size <= 10:
+                return "[" + " ".join(str(x) for x in d.flat) + "]"
+            return f"[{d.shape[0]}x{d.shape[1] if d.ndim > 1 else 1} {str(d.dtype)}]"
+        if isinstance(val, ForgeCell):
+            n = len(val._data)
+            return f"{{{n} elements}}"
+        if isinstance(val, ForgeStruct):
+            fields = list(val._fields.keys()) if hasattr(val, '_fields') else []
+            return "{" + ", ".join(fields[:5]) + "}"
         s = str(val)
         return s if len(s) <= 60 else s[:57] + "..."
 
