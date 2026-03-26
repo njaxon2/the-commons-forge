@@ -2653,6 +2653,390 @@ class ForgeSession:
         session._engine.functions["mfilename"] = forge_mfilename
         session._engine.functions["nargchk"] = forge_nargchk
         session._engine.functions["validatestring"] = forge_validatestring
+
+        # R136: ODE solvers, optimization, integration
+        def forge_ode45(odefun, tspan, y0, *args):
+            """[t, y] = ode45(odefun, tspan, y0) — solve ODE with RK45."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray): tspan = tspan.data.flatten()
+            if isinstance(y0, ForgeArray): y0 = y0.data.flatten()
+            t0, tf = float(tspan[0]), float(tspan[-1])
+            t_eval = None
+            if len(tspan) > 2:
+                t_eval = tspan.astype(float)
+            def rhs(t, y):
+                yt = ForgeArray(y.reshape(-1, 1))
+                tt = ForgeArray(np.float64(t))
+                result = odefun(tt, yt)
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = solve_ivp(rhs, [t0, tf], y0.astype(float), method='RK45',
+                          t_eval=t_eval, rtol=1e-6, atol=1e-9, max_step=np.inf)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
+        def forge_ode23(odefun, tspan, y0, *args):
+            """[t, y] = ode23(odefun, tspan, y0) — solve ODE with RK23."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray): tspan = tspan.data.flatten()
+            if isinstance(y0, ForgeArray): y0 = y0.data.flatten()
+            t0, tf = float(tspan[0]), float(tspan[-1])
+            t_eval = None
+            if len(tspan) > 2:
+                t_eval = tspan.astype(float)
+            def rhs(t, y):
+                yt = ForgeArray(y.reshape(-1, 1))
+                tt = ForgeArray(np.float64(t))
+                result = odefun(tt, yt)
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = solve_ivp(rhs, [t0, tf], y0.astype(float), method='RK23',
+                          t_eval=t_eval, rtol=1e-3, atol=1e-6)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
+        def forge_ode15s(odefun, tspan, y0, *args):
+            """[t, y] = ode15s(odefun, tspan, y0) — solve stiff ODE."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray): tspan = tspan.data.flatten()
+            if isinstance(y0, ForgeArray): y0 = y0.data.flatten()
+            t0, tf = float(tspan[0]), float(tspan[-1])
+            t_eval = None
+            if len(tspan) > 2:
+                t_eval = tspan.astype(float)
+            def rhs(t, y):
+                yt = ForgeArray(y.reshape(-1, 1))
+                tt = ForgeArray(np.float64(t))
+                result = odefun(tt, yt)
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = solve_ivp(rhs, [t0, tf], y0.astype(float), method='BDF',
+                          t_eval=t_eval, rtol=1e-6, atol=1e-9)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
+        def forge_ode23s(odefun, tspan, y0, *args):
+            """[t, y] = ode23s(odefun, tspan, y0) — solve stiff ODE (Rosenbrock)."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray): tspan = tspan.data.flatten()
+            if isinstance(y0, ForgeArray): y0 = y0.data.flatten()
+            t0, tf = float(tspan[0]), float(tspan[-1])
+            t_eval = None
+            if len(tspan) > 2:
+                t_eval = tspan.astype(float)
+            def rhs(t, y):
+                yt = ForgeArray(y.reshape(-1, 1))
+                tt = ForgeArray(np.float64(t))
+                result = odefun(tt, yt)
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = solve_ivp(rhs, [t0, tf], y0.astype(float), method='Radau',
+                          t_eval=t_eval, rtol=1e-3, atol=1e-6)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
+        def forge_odeset(*args):
+            """opts = odeset('Name', Value, ...) — ODE options (stub)."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            from forge.engine.types import ForgeArray
+            opts = ForgeStruct()
+            i = 0
+            while i < len(args) - 1:
+                name = args[i]
+                val = args[i+1]
+                if isinstance(name, ForgeChar): name = name.to_str()
+                opts._fields[name] = val
+                i += 2
+            return opts
+
+        def forge_odeget(opts, name):
+            """odeget(opts, name) — get ODE option value."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            if isinstance(name, ForgeChar): name = name.to_str()
+            if isinstance(opts, ForgeStruct) and name in opts._fields:
+                return opts._fields[name]
+            return ForgeArray(np.array([[]]))
+
+        # --- Optimization ---
+        def forge_fzero(fun, x0, *args):
+            """fzero(fun, x0) — find zero of function."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import brentq, fsolve
+            if isinstance(x0, ForgeArray):
+                x0d = x0.data.flatten()
+            else:
+                x0d = np.array([float(x0)])
+            def f(x):
+                result = fun(ForgeArray(np.float64(x)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            if len(x0d) == 2:
+                root = brentq(f, float(x0d[0]), float(x0d[1]))
+            else:
+                root = fsolve(f, float(x0d[0]))[0]
+            return ForgeArray(np.float64(root))
+
+        def forge_fminbnd(fun, a, b, *args):
+            """fminbnd(fun, a, b) — minimize scalar function on interval."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import minimize_scalar
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            def f(x):
+                result = fun(ForgeArray(np.float64(x)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            res = minimize_scalar(f, bounds=(ad, bd), method='bounded')
+            return ForgeArray(np.float64(res.x))
+
+        def forge_fminsearch(fun, x0, *args):
+            """fminsearch(fun, x0) — Nelder-Mead minimization."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import minimize
+            if isinstance(x0, ForgeArray): x0d = x0.data.flatten()
+            else: x0d = np.array([float(x0)])
+            def f(x):
+                result = fun(ForgeArray(x.reshape(-1, 1)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            res = minimize(f, x0d, method='Nelder-Mead')
+            return ForgeArray(res.x.reshape(-1, 1))
+
+        def forge_fsolve(fun, x0, *args):
+            """fsolve(fun, x0) — solve system of nonlinear equations."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import fsolve as _fsolve
+            if isinstance(x0, ForgeArray): x0d = x0.data.flatten()
+            else: x0d = np.array([float(x0)])
+            def f(x):
+                result = fun(ForgeArray(x.reshape(-1, 1)))
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = _fsolve(f, x0d)
+            return ForgeArray(sol.reshape(-1, 1))
+
+        def forge_lsqnonneg(C, d):
+            """lsqnonneg(C, d) — nonnegative least squares."""
+            from forge.engine.types import ForgeArray
+            from scipy.optimize import nnls
+            Cd = C.data if isinstance(C, ForgeArray) else np.atleast_2d(C)
+            dd = d.data.flatten() if isinstance(d, ForgeArray) else np.array(d).flatten()
+            x, rnorm = nnls(Cd, dd)
+            return ForgeArray(x.reshape(-1, 1))
+
+        # --- Integration ---
+        def forge_integral(fun, a, b, *args):
+            """integral(fun, a, b) — numerical integration."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import quad
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            def f(x):
+                result = fun(ForgeArray(np.float64(x)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            val, err = quad(f, ad, bd)
+            return ForgeArray(np.float64(val))
+
+        def forge_integral2(fun, xa, xb, ya, yb, *args):
+            """integral2(fun, xa, xb, ya, yb) — 2D numerical integration."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import dblquad
+            xad = float(xa.data.flat[0]) if isinstance(xa, ForgeArray) else float(xa)
+            xbd = float(xb.data.flat[0]) if isinstance(xb, ForgeArray) else float(xb)
+            yad = float(ya.data.flat[0]) if isinstance(ya, ForgeArray) else float(ya)
+            ybd = float(yb.data.flat[0]) if isinstance(yb, ForgeArray) else float(yb)
+            def f(y, x):
+                result = fun(ForgeArray(np.float64(x)), ForgeArray(np.float64(y)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            val, err = dblquad(f, xad, xbd, yad, ybd)
+            return ForgeArray(np.float64(val))
+
+        def forge_quad_func(fun, a, b, *args):
+            """quad(fun, a, b) — adaptive Simpson quadrature."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import quad as _quad
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            def f(x):
+                result = fun(ForgeArray(np.float64(x)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            val, err = _quad(f, ad, bd)
+            return ForgeArray(np.float64(val))
+
+        def forge_quadgk(fun, a, b, *args):
+            """quadgk(fun, a, b) — Gauss-Kronrod quadrature."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import quad as _quad
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            def f(x):
+                result = fun(ForgeArray(np.float64(x)))
+                if isinstance(result, ForgeArray):
+                    return float(result.data.flat[0])
+                return float(result)
+            val, err = _quad(f, ad, bd)
+            return ForgeArray(np.float64(val)), ForgeArray(np.float64(err))
+
+        # --- Time functions ---
+        def forge_tic():
+            """tic — start timer."""
+            from forge.engine.types import ForgeArray
+            import time
+            session._tic_time = time.time()
+            return ForgeArray(np.float64(session._tic_time))
+
+        def forge_toc(*args):
+            """toc — elapsed time since tic."""
+            from forge.engine.types import ForgeArray
+            import time
+            t0 = getattr(session, '_tic_time', time.time())
+            elapsed = time.time() - t0
+            return ForgeArray(np.float64(elapsed))
+
+        def forge_clock():
+            """clock — current date/time as [y m d h m s]."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            now = datetime.datetime.now()
+            return ForgeArray(np.array([[now.year, now.month, now.day,
+                                        now.hour, now.minute,
+                                        now.second + now.microsecond/1e6]]))
+
+        def forge_now():
+            """now — current date as serial date number."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            d = datetime.datetime.now()
+            # MATLAB datenum: days since Jan 0, 0000
+            delta = d - datetime.datetime(1, 1, 1)
+            return ForgeArray(np.float64(delta.days + 1 + delta.seconds/86400.0 + 367))
+
+        def forge_datenum(*args):
+            """datenum(y, m, d) or datenum(datestr) — serial date number."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import datetime
+            if len(args) >= 3:
+                y = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                m = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                d = int(args[2].data.flat[0]) if isinstance(args[2], ForgeArray) else int(args[2])
+                dt = datetime.datetime(y, m, d)
+                delta = dt - datetime.datetime(1, 1, 1)
+                return ForgeArray(np.float64(delta.days + 1 + 367))
+            return ForgeArray(np.float64(0))
+
+        def forge_datevec(d):
+            """datevec(d) — convert date number to [y m d h m s]."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            if isinstance(d, ForgeArray): d = float(d.data.flat[0])
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            return ForgeArray(np.array([[base.year, base.month, base.day,
+                                        base.hour, base.minute, base.second]]).astype(float))
+
+        def forge_datestr(d, *args):
+            """datestr(d) — convert date number to string."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import datetime
+            if isinstance(d, ForgeArray): d = float(d.data.flat[0])
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            return ForgeChar(base.strftime('%d-%b-%Y'))
+
+        def forge_etime(t1, t0):
+            """etime(t1, t0) — elapsed time between clock vectors."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            def to_dt(t):
+                d = t.data.flatten() if isinstance(t, ForgeArray) else np.array(t).flatten()
+                return datetime.datetime(int(d[0]), int(d[1]), int(d[2]),
+                                        int(d[3]), int(d[4]), int(d[5]))
+            dt = to_dt(t1) - to_dt(t0)
+            return ForgeArray(np.float64(dt.total_seconds()))
+
+        def forge_weekday(d):
+            """weekday(d) — day of week (1=Sun, 7=Sat)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import datetime
+            if isinstance(d, ForgeArray): d = float(d.data.flat[0])
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            dow = base.isoweekday()  # 1=Mon, 7=Sun
+            matlab_dow = (dow % 7) + 1  # 1=Sun, 7=Sat
+            names = ['', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            return ForgeArray(np.float64(matlab_dow)), ForgeChar(names[matlab_dow])
+
+        def forge_is_leap_year(y):
+            """is_leap_year(y) — test for leap year."""
+            from forge.engine.types import ForgeArray
+            import calendar
+            yd = int(y.data.flat[0]) if isinstance(y, ForgeArray) else int(y)
+            return ForgeArray(np.float64(1 if calendar.isleap(yd) else 0))
+
+        def forge_eomday(y, m):
+            """eomday(y, m) — end of month day."""
+            from forge.engine.types import ForgeArray
+            import calendar
+            yd = int(y.data.flat[0]) if isinstance(y, ForgeArray) else int(y)
+            md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
+            return ForgeArray(np.float64(calendar.monthrange(yd, md)[1]))
+
+        # --- File I/O extras ---
+        def forge_tempname():
+            """tempname — generate temporary file name."""
+            from forge.engine.containers import ForgeChar
+            import tempfile
+            return ForgeChar(tempfile.mktemp())
+
+        def forge_tempdir():
+            """tempdir — get system temp directory."""
+            from forge.engine.containers import ForgeChar
+            import tempfile
+            return ForgeChar(tempfile.gettempdir())
+
+        # Register all R136 functions
+        session._engine.functions["ode45"] = forge_ode45
+        session._engine.functions["ode23"] = forge_ode23
+        session._engine.functions["ode15s"] = forge_ode15s
+        session._engine.functions["ode23s"] = forge_ode23s
+        session._engine.functions["odeset"] = forge_odeset
+        session._engine.functions["odeget"] = forge_odeget
+        session._engine.functions["fzero"] = forge_fzero
+        session._engine.functions["fminbnd"] = forge_fminbnd
+        session._engine.functions["fminsearch"] = forge_fminsearch
+        session._engine.functions["fsolve"] = forge_fsolve
+        session._engine.functions["lsqnonneg"] = forge_lsqnonneg
+        session._engine.functions["integral"] = forge_integral
+        session._engine.functions["integral2"] = forge_integral2
+        session._engine.functions["quad"] = forge_quad_func
+        session._engine.functions["quadgk"] = forge_quadgk
+        session._engine.functions["tic"] = forge_tic
+        session._engine.functions["toc"] = forge_toc
+        session._engine.functions["clock"] = forge_clock
+        session._engine.functions["now"] = forge_now
+        session._engine.functions["datenum"] = forge_datenum
+        session._engine.functions["datevec"] = forge_datevec
+        session._engine.functions["datestr"] = forge_datestr
+        session._engine.functions["etime"] = forge_etime
+        session._engine.functions["weekday"] = forge_weekday
+        session._engine.functions["is_leap_year"] = forge_is_leap_year
+        session._engine.functions["eomday"] = forge_eomday
+        session._engine.functions["tempname"] = forge_tempname
+        session._engine.functions["tempdir"] = forge_tempdir
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

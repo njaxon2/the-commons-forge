@@ -410,4 +410,19 @@ check("roots_quad", "r = roots([1 0 -4]); max(abs(sort(r) - [-2; 2])) < 1e-10", 
 check("fft_len", "length(fft([1 2 3 4]))", "4")
 check("trapz_const", "trapz([1 1 1 1])", "3")
 
+
+print("\nR136 ODE, optimization, integration, time:")
+check("fzero_sin", "abs(fzero(@sin, [3, 4]) - pi) < 1e-10", "1")
+check("fminbnd_x2", "abs(fminbnd(@(x) x^2, -1, 1)) < 1e-6", "1")
+check("integral_sin", "abs(integral(@sin, 0, pi) - 2) < 1e-10", "1")
+check("quad_exp", "abs(quad(@exp, 0, 1) - (exp(1) - 1)) < 1e-10", "1")
+check("tic_toc", "tic(); x = sum(1:10000); toc() >= 0", "1")
+check("clock_len", "length(clock())", "6")
+check("eomday_feb", "eomday(2024, 2)", "29")
+check("eomday_feb_noleap", "eomday(2023, 2)", "28")
+check("is_leap_2024", "is_leap_year(2024)", "1")
+check("is_leap_2023", "is_leap_year(2023)", "0")
+check("tempdir_nonempty", "length(tempdir()) > 0", "1")
+check("lsqnonneg_basic", "x = lsqnonneg(eye(3), [1; 2; 3]); abs(x(1) - 1) < 1e-10", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
