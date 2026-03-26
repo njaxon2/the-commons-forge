@@ -1640,6 +1640,136 @@ class ForgeSession:
         session._engine.functions["funm"] = forge_funm
         session._engine.functions["condest"] = forge_condest
 
+        # R118: format, help, doc, lookfor, version, date functions
+        def forge_format(*args):
+            """format short/long/shortE/longE — set display format."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if len(args) == 0:
+                session._format = "short"
+            else:
+                fmt = args[0]
+                if isinstance(fmt, ForgeChar):
+                    fmt = fmt.to_str()
+                session._format = fmt
+            return ForgeArray(np.array(0.0))
+
+        def forge_help(name=None):
+            """help(name) — display help for function."""
+            from forge.engine.containers import ForgeChar
+            if name is None:
+                msg = "Forge Computing Environment\n"
+                msg += "Type help('function_name') for help on a specific function.\n"
+                msg += f"Total registered functions: {len(session._engine.functions)}\n"
+                import sys
+                print(msg)
+                return ForgeChar(msg)
+            if isinstance(name, ForgeChar):
+                name = name.to_str()
+            if name in session._engine.functions:
+                func = session._engine.functions[name]
+                doc = func.__doc__ if func.__doc__ else f"{name} — no documentation available"
+                import sys
+                print(doc)
+                return ForgeChar(doc)
+            msg = f"No help available for '{name}'"
+            import sys
+            print(msg)
+            return ForgeChar(msg)
+
+        def forge_doc(name=None):
+            """doc(name) — display documentation."""
+            return forge_help(name)
+
+        def forge_lookfor(keyword):
+            """lookfor(keyword) — search for functions by keyword."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(keyword, ForgeChar):
+                keyword = keyword.to_str()
+            matches = []
+            keyword_lower = keyword.lower()
+            for fname, func in session._engine.functions.items():
+                if keyword_lower in fname.lower():
+                    matches.append(fname)
+                elif func.__doc__ and keyword_lower in func.__doc__.lower():
+                    matches.append(fname)
+            result = f"Functions matching '{keyword}':\n"
+            for m in sorted(matches)[:30]:
+                result += f"  {m}\n"
+            if not matches:
+                result += "  (none found)\n"
+            import sys
+            print(result)
+            return ForgeChar(result)
+
+        def forge_version():
+            """version — return Forge version string."""
+            from forge.engine.containers import ForgeChar
+            return ForgeChar("Forge 0.1.0 (R118)")
+
+        def forge_ver():
+            """ver — display version info."""
+            from forge.engine.containers import ForgeChar
+            msg = "Forge Computing Environment v0.1.0 (R118)\n"
+            msg += f"Registered functions: {len(session._engine.functions)}\n"
+            msg += "Python backend with NumPy/SciPy\n"
+            import sys
+            print(msg)
+            return ForgeChar(msg)
+
+        def forge_date():
+            """date — return current date string."""
+            from forge.engine.containers import ForgeChar
+            import datetime
+            return ForgeChar(datetime.datetime.now().strftime("%d-%b-%Y"))
+
+        def forge_now():
+            """now — return serial date number (MATLAB convention)."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            # MATLAB datenum: days since Jan 0, 0000
+            d = datetime.datetime.now()
+            # Simplified: days since epoch + MATLAB epoch offset
+            epoch = datetime.datetime(1970, 1, 1)
+            delta = d - epoch
+            return ForgeArray(np.float64(delta.total_seconds() / 86400 + 719529))
+
+        def forge_clock():
+            """clock — return [year month day hour minute second]."""
+            from forge.engine.types import ForgeArray
+            import datetime
+            d = datetime.datetime.now()
+            return ForgeArray(np.array([d.year, d.month, d.day, d.hour, d.minute, d.second + d.microsecond/1e6]))
+
+        def forge_datestr(n=None):
+            """datestr — convert date number to string."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import datetime
+            if n is None or (isinstance(n, ForgeArray) and n.numel() == 0):
+                return ForgeChar(datetime.datetime.now().strftime("%d-%b-%Y %H:%M:%S"))
+            if isinstance(n, ForgeArray):
+                n = float(n.data.flat[0])
+            # Convert MATLAB datenum to datetime
+            days_from_epoch = n - 719529
+            d = datetime.datetime(1970, 1, 1) + datetime.timedelta(days=days_from_epoch)
+            return ForgeChar(d.strftime("%d-%b-%Y %H:%M:%S"))
+
+        # Initialize format
+        if not hasattr(session, '_format'):
+            session._format = "short"
+
+        session._engine.functions["format"] = forge_format
+        session._engine.functions["help"] = forge_help
+        session._engine.functions["doc"] = forge_doc
+        session._engine.functions["lookfor"] = forge_lookfor
+        session._engine.functions["version"] = forge_version
+        session._engine.functions["ver"] = forge_ver
+        session._engine.functions["date"] = forge_date
+        session._engine.functions["now"] = forge_now
+        session._engine.functions["clock"] = forge_clock
+        session._engine.functions["datestr"] = forge_datestr
+
 
 
 
