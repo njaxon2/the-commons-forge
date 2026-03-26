@@ -1246,7 +1246,20 @@ class Session:
                     elif isinstance(idx, ForgeArray):
                         raw_idx = _unwrap(idx)
                         if raw_idx.dtype == np.bool_:
-                            data.ravel(order='F')[raw_idx.ravel()] = assign_val
+                            # Squeeze assign_val for boolean indexing
+                            av = assign_val
+                            if isinstance(av, np.ndarray) and av.ndim > 1:
+                                if av.size == 1:
+                                    av = av.flat[0]
+                                else:
+                                    av = av.ravel()
+                            # Use direct boolean mask (reshape to match data)
+                            if raw_idx.shape == data.shape:
+                                data[raw_idx] = av
+                            else:
+                                # Shapes differ: broadcast mask
+                                mask_bc = np.broadcast_to(raw_idx, data.shape).copy()
+                                data[mask_bc] = av
                         else:
                             flat = data.ravel(order='F')
                             int_idx = raw_idx.astype(int).ravel() - 1

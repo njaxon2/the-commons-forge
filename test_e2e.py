@@ -306,4 +306,10 @@ check("anonymous_compose", "f = @(x) x^2; g = @(x) f(x) + 1; g(3)", "10")
 check("growing_vector", "v=[]; for i=1:4; v=[v, i^2]; end; v(3)", "9")
 check("nested_for_sum", "t=0; for i=1:3; for j=1:3; t=t+1; end; end; t", "9")
 
+
+print("\nR130 logical indexing assignment:")
+check("logical_assign_vec", "x = [1 2 3 4 5]; x(x > 3) = 0; sum(x)", "6")
+check("logical_assign_mat", "A = [1 2; 3 4]; A(A > 2) = 0; A(2,1)", "0")
+check("logical_assign_scalar", "A = magic(3); A(A > 5) = -1; A(1,1)", "-1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
