@@ -1236,6 +1236,188 @@ class ForgeSession:
         session._engine.functions["class"] = forge_class
         session._engine.functions["typecast"] = forge_typecast_val
 
+        # R110: Fast TIGA assembly built-ins
+        def _findspan(n, p, u, U):
+            """Find knot span (0-based)."""
+            if u >= U[n+1]: return n
+            if u <= U[p]: return p
+            lo, hi = p, n + 1
+            mid = (lo + hi) // 2
+            while u < U[mid] or u >= U[mid + 1]:
+                if u < U[mid]: hi = mid
+                else: lo = mid
+                mid = (lo + hi) // 2
+            return mid
+
+        def _basisfun(i, u, p, U):
+            """B-spline basis functions (p+1 values)."""
+            N = np.zeros(p + 1)
+            N[0] = 1.0
+            left = np.zeros(p + 1)
+            right = np.zeros(p + 1)
+            for j in range(1, p + 1):
+                left[j] = u - U[i + 1 - j]
+                right[j] = U[i + j] - u
+                saved = 0.0
+                for r in range(j):
+                    temp = N[r] / (right[r + 1] + left[j - r])
+                    N[r] = saved + right[r + 1] * temp
+                    saved = left[j - r] * temp
+                N[j] = saved
+            return N
+
+        def _derbasisfun(i, u, p, nd, U):
+            """Basis function derivatives."""
+            ndu = np.zeros((p + 1, p + 1))
+            ndu[0, 0] = 1.0
+            left = np.zeros(p + 1)
+            right = np.zeros(p + 1)
+            for j in range(1, p + 1):
+                left[j] = u - U[i + 1 - j]
+                right[j] = U[i + j] - u
+                saved = 0.0
+                for r in range(j):
+                    ndu[j, r] = right[r + 1] + left[j - r]
+                    temp = ndu[r, j - 1] / ndu[j, r]
+                    ndu[r, j] = saved + right[r + 1] * temp
+                    saved = left[j - r] * temp
+                ndu[j, j] = saved
+            ders = np.zeros((nd + 1, p + 1))
+            for j in range(p + 1):
+                ders[0, j] = ndu[j, p]
+            a = np.zeros((2, p + 1))
+            for r in range(p + 1):
+                s1, s2 = 0, 1
+                a[0, 0] = 1.0
+                for k in range(1, nd + 1):
+                    d = 0.0
+                    rk, pk = r - k, p - k
+                    if r >= k:
+                        a[s2, 0] = a[s1, 0] / ndu[pk + 1, rk]
+                        d = a[s2, 0] * ndu[rk, pk]
+                    j1 = max(0, -(rk)) + 1 if rk < 0 else 1
+                    j2 = min(k - 1, pk - r) if (r - 1) <= pk else k - 1
+                    for j in range(j1, j2 + 1):
+                        a[s2, j] = (a[s1, j] - a[s1, j - 1]) / ndu[pk + 1, rk + j]
+                        d += a[s2, j] * ndu[rk + j, pk]
+                    if r <= pk:
+                        a[s2, k] = -a[s1, k - 1] / ndu[pk + 1, r]
+                        d += a[s2, k] * ndu[r, pk]
+                    ders[k, r] = d
+                    s1, s2 = s2, s1
+            r = p
+            for k in range(1, nd + 1):
+                for j in range(p + 1):
+                    ders[k, j] *= r
+                r *= (p - k)
+            return ders
+
+        def forge_tiga_assemble_2d(p_arr, Xi_r_arr, Xi_t_arr, CPx_arr, CPy_arr, Cw_arr, bc_str=None):
+            """Fast 2D NURBS Laplacian assembly.
+
+            [K, F, free_dofs] = tiga_assemble_2d(p, Xi_r, Xi_t, CPx, CPy, Cw)
+            Returns stiffness matrix K, force vector F, and free DOF indices.
+            """
+            from forge.engine.types import ForgeArray
+            p = int(p_arr.data.flat[0]) if isinstance(p_arr, ForgeArray) else int(p_arr)
+            Xi_r = Xi_r_arr.data.flatten() if isinstance(Xi_r_arr, ForgeArray) else np.asarray(Xi_r_arr).flatten()
+            Xi_t = Xi_t_arr.data.flatten() if isinstance(Xi_t_arr, ForgeArray) else np.asarray(Xi_t_arr).flatten()
+            CPx = CPx_arr.data if isinstance(CPx_arr, ForgeArray) else np.asarray(CPx_arr)
+            CPy = CPy_arr.data if isinstance(CPy_arr, ForgeArray) else np.asarray(CPy_arr)
+            Cw = Cw_arr.data if isinstance(Cw_arr, ForgeArray) else np.asarray(Cw_arr)
+
+            n_r = len(Xi_r) - p - 1
+            n_t = len(Xi_t) - p - 1
+            n_2d = n_r * n_t
+
+            nqp = p + 2
+            gp, gw = np.polynomial.legendre.leggauss(nqp)
+            knots_r = np.unique(Xi_r)
+            knots_t = np.unique(Xi_t)
+
+            K = np.zeros((n_2d, n_2d))
+
+            for er in range(len(knots_r) - 1):
+                xi_a, xi_b = knots_r[er], knots_r[er + 1]
+                if xi_b - xi_a < 1e-14: continue
+                Jr = (xi_b - xi_a) / 2.0
+                for et in range(len(knots_t) - 1):
+                    eta_a, eta_b = knots_t[et], knots_t[et + 1]
+                    if eta_b - eta_a < 1e-14: continue
+                    Jt = (eta_b - eta_a) / 2.0
+                    for qr in range(nqp):
+                        xi = (xi_a + xi_b) / 2 + Jr * gp[qr]
+                        span_r = _findspan(n_r - 1, p, xi, Xi_r)
+                        ders_r = _derbasisfun(span_r, xi, p, 1, Xi_r)
+                        Nr, dNr = ders_r[0], ders_r[1]
+                        for qt in range(nqp):
+                            eta = (eta_a + eta_b) / 2 + Jt * gp[qt]
+                            span_t = _findspan(n_t - 1, p, eta, Xi_t)
+                            ders_t = _derbasisfun(span_t, eta, p, 1, Xi_t)
+                            Nt, dNt = ders_t[0], ders_t[1]
+                            wt_q = gw[qr] * Jr * gw[qt] * Jt
+
+                            W, dW_dxi, dW_deta = 0.0, 0.0, 0.0
+                            for a in range(p + 1):
+                                ir = span_r - p + a
+                                for b in range(p + 1):
+                                    it = span_t - p + b
+                                    ww = Cw[ir, it]
+                                    W += Nr[a] * Nt[b] * ww
+                                    dW_dxi += dNr[a] * Nt[b] * ww
+                                    dW_deta += Nr[a] * dNt[b] * ww
+
+                            dx_dxi, dx_deta = 0.0, 0.0
+                            dy_dxi, dy_deta = 0.0, 0.0
+                            for a in range(p + 1):
+                                ir = span_r - p + a
+                                for b in range(p + 1):
+                                    it = span_t - p + b
+                                    ww = Cw[ir, it]
+                                    dR_dxi = (dNr[a] * Nt[b] * ww * W - Nr[a] * Nt[b] * ww * dW_dxi) / W**2
+                                    dR_deta = (Nr[a] * dNt[b] * ww * W - Nr[a] * Nt[b] * ww * dW_deta) / W**2
+                                    dx_dxi += dR_dxi * CPx[ir, it]
+                                    dx_deta += dR_deta * CPx[ir, it]
+                                    dy_dxi += dR_dxi * CPy[ir, it]
+                                    dy_deta += dR_deta * CPy[ir, it]
+
+                            detJ = dx_dxi * dy_deta - dx_deta * dy_dxi
+                            if abs(detJ) < 1e-15: continue
+                            inv_J = np.array([[dy_deta, -dy_dxi], [-dx_deta, dx_dxi]]) / detJ
+
+                            dR_dx = np.zeros((p + 1, p + 1))
+                            dR_dy = np.zeros((p + 1, p + 1))
+                            glob = np.zeros((p + 1, p + 1), dtype=int)
+                            for a in range(p + 1):
+                                ir = span_r - p + a
+                                for b in range(p + 1):
+                                    it = span_t - p + b
+                                    ww = Cw[ir, it]
+                                    dr_dxi = (dNr[a] * Nt[b] * ww * W - Nr[a] * Nt[b] * ww * dW_dxi) / W**2
+                                    dr_deta = (Nr[a] * dNt[b] * ww * W - Nr[a] * Nt[b] * ww * dW_deta) / W**2
+                                    dR_dx[a, b] = inv_J[0, 0] * dr_dxi + inv_J[0, 1] * dr_deta
+                                    dR_dy[a, b] = inv_J[1, 0] * dr_dxi + inv_J[1, 1] * dr_deta
+                                    glob[a, b] = it * n_r + ir
+
+                            for a in range(p + 1):
+                                for b in range(p + 1):
+                                    gA = glob[a, b]
+                                    for c in range(p + 1):
+                                        for d in range(p + 1):
+                                            gB = glob[c, d]
+                                            K[gA, gB] += (dR_dx[a, b] * dR_dx[c, d] + dR_dy[a, b] * dR_dy[c, d]) * abs(detJ) * wt_q
+
+            # Apply BCs
+            bc_dofs = set()
+            for j in range(n_t):
+                bc_dofs.add(j * n_r)
+                bc_dofs.add(j * n_r + n_r - 1)
+            free_dofs = sorted(set(range(n_2d)) - bc_dofs)
+
+            return ForgeArray(K), ForgeArray(np.zeros(n_2d)), ForgeArray(np.array(free_dofs, dtype=float) + 1)  # 1-based
+
+        session._engine.functions["tiga_assemble_2d"] = forge_tiga_assemble_2d
+
 
 
 
