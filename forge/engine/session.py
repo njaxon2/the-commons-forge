@@ -3037,6 +3037,668 @@ class ForgeSession:
         session._engine.functions["eomday"] = forge_eomday
         session._engine.functions["tempname"] = forge_tempname
         session._engine.functions["tempdir"] = forge_tempdir
+
+        # R138: CSV I/O, sparse solvers, more matrix functions
+        def forge_csvread(fname, *args):
+            """csvread(fname) — read CSV file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            data = np.loadtxt(fname, delimiter=',')
+            return ForgeArray(np.atleast_2d(data))
+
+        def forge_csvwrite(fname, M, *args):
+            """csvwrite(fname, M) — write CSV file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            data = M.data if isinstance(M, ForgeArray) else np.atleast_2d(M)
+            np.savetxt(fname, data, delimiter=',')
+
+        def forge_dlmread(fname, *args):
+            """dlmread(fname, delim) — read delimited file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            delim = ','
+            if args and isinstance(args[0], ForgeChar):
+                delim = args[0].to_str()
+            data = np.loadtxt(fname, delimiter=delim)
+            return ForgeArray(np.atleast_2d(data))
+
+        def forge_dlmwrite(fname, M, *args):
+            """dlmwrite(fname, M, delim) — write delimited file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            data = M.data if isinstance(M, ForgeArray) else np.atleast_2d(M)
+            delim = ','
+            if args and isinstance(args[0], ForgeChar):
+                delim = args[0].to_str()
+            np.savetxt(fname, data, delimiter=delim)
+
+        def forge_fileread(fname):
+            """fileread(fname) — read entire file as string."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            with open(fname, 'r') as f:
+                return ForgeChar(f.read())
+
+        # --- Sparse iterative solvers ---
+        def forge_pcg(A, b, *args):
+            """pcg(A, b) — preconditioned conjugate gradient."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import cg
+            from scipy.sparse import issparse
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            tol = 1e-6
+            if args and isinstance(args[0], ForgeArray):
+                tol = float(args[0].data.flat[0])
+            x, info = cg(Ad, bd, tol=tol)
+            return ForgeArray(x.reshape(-1, 1)), ForgeArray(np.float64(info))
+
+        def forge_gmres_func(A, b, *args):
+            """gmres(A, b) — generalized minimum residual method."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import gmres
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            tol = 1e-6
+            if args and isinstance(args[0], ForgeArray):
+                tol = float(args[0].data.flat[0])
+            x, info = gmres(Ad, bd, tol=tol)
+            return ForgeArray(x.reshape(-1, 1)), ForgeArray(np.float64(info))
+
+        def forge_bicgstab(A, b, *args):
+            """bicgstab(A, b) — BiCGSTAB iterative solver."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import bicgstab
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            tol = 1e-6
+            x, info = bicgstab(Ad, bd, tol=tol)
+            return ForgeArray(x.reshape(-1, 1)), ForgeArray(np.float64(info))
+
+        def forge_eigs_func(A, *args):
+            """eigs(A, k) — find k largest eigenvalues."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import eigs
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            k = 6
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+            k = min(k, Ad.shape[0] - 2)
+            if k < 1: k = 1
+            vals, vecs = eigs(Ad.astype(complex), k=k)
+            return ForgeArray(vals.reshape(-1, 1)), ForgeArray(vecs)
+
+        def forge_svds_func(A, *args):
+            """svds(A, k) — find k largest singular values."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import svds as _svds
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            k = 6
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+            k = min(k, min(Ad.shape) - 1)
+            if k < 1: k = 1
+            U, s, Vh = _svds(Ad, k=k)
+            return ForgeArray(U), ForgeArray(np.diag(s)), ForgeArray(Vh)
+
+        # --- More matrix functions ---
+        def forge_sqrtm(A):
+            """sqrtm(A) — matrix square root."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import sqrtm as _sqrtm
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.real(_sqrtm(Ad)))
+
+        def forge_funm(A, fun):
+            """funm(A, @fun) — general matrix function."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import funm as _funm
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            def f(x):
+                result = fun(ForgeArray(np.atleast_2d(x)))
+                if isinstance(result, ForgeArray):
+                    return result.data
+                return np.atleast_2d(result)
+            return ForgeArray(_funm(Ad, lambda x: np.vectorize(lambda v: float(fun(ForgeArray(np.float64(v))).data.flat[0]))(x)))
+
+        def forge_lsqminnorm(A, b):
+            """lsqminnorm(A, b) — minimum norm least squares."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = b.data if isinstance(b, ForgeArray) else np.atleast_2d(b)
+            x, res, rank, sv = np.linalg.lstsq(Ad, bd, rcond=None)
+            return ForgeArray(x)
+
+        def forge_rcond(A):
+            """rcond(A) — reciprocal condition number."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            n = np.linalg.norm(Ad, 1)
+            try:
+                ni = np.linalg.norm(np.linalg.inv(Ad), 1)
+                return ForgeArray(np.float64(1.0 / (n * ni)))
+            except:
+                return ForgeArray(np.float64(0.0))
+
+        def forge_bandwidth(A):
+            """[lower, upper] = bandwidth(A) — matrix bandwidth."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            m, n = Ad.shape
+            lower = 0
+            upper = 0
+            for i in range(m):
+                for j in range(n):
+                    if Ad[i, j] != 0:
+                        if i > j: lower = max(lower, i - j)
+                        if j > i: upper = max(upper, j - i)
+            return ForgeArray(np.float64(lower)), ForgeArray(np.float64(upper))
+
+        def forge_isbanded(A, lower, upper):
+            """isbanded(A, lower, upper) — test if matrix is banded."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            l = int(lower.data.flat[0]) if isinstance(lower, ForgeArray) else int(lower)
+            u = int(upper.data.flat[0]) if isinstance(upper, ForgeArray) else int(upper)
+            m, n = Ad.shape
+            for i in range(m):
+                for j in range(n):
+                    if (i - j > l or j - i > u) and Ad[i, j] != 0:
+                        return ForgeArray(np.float64(0))
+            return ForgeArray(np.float64(1))
+
+        def forge_isdiag(A):
+            """isdiag(A) — test if matrix is diagonal."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(1 if np.allclose(Ad, np.diag(np.diag(Ad))) else 0))
+
+        def forge_issymmetric(A, *args):
+            """issymmetric(A) — test if matrix is symmetric."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(1 if np.allclose(Ad, Ad.T) else 0))
+
+        def forge_ishermitian(A, *args):
+            """ishermitian(A) — test if matrix is Hermitian."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(1 if np.allclose(Ad, Ad.conj().T) else 0))
+
+        def forge_istril(A):
+            """istril(A) — test if matrix is lower triangular."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(1 if np.allclose(Ad, np.tril(Ad)) else 0))
+
+        def forge_istriu(A):
+            """istriu(A) — test if matrix is upper triangular."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(1 if np.allclose(Ad, np.triu(Ad)) else 0))
+
+        def forge_isdefinite(A, *args):
+            """isdefinite(A) — test if matrix is positive definite."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            try:
+                np.linalg.cholesky(Ad)
+                return ForgeArray(np.float64(1))
+            except:
+                return ForgeArray(np.float64(0))
+
+        def forge_subspace(A, B):
+            """subspace(A, B) — angle between subspaces."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import subspace_angles
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            angles = subspace_angles(Ad, Bd)
+            return ForgeArray(np.float64(angles[0] if len(angles) > 0 else 0.0))
+
+        def forge_spdiags(B, d, m, n):
+            """spdiags(B, d, m, n) — sparse matrix from diagonals."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse import diags
+            Bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            dd = d.data.flatten().astype(int) if isinstance(d, ForgeArray) else np.array([int(d)])
+            md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            diag_list = []
+            for i, di in enumerate(dd):
+                length = min(md, nd) - abs(di)
+                if length > 0:
+                    if Bd.ndim == 2:
+                        diag_list.append(Bd[:length, i])
+                    else:
+                        diag_list.append(Bd[:length])
+            S = diags(diag_list, dd.tolist(), shape=(md, nd))
+            return ForgeArray(S.toarray())
+
+        # Register all R138 functions
+        session._engine.functions["csvread"] = forge_csvread
+        session._engine.functions["csvwrite"] = forge_csvwrite
+        session._engine.functions["dlmread"] = forge_dlmread
+        session._engine.functions["dlmwrite"] = forge_dlmwrite
+        session._engine.functions["fileread"] = forge_fileread
+        session._engine.functions["pcg"] = forge_pcg
+        session._engine.functions["gmres"] = forge_gmres_func
+        session._engine.functions["bicgstab"] = forge_bicgstab
+        session._engine.functions["eigs"] = forge_eigs_func
+        session._engine.functions["svds"] = forge_svds_func
+        session._engine.functions["sqrtm"] = forge_sqrtm
+        session._engine.functions["funm"] = forge_funm
+        session._engine.functions["lsqminnorm"] = forge_lsqminnorm
+        session._engine.functions["rcond"] = forge_rcond
+        session._engine.functions["bandwidth"] = forge_bandwidth
+        session._engine.functions["isbanded"] = forge_isbanded
+        session._engine.functions["isdiag"] = forge_isdiag
+        session._engine.functions["issymmetric"] = forge_issymmetric
+        session._engine.functions["ishermitian"] = forge_ishermitian
+        session._engine.functions["istril"] = forge_istril
+        session._engine.functions["istriu"] = forge_istriu
+        session._engine.functions["isdefinite"] = forge_isdefinite
+        session._engine.functions["subspace"] = forge_subspace
+        session._engine.functions["spdiags"] = forge_spdiags
+
+        # R138b: Genuinely new functions
+        def forge_intmax(typename=None):
+            """intmax(typename) — largest integer value."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            t = 'int32'
+            if typename is not None:
+                if isinstance(typename, ForgeChar): t = typename.to_str()
+            type_map = {'int8': np.iinfo(np.int8).max, 'int16': np.iinfo(np.int16).max,
+                       'int32': np.iinfo(np.int32).max, 'int64': np.iinfo(np.int64).max,
+                       'uint8': np.iinfo(np.uint8).max, 'uint16': np.iinfo(np.uint16).max,
+                       'uint32': np.iinfo(np.uint32).max, 'uint64': np.iinfo(np.uint64).max}
+            return ForgeArray(np.float64(type_map.get(t, np.iinfo(np.int32).max)))
+
+        def forge_intmin(typename=None):
+            """intmin(typename) — smallest integer value."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            t = 'int32'
+            if typename is not None:
+                if isinstance(typename, ForgeChar): t = typename.to_str()
+            type_map = {'int8': np.iinfo(np.int8).min, 'int16': np.iinfo(np.int16).min,
+                       'int32': np.iinfo(np.int32).min, 'int64': np.iinfo(np.int64).min,
+                       'uint8': 0, 'uint16': 0, 'uint32': 0, 'uint64': 0}
+            return ForgeArray(np.float64(type_map.get(t, np.iinfo(np.int32).min)))
+
+        def forge_realmin():
+            """realmin — smallest positive normalized float."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(np.finfo(np.float64).tiny))
+
+        def forge_realmax():
+            """realmax — largest finite float."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(np.finfo(np.float64).max))
+
+        def forge_flintmax():
+            """flintmax — largest consecutive integer in floating point."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(2**53))
+
+        def forge_cell2struct(c, fields):
+            """cell2struct(c, fields) — convert cell to struct."""
+            from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
+            from forge.engine.types import ForgeArray
+            s = ForgeStruct()
+            if isinstance(fields, ForgeCell):
+                for i in range(fields.rows * fields.cols):
+                    fname = fields._data[i]
+                    if isinstance(fname, ForgeChar): fname = fname.to_str()
+                    if isinstance(c, ForgeCell) and i < len(c._data):
+                        s._fields[fname] = c._data[i]
+                    else:
+                        s._fields[fname] = ForgeArray(np.array([[]]))
+            return s
+
+        def forge_struct2cell(s):
+            """struct2cell(s) — convert struct to cell."""
+            from forge.engine.containers import ForgeStruct, ForgeCell
+            if isinstance(s, ForgeStruct):
+                vals = list(s._fields.values())
+                c = ForgeCell(len(vals), 1)
+                for i, v in enumerate(vals):
+                    c._data[i] = v
+                return c
+            return s
+
+        def forge_nfields(s):
+            """nfields(s) — number of struct fields."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(s, ForgeStruct):
+                return ForgeArray(np.float64(len(s._fields)))
+            return ForgeArray(np.float64(0))
+
+        def forge_timeit(fun, *args):
+            """timeit(fun) — time function execution."""
+            from forge.engine.types import ForgeArray
+            import time
+            n = 1
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            total = 0
+            for _ in range(n):
+                t0 = time.perf_counter()
+                fun()
+                total += time.perf_counter() - t0
+            return ForgeArray(np.float64(total / n))
+
+        def forge_diary(*args):
+            """diary(filename) — log session to file (stub)."""
+            pass
+
+        def forge_echo(*args):
+            """echo on/off — control command echoing (stub)."""
+            pass
+
+        def forge_more(*args):
+            """more on/off — control paged output (stub)."""
+            pass
+
+        def forge_smoothdata(x, *args):
+            """smoothdata(x) — smooth noisy data."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            # Moving average, window=5
+            w = 5
+            kernel = np.ones(w) / w
+            smoothed = np.convolve(data, kernel, mode='same')
+            return ForgeArray(smoothed.reshape(x.data.shape if isinstance(x, ForgeArray) else (1, -1)))
+
+        def forge_fillmissing(x, method=None):
+            """fillmissing(x, method) — fill NaN values."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            data = x.data.copy() if isinstance(x, ForgeArray) else np.atleast_2d(x).copy()
+            m = 'linear'
+            if method is not None and isinstance(method, ForgeChar):
+                m = method.to_str()
+            if m in ('linear', 'pchip'):
+                flat = data.flatten()
+                nans = np.isnan(flat)
+                if np.any(nans) and not np.all(nans):
+                    idx = np.arange(len(flat))
+                    flat[nans] = np.interp(idx[nans], idx[~nans], flat[~nans])
+                data = flat.reshape(data.shape)
+            elif m == 'constant':
+                data[np.isnan(data)] = 0
+            elif m == 'previous':
+                flat = data.flatten()
+                for i in range(1, len(flat)):
+                    if np.isnan(flat[i]): flat[i] = flat[i-1]
+                data = flat.reshape(data.shape)
+            return ForgeArray(data)
+
+        def forge_rmmissing(x):
+            """rmmissing(x) — remove rows with NaN."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.ndim == 1 or (data.ndim == 2 and data.shape[0] == 1):
+                mask = ~np.isnan(data.flatten())
+                return ForgeArray(data.flatten()[mask].reshape(1, -1))
+            mask = ~np.any(np.isnan(data), axis=1)
+            return ForgeArray(data[mask])
+
+        def forge_ismissing(x):
+            """ismissing(x) — detect NaN/missing values."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.isnan(data).astype(float))
+
+        def forge_isoutlier(x, *args):
+            """isoutlier(x) — detect outliers using median rule."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            med = np.median(data)
+            mad = np.median(np.abs(data - med))
+            if mad == 0: mad = 1e-10
+            z = np.abs(data - med) / (1.4826 * mad)
+            return ForgeArray((z > 3).astype(float).reshape(x.data.shape if isinstance(x, ForgeArray) else (1, -1)))
+
+        def forge_movmedian(x, k):
+            """movmedian(x, k) — moving median."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            n = len(data)
+            result = np.zeros(n)
+            half = kd // 2
+            for i in range(n):
+                lo = max(0, i - half)
+                hi = min(n, i + half + 1)
+                result[i] = np.median(data[lo:hi])
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_movmax(x, k):
+            """movmax(x, k) — moving maximum."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            n = len(data)
+            result = np.zeros(n)
+            half = kd // 2
+            for i in range(n):
+                lo = max(0, i - half)
+                hi = min(n, i + half + 1)
+                result[i] = np.max(data[lo:hi])
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_movmin(x, k):
+            """movmin(x, k) — moving minimum."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            n = len(data)
+            result = np.zeros(n)
+            half = kd // 2
+            for i in range(n):
+                lo = max(0, i - half)
+                hi = min(n, i + half + 1)
+                result[i] = np.min(data[lo:hi])
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_movvar(x, k):
+            """movvar(x, k) — moving variance."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            n = len(data)
+            result = np.zeros(n)
+            half = kd // 2
+            for i in range(n):
+                lo = max(0, i - half)
+                hi = min(n, i + half + 1)
+                result[i] = np.var(data[lo:hi], ddof=1) if hi - lo > 1 else 0
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_downsample(x, n, *args):
+            """downsample(x, n) — downsample by factor n."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            phase = 0
+            if args and isinstance(args[0], ForgeArray):
+                phase = int(args[0].data.flat[0])
+            return ForgeArray(data[phase::nd].reshape(1, -1))
+
+        def forge_upsample(x, n, *args):
+            """upsample(x, n) — upsample by factor n (zero insert)."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            result = np.zeros(len(data) * nd)
+            result[::nd] = data
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_decimate(x, r, *args):
+            """decimate(x, r) — downsample after lowpass filtering."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import decimate as _decimate
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            rd = int(r.data.flat[0]) if isinstance(r, ForgeArray) else int(r)
+            return ForgeArray(_decimate(data, rd).reshape(1, -1))
+
+        def forge_resample_func(x, p, q):
+            """resample(x, p, q) — resample at p/q rate."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import resample_poly
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            pd = int(p.data.flat[0]) if isinstance(p, ForgeArray) else int(p)
+            qd = int(q.data.flat[0]) if isinstance(q, ForgeArray) else int(q)
+            return ForgeArray(resample_poly(data, pd, qd).reshape(1, -1))
+
+        def forge_medfilt1(x, n=None):
+            """medfilt1(x, n) — 1-D median filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import medfilt
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nd = 3
+            if n is not None:
+                nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            if nd % 2 == 0: nd += 1
+            return ForgeArray(medfilt(data, kernel_size=nd).reshape(1, -1))
+
+        def forge_sgolayfilt(x, order, framelen):
+            """sgolayfilt(x, order, framelen) — Savitzky-Golay filter."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import savgol_filter
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            o = int(order.data.flat[0]) if isinstance(order, ForgeArray) else int(order)
+            fl = int(framelen.data.flat[0]) if isinstance(framelen, ForgeArray) else int(framelen)
+            if fl % 2 == 0: fl += 1
+            return ForgeArray(savgol_filter(data, fl, o).reshape(1, -1))
+
+        def forge_pwelch(x, *args):
+            """[Pxx, f] = pwelch(x) — power spectral density via Welch's method."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import welch as _welch
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            f, Pxx = _welch(data)
+            return ForgeArray(Pxx.reshape(1, -1)), ForgeArray(f.reshape(1, -1))
+
+        def forge_periodogram(x, *args):
+            """[Pxx, f] = periodogram(x) — periodogram PSD estimate."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import periodogram as _periodogram
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            f, Pxx = _periodogram(data)
+            return ForgeArray(Pxx.reshape(1, -1)), ForgeArray(f.reshape(1, -1))
+
+        def forge_strsplit(s, delim=None):
+            """strsplit(s, delim) — split string into cell array."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if delim is not None and isinstance(delim, ForgeChar): delim = delim.to_str()
+            parts = s.split(delim) if delim else s.split()
+            c = ForgeCell(1, len(parts))
+            for i, p in enumerate(parts):
+                c._data[i] = ForgeChar(p)
+            return c
+
+        def forge_strjoin(c, delim=None):
+            """strjoin(c, delim) — join cell of strings."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            d = ' '
+            if delim is not None and isinstance(delim, ForgeChar): d = delim.to_str()
+            parts = []
+            if isinstance(c, ForgeCell):
+                for item in c._data:
+                    if isinstance(item, ForgeChar): parts.append(item.to_str())
+                    elif item is not None: parts.append(str(item))
+            return ForgeChar(d.join(parts))
+
+        def forge_strrep(s, old, new):
+            """strrep(s, old, new) — replace substring."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(old, ForgeChar): old = old.to_str()
+            if isinstance(new, ForgeChar): new = new.to_str()
+            return ForgeChar(s.replace(old, new))
+
+        def forge_regexp(s, pat, *args):
+            """regexp(s, pat) — regular expression matching."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeCell
+            import re
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            matches = list(re.finditer(pat, s))
+            starts = [m.start() + 1 for m in matches]  # 1-based
+            return ForgeArray(np.array(starts).reshape(1, -1) if starts else np.array([[]]))
+
+        def forge_regexprep(s, pat, rep):
+            """regexprep(s, pat, rep) — regex replace."""
+            from forge.engine.containers import ForgeChar
+            import re
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            if isinstance(rep, ForgeChar): rep = rep.to_str()
+            return ForgeChar(re.sub(pat, rep, s))
+
+        def forge_bench(*args):
+            """bench — run benchmark (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.array([0.1, 0.2, 0.3, 0.4, 0.5]).reshape(1, -1))
+
+        def forge_open_func(*args):
+            """open(filename) — open file (stub)."""
+            pass
+
+        def forge_waitbar(*args):
+            """waitbar(x) — display progress bar (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(0))
+
+        # Register all R138b functions
+        session._engine.functions["intmax"] = forge_intmax
+        session._engine.functions["intmin"] = forge_intmin
+        session._engine.functions["realmin"] = forge_realmin
+        session._engine.functions["realmax"] = forge_realmax
+        session._engine.functions["flintmax"] = forge_flintmax
+        session._engine.functions["cell2struct"] = forge_cell2struct
+        session._engine.functions["struct2cell"] = forge_struct2cell
+        session._engine.functions["nfields"] = forge_nfields
+        session._engine.functions["timeit"] = forge_timeit
+        session._engine.functions["diary"] = forge_diary
+        session._engine.functions["echo"] = forge_echo
+        session._engine.functions["more"] = forge_more
+        session._engine.functions["smoothdata"] = forge_smoothdata
+        session._engine.functions["fillmissing"] = forge_fillmissing
+        session._engine.functions["rmmissing"] = forge_rmmissing
+        session._engine.functions["ismissing"] = forge_ismissing
+        session._engine.functions["isoutlier"] = forge_isoutlier
+        session._engine.functions["movmedian"] = forge_movmedian
+        session._engine.functions["movmax"] = forge_movmax
+        session._engine.functions["movmin"] = forge_movmin
+        session._engine.functions["movvar"] = forge_movvar
+        session._engine.functions["downsample"] = forge_downsample
+        session._engine.functions["upsample"] = forge_upsample
+        session._engine.functions["decimate"] = forge_decimate
+        session._engine.functions["resample"] = forge_resample_func
+        session._engine.functions["medfilt1"] = forge_medfilt1
+        session._engine.functions["sgolayfilt"] = forge_sgolayfilt
+        session._engine.functions["pwelch"] = forge_pwelch
+        session._engine.functions["periodogram"] = forge_periodogram
+        session._engine.functions["strsplit"] = forge_strsplit
+        session._engine.functions["strjoin"] = forge_strjoin
+        session._engine.functions["strrep"] = forge_strrep
+        session._engine.functions["regexp"] = forge_regexp
+        session._engine.functions["regexprep"] = forge_regexprep
+        session._engine.functions["bench"] = forge_bench
+        session._engine.functions["open"] = forge_open_func
+        session._engine.functions["waitbar"] = forge_waitbar
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

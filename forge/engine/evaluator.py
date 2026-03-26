@@ -432,8 +432,8 @@ class Session:
 
         # Array ops
         b["size"] = self._builtin_size
-        b["length"] = lambda x: ForgeArray(np.array(x.length() if isinstance(x, ForgeArray) else len(x)))
-        b["numel"] = lambda x: ForgeArray(np.array(x.numel() if isinstance(x, ForgeArray) else len(x)))
+        b["length"] = lambda x: ForgeArray(np.array(max(x._shape) if hasattr(x, "_shape") else (x.length() if isinstance(x, ForgeArray) else len(x))))
+        b["numel"] = lambda x: ForgeArray(np.array(x._shape[0]*x._shape[1] if hasattr(x, "_shape") else (x.numel() if isinstance(x, ForgeArray) else len(x))))
         b["ndims"] = lambda x: ForgeArray(np.array(x.ndim if isinstance(x, ForgeArray) else 0))
         b["reshape"] = lambda x, *a: ForgeArray(_unwrap(x).reshape(*[int(_to_py(v)) for v in a]))
         b["squeeze"] = lambda x: ForgeArray(np.squeeze(_unwrap(x)))
