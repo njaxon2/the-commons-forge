@@ -3973,6 +3973,200 @@ class ForgeSession:
         session._engine.functions["acsch"] = forge_acsch
         session._engine.functions["asec"] = forge_asec
         session._engine.functions["asech"] = forge_asech
+
+        # R141: Degree trig, strings, tables, debug stubs
+        def forge_cotd(x):
+            """cotd(x) — cotangent in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.tan(np.radians(data)))
+
+        def forge_cscd(x):
+            """cscd(x) — cosecant in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.sin(np.radians(data)))
+
+        def forge_secd(x):
+            """secd(x) — secant in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(1.0 / np.cos(np.radians(data)))
+
+        def forge_acotd(x):
+            """acotd(x) — inverse cotangent in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.degrees(np.arctan(1.0 / data)))
+
+        def forge_acscd(x):
+            """acscd(x) — inverse cosecant in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.degrees(np.arcsin(1.0 / data)))
+
+        def forge_asecd(x):
+            """asecd(x) — inverse secant in degrees."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.degrees(np.arccos(1.0 / data)))
+
+        # --- More string operations ---
+        def forge_upper(s):
+            """upper(s) — convert to uppercase."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): return ForgeChar(s.to_str().upper())
+            return s
+
+        def forge_lower(s):
+            """lower(s) — convert to lowercase."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): return ForgeChar(s.to_str().lower())
+            return s
+
+        def forge_strip(s):
+            """strip(s) — remove leading/trailing whitespace."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): return ForgeChar(s.to_str().strip())
+            return s
+
+        def forge_reverse(s):
+            """reverse(s) — reverse string."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): return ForgeChar(s.to_str()[::-1])
+            return s
+
+        def forge_char_func(*args):
+            """char(n) — convert to character, or char(s1, s2, ...) — pad and stack."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if len(args) == 1:
+                a = args[0]
+                if isinstance(a, ForgeArray):
+                    data = a.data.flatten()
+                    if data.dtype in (np.float64, np.float32, np.int64, np.int32):
+                        return ForgeChar(''.join(chr(int(v)) for v in data))
+                return a
+            # Multiple args: pad to same length
+            strs = []
+            for a in args:
+                if isinstance(a, ForgeChar): strs.append(a.to_str())
+                elif isinstance(a, ForgeArray):
+                    strs.append(''.join(chr(int(v)) for v in a.data.flatten()))
+            maxlen = max(len(s) for s in strs)
+            padded = [s.ljust(maxlen) for s in strs]
+            return ForgeChar(chr(10).join(padded))
+
+        def forge_double_func(x):
+            """double(x) — convert to double precision."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(x, ForgeChar):
+                return ForgeArray(np.array([float(ord(c)) for c in x.to_str()]).reshape(1, -1))
+            if isinstance(x, ForgeArray):
+                return ForgeArray(x.data.astype(np.float64))
+            return ForgeArray(np.float64(x))
+
+        def forge_single_func(x):
+            """single(x) — convert to single precision."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(x.data.astype(np.float32))
+            return ForgeArray(np.float32(x))
+
+        def forge_logical_func(x):
+            """logical(x) — convert to logical."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(x.data.astype(bool))
+            return ForgeArray(np.array(bool(x)))
+
+        # --- Table functions ---
+        def forge_array2table(x, *args):
+            """array2table(x) — convert array to table (struct-based)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            t = ForgeStruct()
+            ncols = data.shape[1] if data.ndim > 1 else 1
+            for j in range(ncols):
+                name = f"Var{j+1}"
+                t._fields[name] = ForgeArray(data[:, j].reshape(-1, 1)) if data.ndim > 1 else ForgeArray(data.reshape(-1, 1))
+            return t
+
+        def forge_table2array(t):
+            """table2array(t) — convert table to array."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(t, ForgeStruct):
+                cols = [v.data if isinstance(v, ForgeArray) else np.atleast_2d(v) for v in t._fields.values()]
+                if cols:
+                    return ForgeArray(np.hstack(cols))
+            return ForgeArray(np.array([[]]))
+
+        # --- Debug stubs ---
+        def forge_dbstop(*args):
+            """dbstop — set breakpoint (stub)."""
+            pass
+
+        def forge_dbcont(*args):
+            """dbcont — continue execution (stub)."""
+            pass
+
+        def forge_dbstep(*args):
+            """dbstep — single step (stub)."""
+            pass
+
+        def forge_dbquit(*args):
+            """dbquit — quit debug mode (stub)."""
+            pass
+
+        def forge_dbstack(*args):
+            """dbstack — display call stack (stub)."""
+            from forge.engine.containers import ForgeStruct
+            s = ForgeStruct()
+            s._fields["name"] = "base"
+            s._fields["line"] = 0
+            return s
+
+        def forge_dbclear(*args):
+            """dbclear — clear breakpoints (stub)."""
+            pass
+
+        def forge_dbstatus(*args):
+            """dbstatus — list breakpoints (stub)."""
+            from forge.engine.containers import ForgeStruct
+            return ForgeStruct()
+
+        def forge_profile_func(*args):
+            """profile on/off — profiler (stub)."""
+            pass
+
+        # Register all R141 functions
+        session._engine.functions["cotd"] = forge_cotd
+        session._engine.functions["cscd"] = forge_cscd
+        session._engine.functions["secd"] = forge_secd
+        session._engine.functions["acotd"] = forge_acotd
+        session._engine.functions["acscd"] = forge_acscd
+        session._engine.functions["asecd"] = forge_asecd
+        session._engine.functions["upper"] = forge_upper
+        session._engine.functions["lower"] = forge_lower
+        session._engine.functions["strip"] = forge_strip
+        session._engine.functions["reverse"] = forge_reverse
+        session._engine.functions["char"] = forge_char_func
+        session._engine.functions["double"] = forge_double_func
+        session._engine.functions["single"] = forge_single_func
+        session._engine.functions["logical"] = forge_logical_func
+        session._engine.functions["array2table"] = forge_array2table
+        session._engine.functions["table2array"] = forge_table2array
+        session._engine.functions["dbstop"] = forge_dbstop
+        session._engine.functions["dbcont"] = forge_dbcont
+        session._engine.functions["dbstep"] = forge_dbstep
+        session._engine.functions["dbquit"] = forge_dbquit
+        session._engine.functions["dbstack"] = forge_dbstack
+        session._engine.functions["dbclear"] = forge_dbclear
+        session._engine.functions["dbstatus"] = forge_dbstatus
+        session._engine.functions["profile"] = forge_profile_func
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

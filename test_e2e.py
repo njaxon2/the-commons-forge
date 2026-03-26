@@ -461,4 +461,15 @@ check("sinpi_1", "abs(sinpi(1)) < 1e-15", "1")
 check("acot_1", "abs(acot(1) - pi/4) < 1e-10", "1")
 check("im2double_scale", "x = im2double(255*ones(2)); abs(x(1,1) - 1) < 1e-10", "1")
 
+
+print("\nR141 degree trig, strings, type conversion:")
+check("cotd_45", "abs(cotd(45) - 1) < 1e-10", "1")
+check("secd_0", "abs(secd(0) - 1) < 1e-10", "1")
+check("cscd_90", "abs(cscd(90) - 1) < 1e-10", "1")
+check("upper_hello", "upper('hello')", "HELLO")
+check("lower_HELLO", "lower('HELLO')", "hello")
+check("strrep_test", "strrep('abcabc', 'b', 'x')", "axcaxc")
+check("double_char", "x = double('A'); x(1)", "65")
+check("logical_conv", "x = logical([1 0 1]); sum(x)", "2")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
