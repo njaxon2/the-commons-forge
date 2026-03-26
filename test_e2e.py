@@ -312,4 +312,61 @@ check("logical_assign_vec", "x = [1 2 3 4 5]; x(x > 3) = 0; sum(x)", "6")
 check("logical_assign_mat", "A = [1 2; 3 4]; A(A > 2) = 0; A(2,1)", "0")
 check("logical_assign_scalar", "A = magic(3); A(A > 5) = -1; A(1,1)", "-1")
 
+
+print("\nR131 IGA Poisson solver from M-code:")
+check("derbasisfun", "dN = derbasisfun(2, 0.5, 2, [0 0 0 1 1 1]); length(dN)", "3")
+check("gaussQuad_builtin", "[gp, gw] = gaussQuad(3); length(gp)", "3")
+check("iga_convergence", """
+function err = poisson_err(nel, p)
+    ncp = nel + p;
+    Xi = zeros(1, ncp + p + 1);
+    for i = 1:p+1; Xi(i) = 0; Xi(ncp + i) = 1; end
+    for i = 1:nel-1; Xi(p + 1 + i) = i / nel; end
+    [gp, gw] = gaussQuad(p + 1);
+    K = zeros(ncp); F = zeros(ncp, 1);
+    for e = 1:nel
+        xi_lo = Xi(e + p); xi_hi = Xi(e + p + 1);
+        if xi_hi - xi_lo < 1e-14; continue; end
+        Jxi = (xi_hi - xi_lo) / 2;
+        for q = 1:length(gp)
+            xi = xi_lo + (1 + gp(q)) / 2 * (xi_hi - xi_lo);
+            span = findspan(ncp - 1, p, xi, Xi);
+            N = basisfun(span, xi, p, Xi);
+            dN = derbasisfun(span, xi, p, Xi);
+            for a = 1:p+1
+                I = span - p + a;
+                F(I) = F(I) + N(a) * sin(pi * xi) * Jxi * gw(q);
+                for b = 1:p+1
+                    J = span - p + b;
+                    K(I, J) = K(I, J) + dN(a) * dN(b) * Jxi * gw(q);
+                end
+            end
+        end
+    end
+    free = 2:ncp-1;
+    u = zeros(ncp, 1);
+    u(free) = K(free, free) \ F(free);
+    err_sq = 0;
+    for e = 1:nel
+        xi_lo = Xi(e + p); xi_hi = Xi(e + p + 1);
+        if xi_hi - xi_lo < 1e-14; continue; end
+        Jxi = (xi_hi - xi_lo) / 2;
+        for q = 1:length(gp)
+            xi = xi_lo + (1 + gp(q)) / 2 * (xi_hi - xi_lo);
+            span = findspan(ncp - 1, p, xi, Xi);
+            N = basisfun(span, xi, p, Xi);
+            uh = 0;
+            for a = 1:p+1; I = span - p + a; uh = uh + N(a) * u(I); end
+            exact = sin(pi * xi) / (pi^2);
+            err_sq = err_sq + (uh - exact)^2 * Jxi * gw(q);
+        end
+    end
+    err = sqrt(err_sq);
+end
+e4 = poisson_err(4, 2);
+e8 = poisson_err(8, 2);
+ratio = e4 / e8;
+ratio > 7 && ratio < 12
+""", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
