@@ -4710,6 +4710,276 @@ class ForgeSession:
         session._engine.functions["fullfile"] = forge_fullfile
         session._engine.functions["pwd"] = forge_pwd
         session._engine.functions["cd"] = forge_cd_func
+
+        # R145: More common functions
+        # --- Sparse construction ---
+        def forge_speye2(m, n=None):
+            """speye(m, n) — sparse identity matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse import eye as speye_fn
+            md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
+            nd = md
+            if n is not None:
+                nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeArray(speye_fn(md, nd).toarray())
+
+        def forge_sprand2(m, n, density):
+            """sprand(m, n, density) — sparse random matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse import random as sprand_fn
+            md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            dd = float(density.data.flat[0]) if isinstance(density, ForgeArray) else float(density)
+            return ForgeArray(sprand_fn(md, nd, dd).toarray())
+
+        def forge_sprandn2(m, n, density):
+            """sprandn(m, n, density) — sparse normal random matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse import random as sprand_fn
+            md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            dd = float(density.data.flat[0]) if isinstance(density, ForgeArray) else float(density)
+            return ForgeArray(sprand_fn(md, nd, dd, data_rvs=np.random.randn).toarray())
+
+        # --- Gallery matrices ---
+        def forge_gallery(name, *args):
+            """gallery(name, n) — test matrices."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(name, ForgeChar): name = name.to_str()
+            n = 5
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            if name == 'lehmer':
+                A = np.zeros((n, n))
+                for i in range(n):
+                    for j in range(n):
+                        A[i,j] = min(i+1, j+1) / max(i+1, j+1)
+                return ForgeArray(A)
+            elif name == 'moler':
+                A = np.zeros((n, n))
+                for i in range(n):
+                    for j in range(n):
+                        A[i,j] = min(i+1, j+1) - 2
+                np.fill_diagonal(A, np.arange(1, n+1))
+                return ForgeArray(A)
+            elif name == 'frank':
+                A = np.zeros((n, n))
+                for i in range(n):
+                    for j in range(n):
+                        if j >= i - 1:
+                            A[i,j] = n - max(i, j)
+                return ForgeArray(A)
+            elif name == 'minij':
+                A = np.zeros((n, n))
+                for i in range(n):
+                    for j in range(n):
+                        A[i,j] = min(i+1, j+1)
+                return ForgeArray(A)
+            elif name == 'clement':
+                A = np.zeros((n, n))
+                for i in range(n-1):
+                    A[i, i+1] = np.sqrt((i+1)*(n-i-1))
+                    A[i+1, i] = A[i, i+1]
+                return ForgeArray(A)
+            return ForgeArray(np.eye(n))
+
+        # --- More special matrices ---
+        def forge_hadamard2(n):
+            """hadamard(n) — Hadamard matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import hadamard as _hadamard
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeArray(_hadamard(nd).astype(float))
+
+        def forge_vander2(v, *args):
+            """vander(v, n) — Vandermonde matrix."""
+            from forge.engine.types import ForgeArray
+            vd = v.data.flatten() if isinstance(v, ForgeArray) else np.array(v).flatten()
+            n = len(vd)
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            return ForgeArray(np.vander(vd, N=n))
+
+        # --- More utility functions ---
+        def forge_uniquetol(x, tol=None):
+            """uniquetol(x, tol) — unique within tolerance."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            td = 1e-6
+            if tol is not None:
+                td = float(tol.data.flat[0]) if isinstance(tol, ForgeArray) else float(tol)
+            sorted_data = np.sort(data)
+            result = [sorted_data[0]]
+            for v in sorted_data[1:]:
+                if abs(v - result[-1]) > td:
+                    result.append(v)
+            return ForgeArray(np.array(result).reshape(1, -1))
+
+        def forge_ismembertol(a, b, tol=None):
+            """ismembertol(a, b, tol) — set membership within tolerance."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            td = 1e-6
+            if tol is not None:
+                td = float(tol.data.flat[0]) if isinstance(tol, ForgeArray) else float(tol)
+            result = np.zeros(len(ad), dtype=bool)
+            for i, v in enumerate(ad):
+                if np.any(np.abs(bd - v) <= td):
+                    result[i] = True
+            return ForgeArray(result.astype(float).reshape(1, -1))
+
+        def forge_rescale(x, *args):
+            """rescale(x, lo, hi) — rescale data to [lo, hi]."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            lo, hi = 0.0, 1.0
+            if len(args) >= 2:
+                lo = float(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else float(args[0])
+                hi = float(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else float(args[1])
+            dmin, dmax = data.min(), data.max()
+            if dmax == dmin:
+                return ForgeArray(np.full_like(data, (lo+hi)/2))
+            return ForgeArray(lo + (data - dmin) * (hi - lo) / (dmax - dmin))
+
+        def forge_clip(x, lo, hi):
+            """clip(x, lo, hi) — clamp values to range."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            l = float(lo.data.flat[0]) if isinstance(lo, ForgeArray) else float(lo)
+            h = float(hi.data.flat[0]) if isinstance(hi, ForgeArray) else float(hi)
+            return ForgeArray(np.clip(data, l, h))
+
+        def forge_discretize2(x, edges):
+            """discretize(x, edges) — bin data into categories."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            ed = edges.data.flatten() if isinstance(edges, ForgeArray) else np.array(edges).flatten()
+            result = np.digitize(data, ed)
+            return ForgeArray(result.astype(float).reshape(1, -1))
+
+        def forge_gradient2(f, *args):
+            """gradient(f) or gradient(f, h) — numerical gradient."""
+            from forge.engine.types import ForgeArray
+            data = f.data if isinstance(f, ForgeArray) else np.atleast_2d(f)
+            h = 1.0
+            if args and isinstance(args[0], ForgeArray):
+                h = float(args[0].data.flat[0])
+            if data.ndim == 2 and (data.shape[0] == 1 or data.shape[1] == 1):
+                # Vector
+                flat = data.flatten()
+                g = np.gradient(flat, h)
+                return ForgeArray(g.reshape(data.shape))
+            else:
+                # Matrix
+                gy, gx = np.gradient(data, h)
+                return ForgeArray(gx), ForgeArray(gy)
+
+        def forge_diff2(x, *args):
+            """diff(x, n, dim) — differences."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            n = 1
+            dim = None
+            if args:
+                if isinstance(args[0], ForgeArray):
+                    n = int(args[0].data.flat[0])
+                if len(args) > 1 and isinstance(args[1], ForgeArray):
+                    dim = int(args[1].data.flat[0]) - 1
+            if dim is None:
+                # Auto-detect: first non-singleton dim
+                if data.shape[0] == 1:
+                    dim = 1
+                else:
+                    dim = 0
+            result = data
+            for _ in range(n):
+                result = np.diff(result, axis=dim)
+            return ForgeArray(result)
+
+        def forge_cummax(x, *args):
+            """cummax(x) — cumulative maximum."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.maximum.accumulate(data).reshape(1, -1))
+
+        def forge_cummin(x, *args):
+            """cummin(x) — cumulative minimum."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.minimum.accumulate(data).reshape(1, -1))
+
+        def forge_maxk(x, k):
+            """maxk(x, k) — k largest elements."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            idx = np.argsort(data)[-kd:][::-1]
+            return ForgeArray(data[idx].reshape(-1, 1)), ForgeArray((idx + 1).astype(float).reshape(-1, 1))
+
+        def forge_mink(x, k):
+            """mink(x, k) — k smallest elements."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            idx = np.argsort(data)[:kd]
+            return ForgeArray(data[idx].reshape(-1, 1)), ForgeArray((idx + 1).astype(float).reshape(-1, 1))
+
+        def forge_isnan2(x):
+            """isnan(x) — test for NaN."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.isnan(data).astype(float))
+
+        def forge_isinf2(x):
+            """isinf(x) — test for Inf."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.isinf(data).astype(float))
+
+        def forge_isfinite2(x):
+            """isfinite(x) — test for finite."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.isfinite(data).astype(float))
+
+        def forge_isreal2(x):
+            """isreal(x) — test for real."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            return ForgeArray(np.float64(1 if not np.any(np.iscomplex(data)) else 0))
+
+        def forge_isinteger2(x):
+            """isinteger(x) — test if integer type."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(1 if np.issubdtype(x.data.dtype, np.integer) else 0))
+            return ForgeArray(np.float64(0))
+
+        # Register R145 functions
+        session._engine.functions["speye"] = forge_speye2
+        session._engine.functions["sprand"] = forge_sprand2
+        session._engine.functions["sprandn"] = forge_sprandn2
+        session._engine.functions["gallery"] = forge_gallery
+        session._engine.functions["hadamard"] = forge_hadamard2
+        session._engine.functions["vander"] = forge_vander2
+        session._engine.functions["uniquetol"] = forge_uniquetol
+        session._engine.functions["ismembertol"] = forge_ismembertol
+        session._engine.functions["rescale"] = forge_rescale
+        session._engine.functions["clip"] = forge_clip
+        session._engine.functions["discretize"] = forge_discretize2
+        session._engine.functions["gradient"] = forge_gradient2
+        session._engine.functions["diff"] = forge_diff2
+        session._engine.functions["cummax"] = forge_cummax
+        session._engine.functions["cummin"] = forge_cummin
+        session._engine.functions["maxk"] = forge_maxk
+        session._engine.functions["mink"] = forge_mink
+        session._engine.functions["isnan"] = forge_isnan2
+        session._engine.functions["isinf"] = forge_isinf2
+        session._engine.functions["isfinite"] = forge_isfinite2
+        session._engine.functions["isreal"] = forge_isreal2
+        session._engine.functions["isinteger"] = forge_isinteger2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

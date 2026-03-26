@@ -499,4 +499,18 @@ check("fileparts_test", "[p, n, e] = fileparts('/tmp/test.txt'); e", ".txt")
 check("fullfile_test", "fullfile('/tmp', 'test.txt')", "/tmp/test.txt")
 check("pwd_nonempty", "length(pwd()) > 0", "1")
 
+
+print("\nR145 gallery, tolerance, gradient:")
+check("gallery_lehmer", "A = gallery('lehmer', 3); A(1,1)", "1")
+check("gallery_minij", "A = gallery('minij', 3); A(2,3)", "2")
+check("uniquetol_close", "length(uniquetol([1 1.0001 2 2.0001], 0.001))", "2")
+check("rescale_01", "x = rescale([0 5 10]); abs(x(3) - 1) < 1e-10", "1")
+check("clip_range", "x = clip([-1 0 5 10], 0, 5); x(1) == 0 && x(4) == 5", "1")
+check("diff_vec", "x = diff([1 3 6 10]); x(1) == 2 && x(2) == 3 && x(3) == 4", "1")
+check("cummax_vec", "x = cummax([1 3 2 5 4]); x(3)", "3")
+check("cummin_vec", "x = cummin([5 3 4 1 2]); x(4)", "1")
+check("maxk_3", "[v, i] = maxk([5 1 3 2 4], 3); v(1)", "5")
+check("mink_2", "[v, i] = mink([5 1 3 2 4], 2); v(1)", "1")
+check("hadamard_4", "H = hadamard(4); abs(abs(det(H)) - 16) < 1e-10", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
