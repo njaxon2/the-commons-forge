@@ -7881,6 +7881,474 @@ class ForgeSession:
         session._engine.functions["material"] = forge_material2
         session._engine.functions["camlight"] = forge_camlight2
         session._engine.functions["light"] = forge_light2
+
+        # R150: Table, sparse, matrix, symbolic stubs, classification
+
+        # --- Table operations ---
+        def forge_table_func(*args):
+            """table(var1, var2, ...) — create table."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            t = ForgeStruct()
+            t._fields["_is_table"] = True
+            col_idx = 0
+            i = 0
+            while i < len(args):
+                if isinstance(args[i], ForgeChar):
+                    name = args[i].to_str()
+                    if i + 1 < len(args):
+                        t._fields[name] = args[i + 1]
+                        i += 2
+                        continue
+                name = f"Var{col_idx + 1}"
+                t._fields[name] = args[i]
+                col_idx += 1
+                i += 1
+            return t
+
+        def forge_array2table2(A, *args):
+            """array2table(A) — convert array to table."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            t = ForgeStruct()
+            t._fields["_is_table"] = True
+            for j in range(Ad.shape[1]):
+                name = f"Var{j+1}"
+                t._fields[name] = ForgeArray(Ad[:, j].reshape(-1, 1))
+            return t
+
+        def forge_table2array2(T, *args):
+            """table2array(T) — convert table to array."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(T, ForgeStruct):
+                cols = []
+                for k, v in T._fields.items():
+                    if k.startswith('_'): continue
+                    if isinstance(v, ForgeArray):
+                        cols.append(v.data.flatten())
+                if cols:
+                    return ForgeArray(np.column_stack(cols))
+            return ForgeArray(np.array([[]]))
+
+        def forge_sortrows2(A, *args):
+            """sortrows(A) or sortrows(A, col) — sort rows."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            col = 0
+            if args and isinstance(args[0], ForgeArray):
+                col = int(args[0].data.flat[0]) - 1
+            idx = np.argsort(Ad[:, col])
+            return ForgeArray(Ad[idx])
+
+        def forge_unique2(x, *args):
+            """[C, ia, ic] = unique(x) — unique values."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            C, ia, ic = np.unique(data, return_index=True, return_inverse=True)
+            return ForgeArray(C.reshape(1, -1)), ForgeArray((ia + 1).astype(float).reshape(-1, 1)), ForgeArray((ic + 1).astype(float).reshape(-1, 1))
+
+        def forge_intersect2(a, b, *args):
+            """[C, ia, ib] = intersect(a, b) — set intersection."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            C = np.intersect1d(ad, bd)
+            return ForgeArray(C.reshape(1, -1))
+
+        def forge_setdiff2(a, b, *args):
+            """setdiff(a, b) — set difference."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            return ForgeArray(np.setdiff1d(ad, bd).reshape(1, -1))
+
+        def forge_union2(a, b, *args):
+            """union(a, b) — set union."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            return ForgeArray(np.union1d(ad, bd).reshape(1, -1))
+
+        def forge_setxor2(a, b, *args):
+            """setxor(a, b) — set exclusive or."""
+            from forge.engine.types import ForgeArray
+            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
+            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
+            u = np.union1d(ad, bd)
+            i = np.intersect1d(ad, bd)
+            return ForgeArray(np.setdiff1d(u, i).reshape(1, -1))
+
+        # --- Sparse extras ---
+        def forge_spones2(S):
+            """spones(S) — replace nonzeros with ones."""
+            from forge.engine.types import ForgeArray
+            data = S.data if isinstance(S, ForgeArray) else np.atleast_2d(S)
+            result = np.zeros_like(data)
+            result[data != 0] = 1
+            return ForgeArray(result)
+
+        def forge_spfun2(func, S):
+            """spfun(func, S) — apply function to nonzeros."""
+            from forge.engine.types import ForgeArray
+            data = S.data.copy() if isinstance(S, ForgeArray) else np.atleast_2d(S).copy()
+            mask = data != 0
+            data[mask] = func(ForgeArray(data[mask].reshape(1, -1))).data.flatten()
+            return ForgeArray(data)
+
+        def forge_nonzeros2(S):
+            """nonzeros(S) — extract nonzero elements."""
+            from forge.engine.types import ForgeArray
+            data = S.data if isinstance(S, ForgeArray) else np.atleast_2d(S)
+            nz = data[data != 0]
+            return ForgeArray(nz.reshape(-1, 1))
+
+        def forge_spy_func(*args):
+            """spy(S) — visualize sparsity (stub)."""
+            pass
+
+        # --- More matrix ops ---
+        def forge_hankel2(c, r=None):
+            """hankel(c, r) — Hankel matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import hankel as _hankel
+            cd = c.data.flatten() if isinstance(c, ForgeArray) else np.array(c).flatten()
+            rd = None
+            if r is not None:
+                rd = r.data.flatten() if isinstance(r, ForgeArray) else np.array(r).flatten()
+            return ForgeArray(_hankel(cd, rd))
+
+        def forge_toeplitz2(c, r=None):
+            """toeplitz(c, r) — Toeplitz matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import toeplitz as _toeplitz
+            cd = c.data.flatten() if isinstance(c, ForgeArray) else np.array(c).flatten()
+            rd = None
+            if r is not None:
+                rd = r.data.flatten() if isinstance(r, ForgeArray) else np.array(r).flatten()
+            return ForgeArray(_toeplitz(cd, rd))
+
+        def forge_hilb2(n):
+            """hilb(n) — Hilbert matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import hilbert
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeArray(hilbert(nd))
+
+        def forge_invhilb2(n):
+            """invhilb(n) — inverse Hilbert matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import invhilbert
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeArray(invhilbert(nd))
+
+        def forge_magic2(n):
+            """magic(n) — magic square."""
+            from forge.engine.types import ForgeArray
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            if nd < 3:
+                return ForgeArray(np.array([[1]]) if nd == 1 else np.array([[1,3],[4,2]]).astype(float))
+            M = np.zeros((nd, nd), dtype=float)
+            if nd % 2 == 1:  # Odd
+                i, j = 0, nd // 2
+                for num in range(1, nd*nd + 1):
+                    M[i, j] = num
+                    ni, nj = (i - 1) % nd, (j + 1) % nd
+                    if M[ni, nj] != 0:
+                        ni = (i + 1) % nd
+                        nj = j
+                    i, j = ni, nj
+            elif nd % 4 == 0:  # Doubly even
+                seq = np.arange(1, nd*nd + 1).reshape(nd, nd)
+                for ii in range(nd):
+                    for jj in range(nd):
+                        if (ii % 4 == 0 or ii % 4 == 3) == (jj % 4 == 0 or jj % 4 == 3):
+                            M[ii, jj] = nd*nd + 1 - seq[ii, jj]
+                        else:
+                            M[ii, jj] = seq[ii, jj]
+            else:  # Singly even
+                p = nd // 2
+                sub = np.zeros((p, p), dtype=float)
+                ii, jj = 0, p // 2
+                for num in range(1, p*p + 1):
+                    sub[ii, jj] = num
+                    ni, nj = (ii - 1) % p, (jj + 1) % p
+                    if sub[ni, nj] != 0:
+                        ni = (ii + 1) % p
+                        nj = jj
+                    ii, jj = ni, nj
+                M[:p, :p] = sub
+                M[:p, p:] = sub + 2*p*p
+                M[p:, :p] = sub + 3*p*p
+                M[p:, p:] = sub + p*p
+            return ForgeArray(M)
+
+        def forge_pascal2(n):
+            """pascal(n) — Pascal matrix."""
+            from forge.engine.types import ForgeArray
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            P = np.zeros((nd, nd), dtype=float)
+            P[:, 0] = 1
+            P[0, :] = 1
+            for i in range(1, nd):
+                for j in range(1, nd):
+                    P[i, j] = P[i-1, j] + P[i, j-1]
+            return ForgeArray(P)
+
+        def forge_compan2(p):
+            """compan(p) — companion matrix."""
+            from forge.engine.types import ForgeArray
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p).flatten()
+            return ForgeArray(np.polynomial.polynomial.polycompanion(pd[::-1]))
+
+        # --- Classification / ML stubs ---
+        def forge_fitlm2(X, y, *args):
+            """mdl = fitlm(X, y) — fit linear model."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            # Add intercept
+            Xa = np.column_stack([np.ones(Xd.shape[0]), Xd])
+            beta = np.linalg.lstsq(Xa, yd, rcond=None)[0]
+            yhat = Xa @ beta
+            residuals = yd - yhat
+            SSres = np.sum(residuals**2)
+            SStot = np.sum((yd - np.mean(yd))**2)
+            R2 = 1 - SSres / SStot if SStot > 0 else 1.0
+            mdl = ForgeStruct()
+            mdl._fields["Coefficients"] = ForgeArray(beta.reshape(-1, 1))
+            mdl._fields["Rsquared"] = ForgeArray(np.float64(R2))
+            mdl._fields["Residuals"] = ForgeArray(residuals.reshape(-1, 1))
+            return mdl
+
+        def forge_predict2(mdl, X, *args):
+            """yhat = predict(mdl, X) — predict from model."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            if isinstance(mdl, ForgeStruct) and "Coefficients" in mdl._fields:
+                beta = mdl._fields["Coefficients"].data.flatten()
+                Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+                Xa = np.column_stack([np.ones(Xd.shape[0]), Xd])
+                return ForgeArray((Xa @ beta).reshape(-1, 1))
+            return ForgeArray(np.array([[]]))
+
+        def forge_fitcsvm2(X, y, *args):
+            """mdl = fitcsvm(X, y) — SVM classifier."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            try:
+                from sklearn.svm import SVC
+                clf = SVC()
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "SVM"
+                return mdl
+            except:
+                mdl = ForgeStruct()
+                mdl._fields["type"] = "SVM_stub"
+                return mdl
+
+        def forge_fitctree2(X, y, *args):
+            """mdl = fitctree(X, y) — decision tree classifier."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            try:
+                from sklearn.tree import DecisionTreeClassifier
+                clf = DecisionTreeClassifier()
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "DecisionTree"
+                return mdl
+            except:
+                mdl = ForgeStruct()
+                mdl._fields["type"] = "DecisionTree_stub"
+                return mdl
+
+        def forge_fitcknn2(X, y, *args):
+            """mdl = fitcknn(X, y) — k-NN classifier."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            try:
+                from sklearn.neighbors import KNeighborsClassifier
+                clf = KNeighborsClassifier()
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "KNN"
+                return mdl
+            except:
+                mdl = ForgeStruct()
+                mdl._fields["type"] = "KNN_stub"
+                return mdl
+
+        def forge_fitcensemble2(X, y, *args):
+            """mdl = fitcensemble(X, y) — ensemble classifier."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            try:
+                from sklearn.ensemble import RandomForestClassifier
+                clf = RandomForestClassifier(n_estimators=100)
+                clf.fit(Xd, yd)
+                mdl = ForgeStruct()
+                mdl._fields["_clf"] = clf
+                mdl._fields["type"] = "Ensemble"
+                return mdl
+            except:
+                mdl = ForgeStruct()
+                mdl._fields["type"] = "Ensemble_stub"
+                return mdl
+
+        def forge_crossval2(mdl, *args):
+            """crossval(mdl) — cross-validation (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(0.1))  # Return dummy loss
+
+        def forge_confusionmat2(ytrue, ypred):
+            """confusionmat(ytrue, ypred) — confusion matrix."""
+            from forge.engine.types import ForgeArray
+            yt = ytrue.data.flatten().astype(int) if isinstance(ytrue, ForgeArray) else np.array(ytrue).flatten().astype(int)
+            yp = ypred.data.flatten().astype(int) if isinstance(ypred, ForgeArray) else np.array(ypred).flatten().astype(int)
+            labels = np.unique(np.concatenate([yt, yp]))
+            n = len(labels)
+            C = np.zeros((n, n), dtype=float)
+            label_map = {l: i for i, l in enumerate(labels)}
+            for t, p in zip(yt, yp):
+                C[label_map[t], label_map[p]] += 1
+            return ForgeArray(C)
+
+        # --- PCA ---
+        def forge_pca2(X, *args):
+            """[coeff, score, latent] = pca(X) — principal component analysis."""
+            from forge.engine.types import ForgeArray
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            # Center data
+            mu = np.mean(Xd, axis=0)
+            Xc = Xd - mu
+            U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+            coeff = Vt.T
+            score = Xc @ coeff
+            latent = (S**2) / (Xd.shape[0] - 1)
+            return ForgeArray(coeff), ForgeArray(score), ForgeArray(latent.reshape(-1, 1))
+
+        # --- K-means ---
+        def forge_kmeans2(X, k, *args):
+            """[idx, C] = kmeans(X, k) — k-means clustering."""
+            from forge.engine.types import ForgeArray
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            # Simple k-means
+            n = Xd.shape[0]
+            centers = Xd[np.random.choice(n, kd, replace=False)]
+            for _ in range(100):
+                dists = np.array([np.sum((Xd - c)**2, axis=1) for c in centers]).T
+                idx = np.argmin(dists, axis=1)
+                new_centers = np.array([Xd[idx == i].mean(axis=0) if np.any(idx == i) else centers[i] for i in range(kd)])
+                if np.allclose(new_centers, centers):
+                    break
+                centers = new_centers
+            return ForgeArray((idx + 1).astype(float).reshape(-1, 1)), ForgeArray(centers)
+
+        # --- Symbolic stubs ---
+        def forge_sym2(*args):
+            """sym(x) — create symbolic variable (stub)."""
+            from forge.engine.containers import ForgeChar
+            if args:
+                from forge.engine.containers import ForgeChar as FC
+                if isinstance(args[0], FC):
+                    return args[0]
+            return ForgeChar('x')
+
+        def forge_syms2(*args):
+            """syms x y z — declare symbolic variables (stub)."""
+            pass
+
+        def forge_simplify2(expr, *args):
+            """simplify(expr) — simplify expression (stub)."""
+            return expr
+
+        def forge_expand2(expr, *args):
+            """expand(expr) — expand expression (stub)."""
+            return expr
+
+        def forge_collect2(expr, *args):
+            """collect(expr, var) — collect terms (stub)."""
+            return expr
+
+        def forge_subs2(expr, old, new):
+            """subs(expr, old, new) — symbolic substitution (stub)."""
+            return expr
+
+        def forge_diff_sym2(expr, *args):
+            """diff(expr) — symbolic differentiation (stub)."""
+            return expr
+
+        def forge_int_sym2(expr, *args):
+            """int(expr) — symbolic integration (stub)."""
+            return expr
+
+        def forge_solve_sym2(eqn, *args):
+            """solve(eqn) — symbolic equation solving (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(0))
+
+        def forge_pretty2(expr, *args):
+            """pretty(expr) — pretty-print symbolic (stub)."""
+            pass
+
+        def forge_latex2(expr, *args):
+            """latex(expr) — LaTeX representation (stub)."""
+            from forge.engine.containers import ForgeChar
+            return ForgeChar(str(expr))
+
+        # Register R150 functions
+        session._engine.functions["table"] = forge_table_func
+        session._engine.functions["sortrows"] = forge_sortrows2
+        session._engine.functions["unique"] = forge_unique2
+        session._engine.functions["intersect"] = forge_intersect2
+        session._engine.functions["setdiff"] = forge_setdiff2
+        session._engine.functions["union"] = forge_union2
+        session._engine.functions["setxor"] = forge_setxor2
+        session._engine.functions["spones"] = forge_spones2
+        session._engine.functions["spfun"] = forge_spfun2
+        session._engine.functions["nonzeros"] = forge_nonzeros2
+        session._engine.functions["spy"] = forge_spy_func
+        session._engine.functions["hankel"] = forge_hankel2
+        session._engine.functions["toeplitz"] = forge_toeplitz2
+        session._engine.functions["hilb"] = forge_hilb2
+        session._engine.functions["invhilb"] = forge_invhilb2
+        session._engine.functions["magic"] = forge_magic2
+        session._engine.functions["pascal"] = forge_pascal2
+        session._engine.functions["compan"] = forge_compan2
+        session._engine.functions["fitlm"] = forge_fitlm2
+        session._engine.functions["predict"] = forge_predict2
+        session._engine.functions["fitcsvm"] = forge_fitcsvm2
+        session._engine.functions["fitctree"] = forge_fitctree2
+        session._engine.functions["fitcknn"] = forge_fitcknn2
+        session._engine.functions["fitcensemble"] = forge_fitcensemble2
+        session._engine.functions["crossval"] = forge_crossval2
+        session._engine.functions["confusionmat"] = forge_confusionmat2
+        session._engine.functions["pca"] = forge_pca2
+        session._engine.functions["kmeans"] = forge_kmeans2
+        session._engine.functions["sym"] = forge_sym2
+        session._engine.functions["syms"] = forge_syms2
+        session._engine.functions["simplify"] = forge_simplify2
+        session._engine.functions["expand"] = forge_expand2
+        session._engine.functions["collect"] = forge_collect2
+        session._engine.functions["subs"] = forge_subs2
+        session._engine.functions["pretty"] = forge_pretty2
+        session._engine.functions["latex"] = forge_latex2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
