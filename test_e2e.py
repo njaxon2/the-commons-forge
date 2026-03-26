@@ -134,4 +134,65 @@ check("fopen/fclose", 'fid = fopen("/tmp/e2e_io.txt", "w"); fclose(fid)', "0")
 check("fileread", 'dlmwrite("/tmp/e2e_data.csv", [1 2; 3 4]); dlmread("/tmp/e2e_data.csv", ",")', contains="3")
 check("tempdir", "tempdir", contains="/tmp")
 
+
+
+    # === R105-R111 Tests ===
+print("\nR105 — eval/feval/strjoin:")
+check("eval", 'eval("2+3")', "5")
+check("feval", 'feval("sin", pi/2)', "1")
+check("strjoin", 'strjoin({"hello", "world"}, "-")', "hello-world")
+
+print("\nR108 — sprintf/class/assert/char concat:")
+check("sprintf", 'sprintf("x=%d", 3)', "x=3")
+check("class_double", 'class(3.14)', "double")
+check("class_char", 'class("hello")', "char")
+check("char_concat", '["hello", " ", "world"]', "hello world")
+check("assert_true", 'assert(1)', "1")
+
+print("\nR110 — Fast TIGA assembly:")
+check("tiga_setup", """
+addpath("/home/ubuntu/forge/ForgeHome/tiga");
+p = 2; nel = 4;
+Xi_r = [0 0 0 0.25 0.5 0.75 1 1 1];
+Xi_t = [0 0 0 1 1 1];
+n_r = 6; n_t = 3;
+r_cp = linspace(0.5, 1.5, n_r);
+CPx = zeros(n_r, n_t); CPy = zeros(n_r, n_t); Cw = ones(n_r, n_t);
+for i = 1:n_r
+    r = r_cp(i);
+    CPx(i,1)=r; CPy(i,1)=0;
+    CPx(i,2)=r; CPy(i,2)=r;
+    CPx(i,3)=0; CPy(i,3)=r;
+    Cw(i,2) = 1/sqrt(2);
+end
+[K,F,free] = tiga_assemble_2d(p, Xi_r, Xi_t, CPx, CPy, Cw);
+fprintf("%d %d\\n", size(K,1), length(free));
+""", "18 12")
+
+print("\nAdvanced syntax:")
+check("switch_case", """
+x = 2;
+switch x
+    case 1; r = "one";
+    case 2; r = "two";
+    otherwise; r = "other";
+end
+r
+""", "two")
+check("try_catch", """
+try; error("test"); catch e; r = "caught"; end
+r
+""", "caught")
+check("do_until", """
+x = 0; do; x = x + 1; until (x >= 5); x
+""", "5")
+check("func_handle", """
+f = @(x) x^2 + 1;
+f(3)
+""", "10")
+check("nested_func_def", """
+function y = sq(x); y = x^2; end
+sq(7)
+""", "49")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
