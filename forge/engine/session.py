@@ -74,9 +74,14 @@ class ForgeSession:
     # -- formatting --------------------------------------------------------
 
     def _format_result(self, value):
+        from forge.engine.containers import ForgeCell, ForgeStruct
         # R03: ForgeChar displays as text
         if isinstance(value, ForgeChar):
             return value.to_str()
+        if isinstance(value, ForgeCell):
+            return self._format_cell(value)
+        if isinstance(value, ForgeStruct):
+            return self._format_struct(value)
         if isinstance(value, ForgeArray):
             data = _unwrap(value)
             if data.size == 0:
@@ -92,6 +97,10 @@ class ForgeSession:
             return f'  [{shape} {data.dtype}]'
         if isinstance(value, str):
             return value
+        if isinstance(value, bool):
+            return '  1' if value else '  0'
+        if isinstance(value, (int, float)):
+            return '  ' + self._format_scalar(value)
         return str(value)
 
     def _format_scalar(self, v):
@@ -135,6 +144,74 @@ class ForgeSession:
             for c in range(ncols):
                 parts.append(formatted[r][c].rjust(col_widths[c] + 4))
             lines.append(''.join(parts))
+        return '\n'.join(lines)
+
+    def _format_cell(self, cell):
+        """Format a cell array for display, MATLAB style."""
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        items = cell._data
+        shape = cell.shape
+        lines = []
+        lines.append('{')
+        for i, item in enumerate(items):
+            if isinstance(item, ForgeChar):
+                val_str = f"  [{i+1}] '{item.to_str()}'"
+            elif isinstance(item, ForgeArray):
+                data = _unwrap(item)
+                if data.size == 0:
+                    val_str = f"  [{i+1}] []"
+                elif data.size == 1:
+                    val_str = f"  [{i+1}] {self._format_scalar(data.flat[0])}"
+                elif data.size <= 6:
+                    vals = " ".join(self._format_scalar(x) for x in data.flat)
+                    val_str = f"  [{i+1}] [{vals}]"
+                else:
+                    sh = "x".join(str(s) for s in data.shape)
+                    val_str = f"  [{i+1}] [{sh} double]"
+            elif isinstance(item, ForgeCell):
+                n = len(item._data)
+                val_str = f"  [{i+1}] {{{n}x1 cell}}"
+            elif isinstance(item, ForgeStruct):
+                fields = list(item._fields.keys()) if hasattr(item, '_fields') else []
+                val_str = f"  [{i+1}] [1x1 struct]"
+            else:
+                val_str = f"  [{i+1}] {item}"
+            lines.append(val_str)
+            if i >= 19:
+                lines.append(f"  ... ({len(items) - 20} more)")
+                break
+        lines.append('}')
+        return '\n'.join(lines)
+
+    def _format_struct(self, s):
+        """Format a struct for display, MATLAB style."""
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        if not hasattr(s, '_fields') or not s._fields:
+            return "  struct with no fields."
+        lines = []
+        for name, val in s._fields.items():
+            if isinstance(val, ForgeChar):
+                val_str = f"'{val.to_str()}'"
+            elif isinstance(val, ForgeArray):
+                data = _unwrap(val)
+                if data.size == 0:
+                    val_str = "[]"
+                elif data.size == 1:
+                    val_str = self._format_scalar(data.flat[0])
+                elif data.size <= 6:
+                    vals = " ".join(self._format_scalar(x) for x in data.flat)
+                    val_str = f"[{vals}]"
+                else:
+                    sh = "x".join(str(s2) for s2 in data.shape)
+                    val_str = f"[{sh} double]"
+            elif isinstance(val, ForgeCell):
+                n = len(val._data)
+                val_str = f"{{{n}x1 cell}}"
+            elif isinstance(val, ForgeStruct):
+                val_str = "[1x1 struct]"
+            else:
+                val_str = str(val)
+            lines.append(f"    {name}: {val_str}")
         return '\n'.join(lines)
 
     # -- session builtins --------------------------------------------------
