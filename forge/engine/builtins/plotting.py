@@ -197,14 +197,72 @@ def forge_loglog(*args):
     plt.pause(0.01)
 
 
-def forge_bar(x, y=None, width=0.8):
+def forge_bar(*args, **kwargs):
+    """bar(y), bar(x,y), bar(x,y,width), bar(...,color), bar(...,'prop',val)."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
     _maybe_clear()
-    if y is None:
-        y = _to_np(x)
+    # Parse positional args
+    pos = []
+    kw = {}
+    i = 0
+    str_args = list(args)
+    while i < len(str_args):
+        a = str_args[i]
+        if isinstance(a, ForgeChar) or (isinstance(a, str) and len(a) <= 2 and not a.replace('.','').isdigit()):
+            # Color shorthand like "r", "b", "g"
+            s = a.to_str() if isinstance(a, ForgeChar) else a
+            if len(s) <= 2 and s.isalpha():
+                kw["color"] = s
+                i += 1
+                continue
+        # Check for keyword pair
+        if isinstance(a, (str, ForgeChar)):
+            s = a.to_str() if isinstance(a, ForgeChar) else a
+            if s.lower() in ("facecolor", "edgecolor", "linewidth", "barwidth"):
+                if i + 1 < len(str_args):
+                    val = str_args[i+1]
+                    if isinstance(val, ForgeChar):
+                        val = val.to_str()
+                    elif isinstance(val, ForgeArray):
+                        val = float(val.data.flat[0])
+                    kw[s.lower()] = val
+                    i += 2
+                    continue
+        pos.append(a)
+        i += 1
+    # Now interpret positional args
+    if len(pos) == 1:
+        y = _to_np(pos[0]).ravel()
         x = np.arange(1, len(y) + 1)
+        width = 0.8
+    elif len(pos) == 2:
+        x = _to_np(pos[0]).ravel()
+        y = _to_np(pos[1]).ravel()
+        width = 0.8
+    elif len(pos) >= 3:
+        x = _to_np(pos[0]).ravel()
+        y = _to_np(pos[1]).ravel()
+        w = pos[2]
+        if isinstance(w, ForgeArray):
+            width = float(w.data.flat[0])
+        else:
+            width = float(w)
+        # 4th positional could be color
+        if len(pos) >= 4:
+            c = pos[3]
+            if isinstance(c, ForgeChar):
+                kw["color"] = c.to_str()
+            elif isinstance(c, str):
+                kw["color"] = c
     else:
-        x, y = _to_np(x), _to_np(y)
-    _cur_ax().bar(x, y, width=width)
+        return
+    bar_kw = {"width": width}
+    if "color" in kw:
+        bar_kw["color"] = kw["color"]
+    if "edgecolor" in kw:
+        bar_kw["edgecolor"] = kw["edgecolor"]
+    _cur_ax().bar(x, y, **bar_kw)
     plt.draw()
     plt.pause(0.01)
 
@@ -681,18 +739,51 @@ def forge_zlabel(label: str):
 
 
 def forge_legend(*args, **kwargs):
-    # Convert ForgeChar args to Python strings
+    # Convert ForgeChar args to Python strings, extracting MATLAB-style keyword pairs
     from forge.engine.containers import ForgeChar
-    labels = []
+    # MATLAB keyword args that can appear in positional args
+    _LEGEND_KWARGS = {"location", "fontsize", "orientation", "numcolumns",
+                      "interpreter", "box", "color", "textcolor", "edgecolor"}
+    str_args = []
     for a in args:
         if isinstance(a, ForgeChar):
-            labels.append(a.to_str())
+            str_args.append(a.to_str())
         elif hasattr(a, 'to_str'):
-            labels.append(a.to_str())
+            str_args.append(a.to_str())
         elif isinstance(a, str):
-            labels.append(a)
+            str_args.append(a)
         else:
-            labels.append(str(a))
+            str_args.append(a)  # keep non-string as-is
+    # Extract keyword pairs from positional args
+    labels = []
+    _loc_map = {"north": "upper center", "south": "lower center",
+                "east": "center right", "west": "center left",
+                "northeast": "upper right", "northwest": "upper left",
+                "southeast": "lower right", "southwest": "lower left",
+                "best": "best", "none": "best"}
+    i = 0
+    while i < len(str_args):
+        if isinstance(str_args[i], str) and str_args[i].lower() in _LEGEND_KWARGS and i + 1 < len(str_args):
+            key = str_args[i].lower()
+            val = str_args[i + 1]
+            if isinstance(val, ForgeChar):
+                val = val.to_str()
+            elif hasattr(val, 'to_str'):
+                val = val.to_str()
+            if key == "location":
+                loc = val.lower() if isinstance(val, str) else str(val)
+                kwargs["loc"] = _loc_map.get(loc, loc)
+            elif key == "fontsize":
+                kwargs["fontsize"] = float(val) if not isinstance(val, str) else val
+            elif key == "numcolumns":
+                kwargs["ncol"] = int(float(val)) if not isinstance(val, str) else val
+            i += 2
+        else:
+            if isinstance(str_args[i], str):
+                labels.append(str_args[i])
+            else:
+                labels.append(str(str_args[i]))
+            i += 1
     if labels:
         _cur_ax().legend(labels, **kwargs)
     else:
@@ -738,7 +829,11 @@ def forge_axis(spec=None):
 def forge_xlim(lo=None, hi=None):
     if lo is None:
         return _cur_ax().get_xlim()
-    _cur_ax().set_xlim(float(lo), float(hi))
+    if hi is None:
+        arr = _to_np(lo).ravel()
+        _cur_ax().set_xlim(float(arr[0]), float(arr[1]))
+    else:
+        _cur_ax().set_xlim(float(lo), float(hi))
     plt.draw()
     plt.pause(0.01)
 
@@ -746,7 +841,12 @@ def forge_xlim(lo=None, hi=None):
 def forge_ylim(lo=None, hi=None):
     if lo is None:
         return _cur_ax().get_ylim()
-    _cur_ax().set_ylim(float(lo), float(hi))
+    if hi is None:
+        # Array form: ylim([lo hi])
+        arr = _to_np(lo).ravel()
+        _cur_ax().set_ylim(float(arr[0]), float(arr[1]))
+    else:
+        _cur_ax().set_ylim(float(lo), float(hi))
     plt.draw()
     plt.pause(0.01)
 
@@ -996,7 +1096,7 @@ def forge_rotate3d(state=None):
 
 
 def forge_set_prop(*args):
-    """Set graphics object property. set(h, prop, val)."""
+    """Set graphics object property. set(h, prop, val, ...)."""
     from forge.engine.types import ForgeArray
     from forge.engine.containers import ForgeChar
     if len(args) >= 3:
@@ -1007,12 +1107,38 @@ def forge_set_prop(*args):
                 prop = prop.to_str()
             if isinstance(val, ForgeChar):
                 val = val.to_str()
+            if isinstance(val, ForgeArray):
+                val = float(val.data.flat[0])
             prop = str(prop).lower()
             ax = _cur_ax()
             if prop == "fontsize":
-                if isinstance(val, ForgeArray):
-                    val = float(val.data.flat[0])
                 ax.title.set_fontsize(val)
+                ax.xaxis.label.set_fontsize(val)
+                ax.yaxis.label.set_fontsize(val)
+                ax.tick_params(axis='both', labelsize=val)
+            elif prop == "linewidth":
+                for spine in ax.spines.values():
+                    spine.set_linewidth(val)
+            elif prop == "xlim":
+                arr = _to_np(val).ravel() if not isinstance(val, (int, float)) else None
+                if arr is not None:
+                    ax.set_xlim(float(arr[0]), float(arr[1]))
+            elif prop == "ylim":
+                arr = _to_np(val).ravel() if not isinstance(val, (int, float)) else None
+                if arr is not None:
+                    ax.set_ylim(float(arr[0]), float(arr[1]))
+            elif prop == "xtick":
+                ax.set_xticks(_to_np(val).ravel())
+            elif prop == "ytick":
+                ax.set_yticks(_to_np(val).ravel())
+            elif prop == "xticklabel":
+                if isinstance(val, list):
+                    ax.set_xticklabels([str(v) for v in val])
+            elif prop == "yticklabel":
+                if isinstance(val, list):
+                    ax.set_yticklabels([str(v) for v in val])
+        plt.draw()
+        plt.pause(0.01)
 
 
 def forge_get_prop(*args):
@@ -1021,7 +1147,7 @@ def forge_get_prop(*args):
 
 
 def forge_text_func(*args):
-    """Add text annotation. text(x, y, str)."""
+    """Add text annotation. text(x, y, str, 'prop', val, ...)."""
     from forge.engine.types import ForgeArray
     from forge.engine.containers import ForgeChar
     ax = _cur_ax()
@@ -1031,7 +1157,37 @@ def forge_text_func(*args):
         s = args[2]
         if isinstance(s, ForgeChar):
             s = s.to_str()
-        ax.text(x, y, str(s))
+        # Extract keyword pairs from remaining args
+        kw = {}
+        i = 3
+        while i + 1 < len(args):
+            key = args[i]
+            val = args[i + 1]
+            if isinstance(key, ForgeChar):
+                key = key.to_str()
+            elif hasattr(key, 'to_str'):
+                key = key.to_str()
+            if isinstance(val, ForgeChar):
+                val = val.to_str()
+            elif hasattr(val, 'to_str'):
+                val = val.to_str()
+            elif isinstance(val, ForgeArray):
+                val = float(val.data.flat[0])
+            key = str(key).lower()
+            if key == "fontsize":
+                kw["fontsize"] = val
+            elif key == "fontweight":
+                kw["fontweight"] = val
+            elif key == "horizontalalignment":
+                kw["ha"] = val
+            elif key == "verticalalignment":
+                kw["va"] = val
+            elif key == "color":
+                kw["color"] = val
+            elif key == "rotation":
+                kw["rotation"] = float(val)
+            i += 2
+        ax.text(x, y, str(s), **kw)
     plt.draw()
     plt.pause(0.01)
 
