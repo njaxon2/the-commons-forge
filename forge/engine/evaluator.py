@@ -1183,9 +1183,11 @@ class Session:
                     value = val_tuple
             if isinstance(value, tuple):
                 for t, v in zip(target, value):
-                    ws.set(t.name, v)
+                    if t.name != "~":  # ~ = discard output
+                        ws.set(t.name, v)
             else:
-                ws.set(target[0].name, value)
+                if target[0].name != "~":
+                    ws.set(target[0].name, value)
             return value
 
         if isinstance(target, Identifier):

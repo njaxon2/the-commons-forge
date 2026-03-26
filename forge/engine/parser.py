@@ -440,11 +440,15 @@ class Parser:
         return ExpressionStatement(expr, print_result=not suppress)
 
     def _parse_multi_assign_targets(self) -> List[Any]:
-        """Parse [a, b, c] for multi-return assignment."""
+        """Parse [a, b, ~, c] for multi-return assignment. ~ = discard."""
         self._expect(TokenType.LBRACKET)
         targets = []
         while not self._at(TokenType.RBRACKET):
-            targets.append(Identifier(self._expect(TokenType.IDENT).value))
+            if self._at(TokenType.NOT):  # ~ tilde = discard
+                self._advance()
+                targets.append(Identifier("~"))
+            else:
+                targets.append(Identifier(self._expect(TokenType.IDENT).value))
             if not self._match(TokenType.COMMA):
                 break
         self._expect(TokenType.RBRACKET)
