@@ -114,6 +114,27 @@
 ### Display Formatting (R92)
 - Cell arrays: indexed display {[1] val, [2] val, ...}
 - Structs: field: value pairs with nested type summaries
+- 59/59 E2E tests passing
+
+### Syntax Highlighting (R88)
+- VS Code-style M-code highlighting in command widget
+- Keywords (blue bold), strings (orange), numbers (green), comments (green italic), functions (yellow)
+
+### Workspace Browser (R89)
+- Shows MATLAB type names: double, char, cell, struct (not numpy names)
+- Better value previews for ForgeArray, ForgeChar, ForgeCell, ForgeStruct
+
+### String Operations (R90)
+- regexp(), regexpi(), regexprep(): Full regex support with match/tokens/names modes
+- strrep(), strfind(): String search and replace
+
+### Container Utilities (R90)
+- cellfun(), arrayfun(): Apply functions to cell/array elements
+- cat(), num2cell(), cell2mat(), rmfield(): Container manipulation
+
+### Display Formatting (R92)
+- Cell arrays: indexed display {[1] val, [2] val, ...}
+- Structs: field: value pairs with nested type summaries
 
 ### File I/O (R94)
 - fopen, fclose, fprintf (to file handles), fgets, fgetl, feof, ftell, fseek
