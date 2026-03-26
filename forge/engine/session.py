@@ -737,5 +737,116 @@ class ForgeSession:
         self._engine.functions["ode15s"] = forge_ode15s
         self._engine.functions["odeset"] = forge_odeset
 
+        # Optimization functions (R98)
+        def forge_fzero(func, x0, *args):
+            """Find zero of a function. x = fzero(@f, x0) or fzero(@f, [a b])."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.optimize import brentq, fsolve as _fsolve
+
+            if isinstance(x0, ForgeArray):
+                x0_arr = x0.data.ravel()
+            else:
+                x0_arr = np.atleast_1d(np.asarray(x0, dtype=np.float64))
+
+            def f_scalar(x):
+                r = func(ForgeArray(np.float64(x)))
+                if isinstance(r, ForgeArray):
+                    return float(r.data.flat[0])
+                return float(r)
+
+            if len(x0_arr) == 2:
+                # Bracket method
+                root = brentq(f_scalar, float(x0_arr[0]), float(x0_arr[1]))
+            else:
+                # Initial guess method
+                root = _fsolve(f_scalar, float(x0_arr[0]))[0]
+            return ForgeArray(np.float64(root))
+
+        def forge_fminbnd(func, a, b, *args):
+            """Find minimum of function on interval [a, b]."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.optimize import minimize_scalar
+
+            if isinstance(a, ForgeArray): a = float(a.data.flat[0])
+            if isinstance(b, ForgeArray): b = float(b.data.flat[0])
+
+            def f_scalar(x):
+                r = func(ForgeArray(np.float64(x)))
+                if isinstance(r, ForgeArray):
+                    return float(r.data.flat[0])
+                return float(r)
+
+            result = minimize_scalar(f_scalar, bounds=(float(a), float(b)), method='bounded')
+            return ForgeArray(np.float64(result.x))
+
+        def forge_fminsearch(func, x0, *args):
+            """Find minimum of unconstrained multivariable function (Nelder-Mead)."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.optimize import minimize
+
+            if isinstance(x0, ForgeArray):
+                x0_arr = x0.data.ravel().astype(np.float64)
+            else:
+                x0_arr = np.atleast_1d(np.asarray(x0, dtype=np.float64))
+
+            def f_vec(x):
+                x_fa = ForgeArray(np.array(x, dtype=np.float64))
+                r = func(x_fa)
+                if isinstance(r, ForgeArray):
+                    return float(r.data.flat[0])
+                return float(r)
+
+            result = minimize(f_vec, x0_arr, method='Nelder-Mead')
+            return ForgeArray(result.x)
+
+        def forge_fsolve(func, x0, *args):
+            """Solve system of nonlinear equations."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.optimize import fsolve as _fsolve
+
+            if isinstance(x0, ForgeArray):
+                x0_arr = x0.data.ravel().astype(np.float64)
+            else:
+                x0_arr = np.atleast_1d(np.asarray(x0, dtype=np.float64))
+
+            def f_vec(x):
+                x_fa = ForgeArray(np.array(x, dtype=np.float64))
+                r = func(x_fa)
+                if isinstance(r, ForgeArray):
+                    return r.data.ravel()
+                return np.asarray(r, dtype=np.float64).ravel()
+
+            result = _fsolve(f_vec, x0_arr)
+            return ForgeArray(result)
+
+        def forge_integral(func, a, b, *args):
+            """Numerical integration. q = integral(@f, a, b)."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.integrate import quad
+
+            if isinstance(a, ForgeArray): a = float(a.data.flat[0])
+            if isinstance(b, ForgeArray): b = float(b.data.flat[0])
+
+            def f_scalar(x):
+                r = func(ForgeArray(np.float64(x)))
+                if isinstance(r, ForgeArray):
+                    return float(r.data.flat[0])
+                return float(r)
+
+            val, err = quad(f_scalar, float(a), float(b))
+            return ForgeArray(np.float64(val))
+
+        self._engine.functions["fzero"] = forge_fzero
+        self._engine.functions["fminbnd"] = forge_fminbnd
+        self._engine.functions["fminsearch"] = forge_fminsearch
+        self._engine.functions["fsolve"] = forge_fsolve
+        self._engine.functions["integral"] = forge_integral
+
+
 
 
