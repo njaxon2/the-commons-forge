@@ -156,16 +156,35 @@ class ForgeSession:
             return '\n'.join(sorted(session._engine.workspace.names()))
 
         def forge_whos():
+            _dtype_map = {
+                "float64": "double", "float32": "single",
+                "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
+                "uint8": "uint8", "uint16": "uint16", "uint32": "uint32", "uint64": "uint64",
+                "bool": "logical", "complex128": "double complex", "complex64": "single complex",
+            }
             lines = []
             ws = session._engine.workspace
             for name in sorted(ws.names()):
                 val = ws.get(name)
-                if isinstance(val, ForgeArray):
+                if isinstance(val, ForgeChar):
+                    s_val = val.to_str()
+                    shape = f'1x{len(s_val)}'
+                    lines.append(f'  {name:20s} {shape:10s} {"char":10s}')
+                elif isinstance(val, ForgeArray):
                     d = _unwrap(val)
                     shape = 'x'.join(str(s) for s in d.shape)
-                    lines.append(f'  {name:20s} {shape:10s} {str(d.dtype):10s}')
+                    cls = _dtype_map.get(str(d.dtype), str(d.dtype))
+                    lines.append(f'  {name:20s} {shape:10s} {cls:10s}')
                 else:
-                    lines.append(f'  {name:20s} {"1x1":10s} {type(val).__name__:10s}')
+                    from forge.engine.containers import ForgeCell, ForgeStruct
+                    if isinstance(val, ForgeCell):
+                        shape = 'x'.join(str(s) for s in val.shape)
+                        lines.append(f'  {name:20s} {shape:10s} {"cell":10s}')
+                    elif isinstance(val, ForgeStruct):
+                        n_fields = len(val._fields) if hasattr(val, '_fields') else 0
+                        lines.append(f'  {name:20s} {"1x1":10s} {"struct":10s}')
+                    else:
+                        lines.append(f'  {name:20s} {"1x1":10s} {type(val).__name__:10s}')
             return '\n'.join(lines)
 
         def forge_clear(*args):
@@ -212,10 +231,26 @@ class ForgeSession:
             return ForgeArray(np.array(0.0))
 
         def forge_class(x):
+            from forge.engine.containers import ForgeCell, ForgeStruct
+            _dtype_map = {
+                "float64": "double", "float32": "single",
+                "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
+                "uint8": "uint8", "uint16": "uint16", "uint32": "uint32", "uint64": "uint64",
+                "bool": "logical", "complex128": "double", "complex64": "single",
+            }
             if isinstance(x, ForgeChar):
                 return 'char'
             if isinstance(x, ForgeArray):
-                return str(_unwrap(x).dtype)
+                dtype_name = str(_unwrap(x).dtype)
+                return _dtype_map.get(dtype_name, dtype_name)
+            if isinstance(x, ForgeCell):
+                return 'cell'
+            if isinstance(x, ForgeStruct):
+                return 'struct'
+            if isinstance(x, bool):
+                return 'logical'
+            if isinstance(x, (int, float)):
+                return 'double'
             return type(x).__name__
 
         def forge_format(*args):

@@ -338,7 +338,32 @@ class Session:
         b["toc"] = _forge_toc
 
         # Misc
-        b["class"] = lambda x: ForgeChar(x.type_name() if isinstance(x, ForgeArray) else type(x).__name__)
+        def _class_name(x):
+            from forge.engine.containers import ForgeChar as FC, ForgeCell, ForgeStruct
+            if isinstance(x, ForgeArray):
+                # Map numpy dtype to MATLAB class name
+                _dtype_map = {
+                    "float64": "double", "float32": "single",
+                    "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
+                    "uint8": "uint8", "uint16": "uint16", "uint32": "uint32", "uint64": "uint64",
+                    "bool": "logical", "complex128": "double", "complex64": "single",
+                }
+                dtype_name = str(x.data.dtype)
+                return FC(_dtype_map.get(dtype_name, dtype_name))
+            if isinstance(x, FC):
+                return FC("char")
+            if isinstance(x, ForgeCell):
+                return FC("cell")
+            if isinstance(x, ForgeStruct):
+                return FC("struct")
+            if isinstance(x, bool):
+                return FC("logical")
+            if isinstance(x, (int, float)):
+                return FC("double")
+            if isinstance(x, str):
+                return FC("char")
+            return FC(type(x).__name__)
+        b["class"] = _class_name
         b["typecast"] = lambda x, t: x.astype(t.to_str() if isinstance(t, ForgeChar) else str(t))
 
         # Merge toolbox registries (elfun, general, specfun, ...)
