@@ -103,12 +103,22 @@ def _can_be_transpose(prev_token):
     """Determine if ' should be transpose (postfix) vs char string start.
     Transpose follows: ), ], }, identifier, number, .'
     Char literal follows everything else (start of line, operator, comma, etc).
+    Keywords that expect an expression after them (case, return, if, etc.)
+    should NOT trigger transpose — the ' starts a string.
     """
     if prev_token is None:
         return False
+    if prev_token.type == TokenType.KEYWORD:
+        # These keywords expect an expression — ' after them is a string
+        _EXPR_KEYWORDS = {'case', 'return', 'if', 'elseif', 'while', 'until',
+                          'switch', 'global', 'persistent', 'otherwise'}
+        if prev_token.value in _EXPR_KEYWORDS:
+            return False
+        # 'end' can be transpose target (e.g., A(end)')
+        return True
     return prev_token.type in (
         TokenType.RPAREN, TokenType.RBRACKET, TokenType.RBRACE,
-        TokenType.IDENT, TokenType.NUMBER, TokenType.KEYWORD,
+        TokenType.IDENT, TokenType.NUMBER,
         TokenType.TRANSPOSE, TokenType.DOT_TRANSPOSE,
     )
 

@@ -283,4 +283,27 @@ check("sscanf_int", "sscanf('42', '%d')", "42")
 check("display_sci", "x = 1e-10; x < 1", "1")
 check("display_complex", "z = 3 + 4i; real(z)", "3")
 
+
+print("\nR128-R129 char indexing + switch strings:")
+check("char_index", "s = 'hello'; s(1)", "h")
+check("char_range", "s = 'hello'; s(1:3)", "hel")
+check("char_end", "s = 'hello'; s(end)", "o")
+check("switch_string", """
+s = 'b';
+switch s
+    case 'a'; r = 1;
+    case 'b'; r = 2;
+    otherwise; r = 0;
+end
+r
+""", "2")
+check("struct_dynamic_field", """
+st.x = 10; st.y = 20;
+f = fieldnames(st);
+st.(f{1})
+""", "10")
+check("anonymous_compose", "f = @(x) x^2; g = @(x) f(x) + 1; g(3)", "10")
+check("growing_vector", "v=[]; for i=1:4; v=[v, i^2]; end; v(3)", "9")
+check("nested_for_sum", "t=0; for i=1:3; for j=1:3; t=t+1; end; end; t", "9")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
