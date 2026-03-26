@@ -1530,6 +1530,116 @@ class ForgeSession:
         session._engine.functions["which"] = forge_which
         session._engine.functions["methods"] = forge_methods
 
+        # R115: Linear algebra decompositions + conv2
+        def forge_schur(A):
+            """[U, T] = schur(A) - Schur decomposition."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import schur as _schur
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            T, U = _schur(data)
+            return ForgeArray(T), ForgeArray(U)
+
+        def forge_hess(A):
+            """[P, H] = hess(A) - Hessenberg decomposition."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import hessenberg
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            H, P = hessenberg(data, calc_q=True)
+            return ForgeArray(P), ForgeArray(H)
+
+        def forge_balance(A):
+            """[D, B] = balance(A) - diagonal scaling for eigenvalue computation."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import matrix_balance
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            B, T = matrix_balance(data)
+            return ForgeArray(T), ForgeArray(B)
+
+        def forge_conv2(A, B, *args):
+            """C = conv2(A, B) - 2D convolution."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import convolve2d
+            a_data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            b_data = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            mode = "full"
+            from forge.engine.containers import ForgeChar
+            for arg in args:
+                if isinstance(arg, ForgeChar):
+                    mode = arg.to_str()
+                elif isinstance(arg, str):
+                    mode = arg
+            result = convolve2d(a_data, b_data, mode=mode)
+            return ForgeArray(result)
+
+        def forge_eigs_fixed(A, k=None, *args):
+            """eigs(A, k) - compute k largest eigenvalues."""
+            from forge.engine.types import ForgeArray
+            from scipy.sparse.linalg import eigs as _eigs
+            from scipy.sparse import issparse, csc_matrix
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if k is None:
+                k = min(6, data.shape[0] - 2)
+            elif isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            k = min(k, data.shape[0] - 2)
+            if k < 1:
+                k = 1
+            try:
+                if not issparse(data):
+                    data = csc_matrix(data)
+                vals, vecs = _eigs(data, k=k)
+                return ForgeArray(np.sort(np.real(vals))[::-1])
+            except Exception as e:
+                # Fallback to dense eigenvalues
+                if issparse(data):
+                    data = data.toarray()
+                ev = np.linalg.eigvals(data)
+                ev = np.sort(np.real(ev))[::-1]
+                return ForgeArray(ev[:k])
+
+        def forge_expm(A):
+            """expm(A) - matrix exponential."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import expm as _expm
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(_expm(data))
+
+        def forge_logm(A):
+            """logm(A) - matrix logarithm."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import logm as _logm
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            result = _logm(data)
+            if np.isrealobj(data) and np.allclose(result.imag, 0):
+                result = result.real
+            return ForgeArray(result)
+
+        def forge_funm(A, func):
+            """funm(A, @f) - general matrix function."""
+            from forge.engine.types import ForgeArray
+            from scipy.linalg import funm as _funm
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            if callable(func):
+                result = _funm(data, func)
+                return ForgeArray(result)
+            return ForgeArray(data)
+
+        def forge_condest(A):
+            """condest(A) - 1-norm condition number estimate."""
+            from forge.engine.types import ForgeArray
+            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(np.linalg.cond(data, 1)))
+
+        session._engine.functions["schur"] = forge_schur
+        session._engine.functions["hess"] = forge_hess
+        session._engine.functions["balance"] = forge_balance
+        session._engine.functions["conv2"] = forge_conv2
+        session._engine.functions["eigs"] = forge_eigs_fixed
+        session._engine.functions["expm"] = forge_expm
+        session._engine.functions["logm"] = forge_logm
+        session._engine.functions["funm"] = forge_funm
+        session._engine.functions["condest"] = forge_condest
+
 
 
 
