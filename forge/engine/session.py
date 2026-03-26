@@ -4421,6 +4421,295 @@ class ForgeSession:
         session._engine.functions["normpdf"] = forge_normpdf
         session._engine.functions["normcdf"] = forge_normcdf
         session._engine.functions["norminv"] = forge_norminv
+
+        # R144: PDE helpers, more LA, distributions, file ops
+
+        # --- Probability distributions ---
+        def forge_unifrnd(a, b, *args):
+            """unifrnd(a, b, m, n) — uniform random."""
+            from forge.engine.types import ForgeArray
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            elif len(args) == 1:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                shape = (m, m)
+            return ForgeArray(np.random.uniform(ad, bd, shape))
+
+        def forge_exprnd(mu, *args):
+            """exprnd(mu, m, n) — exponential random."""
+            from forge.engine.types import ForgeArray
+            mud = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            return ForgeArray(np.random.exponential(mud, shape))
+
+        def forge_poissrnd(lam, *args):
+            """poissrnd(lambda, m, n) — Poisson random."""
+            from forge.engine.types import ForgeArray
+            lamd = float(lam.data.flat[0]) if isinstance(lam, ForgeArray) else float(lam)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            return ForgeArray(np.random.poisson(lamd, shape).astype(float))
+
+        def forge_chi2rnd(v, *args):
+            """chi2rnd(v, m, n) — chi-squared random."""
+            from forge.engine.types import ForgeArray
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            return ForgeArray(np.random.chisquare(vd, shape))
+
+        def forge_trnd(v, *args):
+            """trnd(v, m, n) — Student t random."""
+            from forge.engine.types import ForgeArray
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            return ForgeArray(np.random.standard_t(vd, shape))
+
+        def forge_frnd(d1, d2, *args):
+            """frnd(d1, d2, m, n) — F-distribution random."""
+            from forge.engine.types import ForgeArray
+            d1v = float(d1.data.flat[0]) if isinstance(d1, ForgeArray) else float(d1)
+            d2v = float(d2.data.flat[0]) if isinstance(d2, ForgeArray) else float(d2)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                n = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, n)
+            return ForgeArray(np.random.f(d1v, d2v, shape))
+
+        def forge_binornd(n, p, *args):
+            """binornd(n, p, m, k) — binomial random."""
+            from forge.engine.types import ForgeArray
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            pd = float(p.data.flat[0]) if isinstance(p, ForgeArray) else float(p)
+            shape = (1, 1)
+            if len(args) >= 2:
+                m = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                k = int(args[1].data.flat[0]) if isinstance(args[1], ForgeArray) else int(args[1])
+                shape = (m, k)
+            return ForgeArray(np.random.binomial(nd, pd, shape).astype(float))
+
+        def forge_exppdf(x, mu=None):
+            """exppdf(x, mu) — exponential PDF."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            m = 1.0
+            if mu is not None:
+                m = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            result = (1/m) * np.exp(-data/m)
+            result[data < 0] = 0
+            return ForgeArray(result)
+
+        def forge_expcdf(x, mu=None):
+            """expcdf(x, mu) — exponential CDF."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            m = 1.0
+            if mu is not None:
+                m = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            result = 1 - np.exp(-data/m)
+            result[data < 0] = 0
+            return ForgeArray(result)
+
+        def forge_chi2pdf(x, v):
+            """chi2pdf(x, v) — chi-squared PDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import chi2
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            return ForgeArray(chi2.pdf(data, vd))
+
+        def forge_chi2cdf(x, v):
+            """chi2cdf(x, v) — chi-squared CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import chi2
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            return ForgeArray(chi2.cdf(data, vd))
+
+        def forge_tpdf(x, v):
+            """tpdf(x, v) — Student t PDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import t as tdist
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            return ForgeArray(tdist.pdf(data, vd))
+
+        def forge_tcdf(x, v):
+            """tcdf(x, v) — Student t CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import t as tdist
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            return ForgeArray(tdist.cdf(data, vd))
+
+        def forge_tinv(p, v):
+            """tinv(p, v) — inverse Student t CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import t as tdist
+            data = p.data if isinstance(p, ForgeArray) else np.atleast_2d(p)
+            vd = float(v.data.flat[0]) if isinstance(v, ForgeArray) else float(v)
+            return ForgeArray(tdist.ppf(data, vd))
+
+        def forge_fpdf(x, d1, d2):
+            """fpdf(x, d1, d2) — F-distribution PDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import f as fdist
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            d1v = float(d1.data.flat[0]) if isinstance(d1, ForgeArray) else float(d1)
+            d2v = float(d2.data.flat[0]) if isinstance(d2, ForgeArray) else float(d2)
+            return ForgeArray(fdist.pdf(data, d1v, d2v))
+
+        def forge_fcdf(x, d1, d2):
+            """fcdf(x, d1, d2) — F-distribution CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import f as fdist
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            d1v = float(d1.data.flat[0]) if isinstance(d1, ForgeArray) else float(d1)
+            d2v = float(d2.data.flat[0]) if isinstance(d2, ForgeArray) else float(d2)
+            return ForgeArray(fdist.cdf(data, d1v, d2v))
+
+        def forge_finv(p, d1, d2):
+            """finv(p, d1, d2) — inverse F CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import f as fdist
+            data = p.data if isinstance(p, ForgeArray) else np.atleast_2d(p)
+            d1v = float(d1.data.flat[0]) if isinstance(d1, ForgeArray) else float(d1)
+            d2v = float(d2.data.flat[0]) if isinstance(d2, ForgeArray) else float(d2)
+            return ForgeArray(fdist.ppf(data, d1v, d2v))
+
+        # --- File operations ---
+        def forge_isfile(fname):
+            """isfile(fname) — test if file exists."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            return ForgeArray(np.float64(1 if os.path.isfile(fname) else 0))
+
+        def forge_isfolder(fname):
+            """isfolder(fname) — test if directory exists."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            return ForgeArray(np.float64(1 if os.path.isdir(fname) else 0))
+
+        def forge_mkdir_func(dirname):
+            """mkdir(dirname) — create directory."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(dirname, ForgeChar): dirname = dirname.to_str()
+            os.makedirs(dirname, exist_ok=True)
+            return ForgeArray(np.float64(1))
+
+        def forge_rmdir(dirname):
+            """rmdir(dirname) — remove directory."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(dirname, ForgeChar): dirname = dirname.to_str()
+            os.rmdir(dirname)
+
+        def forge_copyfile(src, dst):
+            """copyfile(src, dst) — copy file."""
+            from forge.engine.containers import ForgeChar
+            import shutil
+            if isinstance(src, ForgeChar): src = src.to_str()
+            if isinstance(dst, ForgeChar): dst = dst.to_str()
+            shutil.copy2(src, dst)
+
+        def forge_movefile(src, dst):
+            """movefile(src, dst) — move file."""
+            from forge.engine.containers import ForgeChar
+            import shutil
+            if isinstance(src, ForgeChar): src = src.to_str()
+            if isinstance(dst, ForgeChar): dst = dst.to_str()
+            shutil.move(src, dst)
+
+        def forge_delete_func(fname):
+            """delete(fname) — delete file."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            if os.path.exists(fname):
+                os.remove(fname)
+
+        def forge_fileparts(fname):
+            """[path, name, ext] = fileparts(fname) — split filename."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            path = os.path.dirname(fname)
+            base = os.path.basename(fname)
+            name, ext = os.path.splitext(base)
+            return ForgeChar(path), ForgeChar(name), ForgeChar(ext)
+
+        def forge_fullfile(*args):
+            """fullfile(p1, p2, ...) — build full filename."""
+            from forge.engine.containers import ForgeChar
+            parts = []
+            for a in args:
+                if isinstance(a, ForgeChar): parts.append(a.to_str())
+                else: parts.append(str(a))
+            return ForgeChar(os.path.join(*parts))
+
+        def forge_pwd():
+            """pwd — current working directory."""
+            from forge.engine.containers import ForgeChar
+            return ForgeChar(os.getcwd())
+
+        def forge_cd_func(dirname=None):
+            """cd(dirname) — change directory."""
+            from forge.engine.containers import ForgeChar
+            if dirname is not None:
+                if isinstance(dirname, ForgeChar): dirname = dirname.to_str()
+                os.chdir(dirname)
+            return ForgeChar(os.getcwd())
+
+        # Register all R144 functions
+        session._engine.functions["unifrnd"] = forge_unifrnd
+        session._engine.functions["exprnd"] = forge_exprnd
+        session._engine.functions["poissrnd"] = forge_poissrnd
+        session._engine.functions["chi2rnd"] = forge_chi2rnd
+        session._engine.functions["trnd"] = forge_trnd
+        session._engine.functions["frnd"] = forge_frnd
+        session._engine.functions["binornd"] = forge_binornd
+        session._engine.functions["exppdf"] = forge_exppdf
+        session._engine.functions["expcdf"] = forge_expcdf
+        session._engine.functions["chi2pdf"] = forge_chi2pdf
+        session._engine.functions["chi2cdf"] = forge_chi2cdf
+        session._engine.functions["tpdf"] = forge_tpdf
+        session._engine.functions["tcdf"] = forge_tcdf
+        session._engine.functions["tinv"] = forge_tinv
+        session._engine.functions["fpdf"] = forge_fpdf
+        session._engine.functions["fcdf"] = forge_fcdf
+        session._engine.functions["finv"] = forge_finv
+        session._engine.functions["isfile"] = forge_isfile
+        session._engine.functions["isfolder"] = forge_isfolder
+        session._engine.functions["mkdir"] = forge_mkdir_func
+        session._engine.functions["rmdir"] = forge_rmdir
+        session._engine.functions["copyfile"] = forge_copyfile
+        session._engine.functions["movefile"] = forge_movefile
+        session._engine.functions["delete"] = forge_delete_func
+        session._engine.functions["fileparts"] = forge_fileparts
+        session._engine.functions["fullfile"] = forge_fullfile
+        session._engine.functions["pwd"] = forge_pwd
+        session._engine.functions["cd"] = forge_cd_func
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

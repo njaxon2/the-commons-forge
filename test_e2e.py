@@ -485,4 +485,18 @@ check("norminv_05", "abs(norminv(0.5)) < 1e-10", "1")
 check("vecnorm_2", "abs(vecnorm([3 4]) - 5) < 1e-10", "1")
 check("peaks_size", "[X, Y, Z] = peaks(10); size(Z, 1)", "10")
 
+
+print("\nR144 distributions, file ops:")
+check("unifrnd_range", "x = unifrnd(0, 1, 100, 1); min(x) >= 0 && max(x) <= 1", "1")
+check("exppdf_0", "abs(exppdf(0, 1) - 1) < 1e-10", "1")
+check("expcdf_1", "abs(expcdf(0) - 0) < 1e-10", "1")
+check("tcdf_sym", "abs(tcdf(0, 5) - 0.5) < 1e-10", "1")
+check("tinv_05", "abs(tinv(0.5, 10)) < 1e-10", "1")
+check("chi2cdf_0", "abs(chi2cdf(0, 3)) < 1e-10", "1")
+check("isfile_test", "isfile('test_e2e.py')", "1")
+check("isfolder_test", "isfolder('forge')", "1")
+check("fileparts_test", "[p, n, e] = fileparts('/tmp/test.txt'); e", ".txt")
+check("fullfile_test", "fullfile('/tmp', 'test.txt')", "/tmp/test.txt")
+check("pwd_nonempty", "length(pwd()) > 0", "1")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
