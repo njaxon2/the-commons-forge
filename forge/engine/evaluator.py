@@ -269,6 +269,42 @@ def _cat_builtin(dim, *arrays):
     return ForgeArray(result)
 
 
+
+def _deal_builtin(*args):
+    """Deal inputs to outputs. [a,b,c] = deal(x,y,z) or [a,b] = deal(x)."""
+    if len(args) == 1:
+        # Replicate single input for all outputs
+        return args[0]
+    return args
+
+
+def _structfun_builtin(func, s):
+    """Apply function to each field of a struct."""
+    from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
+    from forge.engine.types import ForgeArray
+    import numpy as np
+    if not isinstance(s, ForgeStruct):
+        raise ValueError("Second argument must be a struct")
+    results = []
+    for name, val in s._fields.items():
+        r = func(val)
+        results.append(r)
+    # Check if all scalar
+    all_scalar = all(
+        isinstance(r, (int, float, np.integer, np.floating)) or
+        (isinstance(r, ForgeArray) and r.data.size == 1)
+        for r in results
+    )
+    if all_scalar:
+        vals = []
+        for r in results:
+            if isinstance(r, ForgeArray):
+                vals.append(float(r.data.flat[0]))
+            else:
+                vals.append(float(r))
+        return ForgeArray(np.array(vals, dtype=np.float64))
+    return ForgeCell(results)
+
 class Session:
     """Forge execution session — holds workspace, output, and function registry."""
 

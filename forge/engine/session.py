@@ -601,3 +601,9 @@ class ForgeSession:
             raise ValueError("fprintf requires arguments")
         self._engine.functions["fprintf"] = forge_fprintf_dispatch
 
+        # Misc builtins (R96)
+        from forge.engine.evaluator import _deal_builtin, _structfun_builtin
+        self._engine.functions["deal"] = _deal_builtin
+        self._engine.functions["structfun"] = _structfun_builtin
+
+
