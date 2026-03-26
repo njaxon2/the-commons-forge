@@ -1,20 +1,23 @@
 # Forge MEMORY.md — Session Continuity
 
-## Current State (R92)
-- **Last commit**: R92 — MATLAB-style display for cells/structs
+## Current State (R99)
+- **Last commit**: R99 — 890 registered functions, ODE/optimization/file I/O
 - **VPS**: ubuntu@15.204.8.77 (NOT 34.32.100.183 which is production)
 - **Display**: :99 port 5900 (GUI), :98 port 5901 (testing)
 - **Git branch**: master
 
-## Recent Commits (R85-R92)
-- R85: MATLAB-style type names in class() and whos
-- R86: Update MEMORY.md with R80-R85 progress
-- R87: E2E test suite — 52/52 passing
-- R88: Syntax highlighting in command widget
+## Recent Commits (R89-R99)
 - R89: MATLAB-style types and previews in workspace browser GUI
 - R90: regexp/strrep/strfind + cellfun/arrayfun/cat/rmfield/cell2mat/num2cell
 - R91: basisfunder wrapper + E2E test suite expanded to 59 tests
 - R92: MATLAB-style display for cell arrays and structs
+- R93: Update MEMORY.md
+- R94: File I/O — fopen/fclose/fprintf/fgetl/feof/fileread/dlmwrite/dlmread
+- R95: E2E test suite expanded to 62 tests
+- R96: deal, structfun, deblank, mat2str, blanks
+- R97: ODE solvers — ode45, ode23, ode15s
+- R98: Optimization — fzero, fminbnd, fminsearch, fsolve, integral
+- R99: Fill gaps — cbrt, pow2, asinh/acosh/atanh, isa, isreal, interp2, save/load
 
 ## NOVEL FINDING: Complete Thesis Arc
 
@@ -111,7 +114,30 @@
 ### Display Formatting (R92)
 - Cell arrays: indexed display {[1] val, [2] val, ...}
 - Structs: field: value pairs with nested type summaries
-- 59/59 E2E tests passing
+
+### File I/O (R94)
+- fopen, fclose, fprintf (to file handles), fgets, fgetl, feof, ftell, fseek
+- fileread, dlmwrite, dlmread, csvread, csvwrite
+- tempname, tempdir
+- fprintf dispatches to file or stdout based on first argument
+
+### ODE Solvers (R97)
+- ode45 (Dormand-Prince RK45), ode23 (Bogacki-Shampine RK23), ode15s (BDF for stiff)
+- Full MATLAB calling convention: [t,y] = ode45(@f, tspan, y0)
+- Anonymous function handles as RHS, scipy.integrate backend
+
+### Optimization (R98)
+- fzero: root finding (bracket or initial guess)
+- fminbnd: bounded scalar minimization
+- fminsearch: unconstrained multivariable (Nelder-Mead)
+- fsolve: nonlinear equation system
+- integral: numerical integration (quad)
+
+### Function Coverage (R99)
+- 890 total registered functions
+- 226/226 commonly-used MATLAB functions available
+- 62/62 E2E tests passing
+- IGA assembly: 31ms (nel=2), 61ms (nel=4)
 
 ## GUI State
 - Single-pane command widget with tab completion
@@ -128,7 +154,7 @@
 - 3D array display shows type info instead of values
 - Plot window focus stealing in GUI
 - No subfunction support in scripts
-- IGA assembly performance: 31ms (nel=2), 61ms (nel=4) — acceptable
+- IGA assembly: 31ms (nel=2), 61ms (nel=4) — good performance
 
 ## Next Steps
 1. **Thesis production**: Document with Forge-exported figures (complete)
