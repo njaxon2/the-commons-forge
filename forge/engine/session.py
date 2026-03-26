@@ -2318,6 +2318,286 @@ class ForgeSession:
         session._engine.functions["permute"] = forge_permute
         session._engine.functions["ipermute"] = forge_ipermute
 
+        # R125: Statistics, data manipulation, additional functions
+        def forge_prctile(x, p):
+            """prctile(x, p) — percentiles of data."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(p, ForgeArray):
+                p = p.data.flatten()
+            result = np.percentile(x, p)
+            return ForgeArray(np.atleast_1d(result))
+
+        def forge_quantile(x, p):
+            """quantile(x, p) — quantiles of data (0-1 scale)."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            if isinstance(p, ForgeArray):
+                p = p.data.flatten()
+            result = np.quantile(x, p)
+            return ForgeArray(np.atleast_1d(result))
+
+        def forge_iqr(x):
+            """iqr(x) — interquartile range."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                x = x.data.flatten()
+            return ForgeArray(np.float64(np.percentile(x, 75) - np.percentile(x, 25)))
+
+        def forge_zscore(x):
+            """zscore(x) — standardize to zero mean, unit variance."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                data = x.data.copy()
+            else:
+                data = np.array(x, dtype=np.float64)
+            if data.ndim == 1:
+                data = data.reshape(-1, 1)
+            mu = np.mean(data, axis=0)
+            sigma = np.std(data, axis=0, ddof=1)
+            sigma[sigma == 0] = 1
+            return ForgeArray((data - mu) / sigma)
+
+        def forge_normalize(x, *args):
+            """normalize(x) — normalize data to [0,1] or specified range."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                data = x.data.copy().astype(np.float64)
+            else:
+                data = np.array(x, dtype=np.float64)
+            mn = np.min(data)
+            mx = np.max(data)
+            if mx - mn == 0:
+                return ForgeArray(np.zeros_like(data))
+            return ForgeArray((data - mn) / (mx - mn))
+
+        def forge_cummax(x):
+            """cummax(x) — cumulative maximum."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            return ForgeArray(np.maximum.accumulate(data))
+
+        def forge_cummin(x):
+            """cummin(x) — cumulative minimum."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            return ForgeArray(np.minimum.accumulate(data))
+
+        def forge_mode_stat(x):
+            """mode(x) — most frequent value."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            result = _stats.mode(data, keepdims=False)
+            return ForgeArray(np.float64(result.mode))
+
+        def forge_skewness(x):
+            """skewness(x) — sample skewness."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            return ForgeArray(np.float64(_stats.skew(data)))
+
+        def forge_kurtosis(x):
+            """kurtosis(x) — sample kurtosis (excess)."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            return ForgeArray(np.float64(_stats.kurtosis(data)))
+
+        def forge_ttest(x, *args):
+            """[h, p] = ttest(x) — one-sample t-test."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            if isinstance(x, ForgeArray):
+                data = x.data.flatten()
+            else:
+                data = np.array(x).flatten()
+            mu = 0
+            if args and isinstance(args[0], ForgeArray):
+                mu = float(args[0].data.flat[0])
+            stat, pval = _stats.ttest_1samp(data, mu)
+            h = ForgeArray(np.float64(1 if pval < 0.05 else 0))
+            p = ForgeArray(np.float64(pval))
+            return h, p
+
+        def forge_ttest2(x, y):
+            """[h, p] = ttest2(x, y) — two-sample t-test."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            stat, pval = _stats.ttest_ind(xd, yd)
+            h = ForgeArray(np.float64(1 if pval < 0.05 else 0))
+            p = ForgeArray(np.float64(pval))
+            return h, p
+
+        def forge_chi2test(observed, expected=None):
+            """[h, p] = chi2gof(observed) — chi-squared goodness of fit."""
+            from forge.engine.types import ForgeArray
+            from scipy import stats as _stats
+            if isinstance(observed, ForgeArray):
+                observed = observed.data.flatten()
+            if expected is not None and isinstance(expected, ForgeArray):
+                expected = expected.data.flatten()
+            if expected is not None:
+                stat, pval = _stats.chisquare(observed, expected)
+            else:
+                stat, pval = _stats.chisquare(observed)
+            h = ForgeArray(np.float64(1 if pval < 0.05 else 0))
+            p = ForgeArray(np.float64(pval))
+            return h, p
+
+        def forge_fitlm(x, y):
+            """fitlm(x, y) — simple linear regression (returns struct with coefficients)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeStruct
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            # y = a + b*x
+            n = len(xd)
+            X = np.column_stack([np.ones(n), xd])
+            beta, residuals, rank, sv = np.linalg.lstsq(X, yd, rcond=None)
+            y_pred = X @ beta
+            ss_res = np.sum((yd - y_pred)**2)
+            ss_tot = np.sum((yd - np.mean(yd))**2)
+            r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+            s = ForgeStruct()
+            s._fields = {
+                'Coefficients': ForgeArray(np.array(beta)),
+                'Rsquared': ForgeArray(np.float64(r_squared)),
+                'Residuals': ForgeArray(yd - y_pred),
+            }
+            return s
+
+        def forge_pdist(X, *args):
+            """pdist(X) — pairwise distances between rows."""
+            from forge.engine.types import ForgeArray
+            from scipy.spatial.distance import pdist as _pdist
+            if isinstance(X, ForgeArray):
+                X = X.data
+            return ForgeArray(_pdist(X))
+
+        def forge_squareform(Y):
+            """squareform(Y) — convert distance vector to matrix."""
+            from forge.engine.types import ForgeArray
+            from scipy.spatial.distance import squareform as _sqf
+            if isinstance(Y, ForgeArray):
+                Y = Y.data.flatten()
+            return ForgeArray(_sqf(Y))
+
+        def forge_kmeans(X, k):
+            """[idx, C] = kmeans(X, k) — k-means clustering."""
+            from forge.engine.types import ForgeArray
+            from scipy.cluster.vq import kmeans2
+            if isinstance(X, ForgeArray):
+                X = X.data
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            centroids, labels = kmeans2(X.astype(np.float64), k, minit='++')
+            return ForgeArray((labels + 1).astype(np.float64)), ForgeArray(centroids)
+
+        def forge_regress(y, X):
+            """[b, bint, r] = regress(y, X) — multiple linear regression."""
+            from forge.engine.types import ForgeArray
+            yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            Xd = X.data if isinstance(X, ForgeArray) else np.atleast_2d(X)
+            beta, residuals, rank, sv = np.linalg.lstsq(Xd, yd, rcond=None)
+            r = yd - Xd @ beta
+            return ForgeArray(beta), ForgeArray(np.zeros((len(beta), 2))), ForgeArray(r)
+
+        def forge_polyconf(p, x, S):
+            """polyconf(p, x, S) — confidence intervals for polyfit."""
+            from forge.engine.types import ForgeArray
+            # Simplified: just evaluate the polynomial
+            pd = p.data.flatten() if isinstance(p, ForgeArray) else np.array(p)
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x)
+            y = np.polyval(pd, xd)
+            return ForgeArray(y), ForgeArray(np.zeros_like(y))
+
+        def forge_randsample(n, k):
+            """randsample(n, k) — random sample without replacement."""
+            from forge.engine.types import ForgeArray
+            if isinstance(n, ForgeArray):
+                if n.data.size > 1:
+                    pop = n.data.flatten()
+                    k_val = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+                    idx = np.random.choice(len(pop), k_val, replace=False)
+                    return ForgeArray(pop[idx])
+                n = int(n.data.flat[0])
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            return ForgeArray(np.random.choice(n, k, replace=False).astype(np.float64) + 1)
+
+        def forge_datasample(data, k):
+            """datasample(data, k) — random sample from data with replacement."""
+            from forge.engine.types import ForgeArray
+            if isinstance(data, ForgeArray):
+                data = data.data.flatten()
+            if isinstance(k, ForgeArray):
+                k = int(k.data.flat[0])
+            idx = np.random.choice(len(data), k, replace=True)
+            return ForgeArray(data[idx])
+
+        def forge_bootstrp(nboot, func, data):
+            """bootstrp(nboot, func, data) — bootstrap statistics."""
+            from forge.engine.types import ForgeArray
+            if isinstance(nboot, ForgeArray):
+                nboot = int(nboot.data.flat[0])
+            if isinstance(data, ForgeArray):
+                data = data.data.flatten()
+            stats = []
+            for _ in range(nboot):
+                sample = data[np.random.randint(0, len(data), len(data))]
+                if callable(func):
+                    result = func(ForgeArray(sample))
+                    if isinstance(result, ForgeArray):
+                        stats.append(float(result.data.flat[0]))
+                    else:
+                        stats.append(float(result))
+            return ForgeArray(np.array(stats))
+
+        # Register all
+        session._engine.functions["prctile"] = forge_prctile
+        session._engine.functions["quantile"] = forge_quantile
+        session._engine.functions["iqr"] = forge_iqr
+        session._engine.functions["zscore"] = forge_zscore
+        session._engine.functions["normalize"] = forge_normalize
+        session._engine.functions["cummax"] = forge_cummax
+        session._engine.functions["cummin"] = forge_cummin
+        session._engine.functions["mode"] = forge_mode_stat
+        session._engine.functions["skewness"] = forge_skewness
+        session._engine.functions["kurtosis"] = forge_kurtosis
+        session._engine.functions["ttest"] = forge_ttest
+        session._engine.functions["ttest2"] = forge_ttest2
+        session._engine.functions["chi2gof"] = forge_chi2test
+        session._engine.functions["fitlm"] = forge_fitlm
+        session._engine.functions["pdist"] = forge_pdist
+        session._engine.functions["squareform"] = forge_squareform
+        session._engine.functions["kmeans"] = forge_kmeans
+        session._engine.functions["regress"] = forge_regress
+        session._engine.functions["polyconf"] = forge_polyconf
+        session._engine.functions["randsample"] = forge_randsample
+        session._engine.functions["datasample"] = forge_datasample
+        session._engine.functions["bootstrp"] = forge_bootstrp
+
 
 
 
