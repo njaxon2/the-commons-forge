@@ -26,6 +26,7 @@ class ForgeMainWindow(QMainWindow):
         self._create_toolbar()
         self._create_docks()
         self._create_status_bar()
+        self._set_default_layout()
         self._restore_state()
 
     # ------------------------------------------------------------------
@@ -190,6 +191,21 @@ class ForgeMainWindow(QMainWindow):
         tb.addAction(self.action_stop)
 
     # ------------------------------------------------------------------
+    def _set_default_layout(self):
+        """Set initial dock sizes: command window gets ~40% of vertical space."""
+        # resizeDocks takes a list of docks and a list of sizes
+        # Give command window 320px (40% of 800), file browser 280px width
+        self.resizeDocks(
+            [self.command_dock],
+            [320],
+            Qt.Vertical,
+        )
+        self.resizeDocks(
+            [self.file_browser_dock],
+            [280],
+            Qt.Horizontal,
+        )
+
     # Dock widgets
     # ------------------------------------------------------------------
 
@@ -201,6 +217,7 @@ class ForgeMainWindow(QMainWindow):
 
         # --- Command Window (bottom) ---
         self.command_widget = CommandWidget(self)
+        self.command_widget.setMinimumHeight(200)
         self.command_dock = self._make_dock("Command Window", "CommandDock",
                                            self.command_widget)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)

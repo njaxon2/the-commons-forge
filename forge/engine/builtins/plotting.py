@@ -862,21 +862,63 @@ def forge_close(n=None):
         plt.close(int(n))
 
 
-def forge_saveas(filename, fmt=None):
-    """Save current figure to *filename*."""
-    if fmt:
-        _cur_fig().savefig(filename, format=fmt)
+def forge_saveas(*args):
+    """Save figure: saveas(handle, filename) or saveas(handle, filename, format) or saveas(filename)."""
+    import numpy as np
+    # Parse args: saveas(h, file) or saveas(h, file, fmt) or saveas(file)
+    if len(args) >= 2:
+        h = args[0]
+        # Convert ForgeArray to int
+        if hasattr(h, 'array'):
+            h = int(h.array.flat[0])
+        filename = args[1]
+        if hasattr(filename, 'to_str'):
+            filename = filename.to_str()
+        elif hasattr(filename, 'array'):
+            filename = str(filename)
+        fmt = args[2] if len(args) > 2 else None
+        if hasattr(fmt, 'to_str'):
+            fmt = fmt.to_str()
+        fig = plt.figure(int(h))
     else:
-        _cur_fig().savefig(filename)
+        filename = args[0]
+        if hasattr(filename, 'to_str'):
+            filename = filename.to_str()
+        fig = _cur_fig()
+        fmt = None
+    if fmt:
+        fig.savefig(str(filename), format=str(fmt), dpi=150, bbox_inches="tight")
+    else:
+        fig.savefig(str(filename), dpi=150, bbox_inches="tight")
 
 
-def forge_print_fig(filename, *args):
-    """Octave-compatible 'print' command (saves to file)."""
+def forge_print_fig(*args):
+    """Octave-compatible print command: print(filename), print(h, filename), print('-dpng', filename)."""
     dpi = 150
+    fig = _cur_fig()
+    filename = None
+    fmt = None
     for a in args:
-        if isinstance(a, str) and a.startswith("-r"):
-            dpi = int(a[2:])
-    _cur_fig().savefig(filename, dpi=dpi)
+        if hasattr(a, 'to_str'):
+            a = a.to_str()
+        elif hasattr(a, 'array'):
+            import numpy as np
+            val = a.array.flat[0]
+            if np.issubdtype(type(val), np.floating) or np.issubdtype(type(val), np.integer):
+                fig = plt.figure(int(val))
+                continue
+        if isinstance(a, str):
+            if a.startswith("-r"):
+                dpi = int(a[2:])
+            elif a.startswith("-d"):
+                fmt = a[2:]
+            else:
+                filename = a
+    if filename:
+        kwargs = {"dpi": dpi, "bbox_inches": "tight"}
+        if fmt:
+            kwargs["format"] = fmt
+        fig.savefig(filename, **kwargs)
 
 
 # ===================================================================

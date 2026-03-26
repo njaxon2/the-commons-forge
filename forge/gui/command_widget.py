@@ -1,6 +1,7 @@
 """Forge command widget — interactive REPL (forge/gui/command_widget.py)."""
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QLineEdit
 
 
@@ -28,17 +29,32 @@ class CommandWidget(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(2, 2, 2, 2)
+
+        # Monospace font for the whole command widget
+        mono = QFont("Monospace", 10)
+        mono.setStyleHint(QFont.Monospace)
 
         # Output display
         self.output_display = QPlainTextEdit(self)
         self.output_display.setReadOnly(True)
         self.output_display.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.output_display.setFont(mono)
+        self.output_display.setStyleSheet(
+            "QPlainTextEdit { background-color: #1e1e1e; color: #d4d4d4; "
+            "selection-background-color: #264f78; }"
+        )
         layout.addWidget(self.output_display)
 
-        # Input line
+        # Input line with >> prompt
         self.input_line = QLineEdit(self)
-        self.input_line.setPlaceholderText(">> ")
+        self.input_line.setFont(mono)
+        self.input_line.setPlaceholderText("Type command here...")
+        self.input_line.setStyleSheet(
+            "QLineEdit { background-color: #1e1e1e; color: #d4d4d4; "
+            "border: 1px solid #3c3c3c; padding: 4px; padding-left: 24px; }"
+        )
+        # We prepend >> in the echo, not the placeholder
         self.input_line.returnPressed.connect(self._on_return)
         self.input_line.installEventFilter(self)
         layout.addWidget(self.input_line)
