@@ -154,7 +154,7 @@ class ForgeCell:
             if idx < 1:
                 raise IndexError(f"Cell index {idx} out of range (1-based)")
             return idx - 1
-        raise TypeError(f"Cell index must be int, got {type(idx)}")
+        idx = int(idx)  # auto-convert float to int
 
     def content_get(self, *indices):
         """Get cell content: C{i} or C{i,j}."""

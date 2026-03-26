@@ -951,6 +951,41 @@ class ForgeSession:
         ]:
             self._engine.functions[_n] = _f
 
+        # Small gap fixes (R102)
+        def forge_sqrtm(A):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.linalg import sqrtm as _sqrtm
+            if isinstance(A, ForgeArray): A = A.data
+            result = _sqrtm(np.atleast_2d(A))
+            if np.isrealobj(A) and np.allclose(result.imag, 0):
+                result = result.real
+            return ForgeArray(result)
+
+        def forge_rcond(A):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            if isinstance(A, ForgeArray): A = A.data
+            return ForgeArray(np.float64(1.0 / np.linalg.cond(np.atleast_2d(A))))
+
+        def forge_blkdiag(*args):
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.linalg import block_diag
+            mats = []
+            for a in args:
+                if isinstance(a, ForgeArray):
+                    mats.append(np.atleast_2d(a.data))
+                elif isinstance(a, np.ndarray):
+                    mats.append(np.atleast_2d(a))
+                else:
+                    mats.append(np.atleast_2d(np.array([[float(a)]])))
+            return ForgeArray(block_diag(*mats))
+
+        self._engine.functions["sqrtm"] = forge_sqrtm
+        self._engine.functions["rcond"] = forge_rcond
+        self._engine.functions["blkdiag"] = forge_blkdiag
+
 
 
 
