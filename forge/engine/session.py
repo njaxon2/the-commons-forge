@@ -4167,6 +4167,260 @@ class ForgeSession:
         session._engine.functions["dbclear"] = forge_dbclear
         session._engine.functions["dbstatus"] = forge_dbstatus
         session._engine.functions["profile"] = forge_profile_func
+
+        # R142: Additional common functions
+        def forge_accumdim(f, x, dim=None):
+            """accumdim(f, x, dim) — accumulate along dimension."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            d = 0
+            if dim is not None:
+                d = int(dim.data.flat[0]) if isinstance(dim, ForgeArray) else int(dim)
+                d -= 1
+            return ForgeArray(np.apply_along_axis(lambda a: np.cumsum(a), d, data))
+
+        def forge_rref(A):
+            """rref(A) — reduced row echelon form."""
+            from forge.engine.types import ForgeArray
+            data = A.data.copy() if isinstance(A, ForgeArray) else np.atleast_2d(A).copy().astype(float)
+            m, n = data.shape
+            pivot_row = 0
+            for col in range(n):
+                if pivot_row >= m: break
+                # Find pivot
+                max_row = pivot_row
+                for row in range(pivot_row + 1, m):
+                    if abs(data[row, col]) > abs(data[max_row, col]):
+                        max_row = row
+                if abs(data[max_row, col]) < 1e-12:
+                    continue
+                data[[pivot_row, max_row]] = data[[max_row, pivot_row]]
+                data[pivot_row] /= data[pivot_row, col]
+                for row in range(m):
+                    if row != pivot_row:
+                        data[row] -= data[row, col] * data[pivot_row]
+                pivot_row += 1
+            return ForgeArray(data)
+
+        def forge_planerot(x):
+            """[G, y] = planerot(x) — Givens plane rotation."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            a, b = xd[0], xd[1]
+            if b == 0:
+                c, s = 1.0, 0.0
+            elif abs(b) > abs(a):
+                tau = -a / b; s = 1 / np.sqrt(1 + tau**2); c = s * tau
+            else:
+                tau = -b / a; c = 1 / np.sqrt(1 + tau**2); s = c * tau
+            G = ForgeArray(np.array([[c, s], [-s, c]]))
+            y = ForgeArray(np.array([[np.sqrt(a**2 + b**2)], [0.0]]))
+            return G, y
+
+        def forge_vecnorm(x, p=None, dim=None):
+            """vecnorm(x, p, dim) — vector norm."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            pd = 2
+            if p is not None:
+                pd = float(p.data.flat[0]) if isinstance(p, ForgeArray) else float(p)
+            if dim is not None:
+                d = int(dim.data.flat[0]) if isinstance(dim, ForgeArray) else int(dim)
+                d -= 1
+                return ForgeArray(np.linalg.norm(data, ord=pd, axis=d, keepdims=True))
+            return ForgeArray(np.float64(np.linalg.norm(data.flatten(), ord=pd)))
+
+        def forge_normest(A, *args):
+            """normest(A) — estimate 2-norm."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(np.linalg.norm(Ad, ord=2)))
+
+        def forge_condest(A):
+            """condest(A) — estimate 1-norm condition number."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            return ForgeArray(np.float64(np.linalg.cond(Ad, 1)))
+
+        def forge_condeig(A):
+            """[V, D, s] = condeig(A) — condition numbers of eigenvalues."""
+            from forge.engine.types import ForgeArray
+            Ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            vals, vecs = np.linalg.eig(Ad)
+            cond = np.zeros(len(vals))
+            try:
+                vecs_inv = np.linalg.inv(vecs)
+                for i in range(len(vals)):
+                    cond[i] = np.linalg.norm(vecs[:, i]) * np.linalg.norm(vecs_inv[i, :])
+            except:
+                cond[:] = np.inf
+            return ForgeArray(vecs), ForgeArray(np.diag(vals)), ForgeArray(cond.reshape(-1, 1))
+
+        # --- More array functions ---
+        def forge_repelem(x, r, *args):
+            """repelem(x, r, c) — replicate array elements."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            rd = int(r.data.flat[0]) if isinstance(r, ForgeArray) else int(r)
+            if args:
+                cd = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                return ForgeArray(np.repeat(np.repeat(data, rd, axis=0), cd, axis=1))
+            return ForgeArray(np.repeat(data, rd, axis=0))
+
+        def forge_logspace2(a, b, *args):
+            """logspace(a, b, n) — logarithmically spaced vector."""
+            from forge.engine.types import ForgeArray
+            ad = float(a.data.flat[0]) if isinstance(a, ForgeArray) else float(a)
+            bd = float(b.data.flat[0]) if isinstance(b, ForgeArray) else float(b)
+            n = 50
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            return ForgeArray(np.logspace(ad, bd, n).reshape(1, -1))
+
+        def forge_meshgrid2(x, y=None, *args):
+            """[X, Y] = meshgrid(x, y) — 2D grid."""
+            from forge.engine.types import ForgeArray
+            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            if y is None:
+                yd = xd.copy()
+            else:
+                yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+            X, Y = np.meshgrid(xd, yd)
+            return ForgeArray(X), ForgeArray(Y)
+
+        def forge_peaks(*args):
+            """[X, Y, Z] = peaks(n) — sample 3D surface."""
+            from forge.engine.types import ForgeArray
+            n = 49
+            if args and isinstance(args[0], ForgeArray):
+                n = int(args[0].data.flat[0])
+            x = np.linspace(-3, 3, n)
+            y = np.linspace(-3, 3, n)
+            X, Y = np.meshgrid(x, y)
+            Z = 3*(1-X)**2*np.exp(-X**2-(Y+1)**2) - 10*(X/5-X**3-Y**5)*np.exp(-X**2-Y**2) - 1/3*np.exp(-(X+1)**2-Y**2)
+            return ForgeArray(X), ForgeArray(Y), ForgeArray(Z)
+
+        # --- Statistics extras ---
+        def forge_histcounts2(x, *args):
+            """[N, edges] = histcounts(x) — histogram bin counts."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            nbins = 'auto'
+            if args and isinstance(args[0], ForgeArray):
+                a = args[0].data.flatten()
+                if len(a) == 1:
+                    nbins = int(a[0])
+                else:
+                    # Edges provided
+                    N, _ = np.histogram(data, bins=a)
+                    return ForgeArray(N.astype(float).reshape(1, -1)), ForgeArray(a.reshape(1, -1))
+            N, edges = np.histogram(data, bins=nbins)
+            return ForgeArray(N.astype(float).reshape(1, -1)), ForgeArray(edges.reshape(1, -1))
+
+        def forge_tabulate(x):
+            """tabulate(x) — frequency table."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten().astype(int) if isinstance(x, ForgeArray) else np.array(x).flatten().astype(int)
+            counts = np.zeros(max(data) + 1)
+            for v in data:
+                if v >= 0:
+                    counts[v] += 1
+            return ForgeArray(counts.reshape(1, -1))
+
+        def forge_corrcoef2(x, y=None):
+            """corrcoef(x, y) — pairwise correlation."""
+            from forge.engine.types import ForgeArray
+            if y is not None:
+                xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+                yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+                return ForgeArray(np.corrcoef(xd, yd))
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.shape[0] == 1: data = data.T
+            return ForgeArray(np.corrcoef(data, rowvar=False))
+
+        def forge_cov2(x, y=None):
+            """cov(x, y) — covariance."""
+            from forge.engine.types import ForgeArray
+            if y is not None:
+                xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+                yd = y.data.flatten() if isinstance(y, ForgeArray) else np.array(y).flatten()
+                return ForgeArray(np.cov(xd, yd))
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.shape[0] == 1: data = data.T
+            return ForgeArray(np.cov(data, rowvar=False))
+
+        def forge_mvnrnd(mu, sigma, n=None):
+            """mvnrnd(mu, sigma, n) — multivariate normal random."""
+            from forge.engine.types import ForgeArray
+            mud = mu.data.flatten() if isinstance(mu, ForgeArray) else np.array(mu).flatten()
+            sigd = sigma.data if isinstance(sigma, ForgeArray) else np.atleast_2d(sigma)
+            nd = 1
+            if n is not None:
+                nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeArray(np.random.multivariate_normal(mud, sigd, nd))
+
+        def forge_normpdf(x, mu=None, sigma=None):
+            """normpdf(x, mu, sigma) — normal PDF."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            m = 0.0
+            s = 1.0
+            if mu is not None:
+                m = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            if sigma is not None:
+                s = float(sigma.data.flat[0]) if isinstance(sigma, ForgeArray) else float(sigma)
+            result = (1 / (s * np.sqrt(2*np.pi))) * np.exp(-0.5 * ((data - m)/s)**2)
+            return ForgeArray(result)
+
+        def forge_normcdf(x, mu=None, sigma=None):
+            """normcdf(x, mu, sigma) — normal CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erfc
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            m = 0.0
+            s = 1.0
+            if mu is not None:
+                m = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            if sigma is not None:
+                s = float(sigma.data.flat[0]) if isinstance(sigma, ForgeArray) else float(sigma)
+            z = (data - m) / s
+            result = 0.5 * erfc(-z / np.sqrt(2))
+            return ForgeArray(result)
+
+        def forge_norminv(p, mu=None, sigma=None):
+            """norminv(p, mu, sigma) — inverse normal CDF."""
+            from forge.engine.types import ForgeArray
+            from scipy.special import erfinv
+            data = p.data if isinstance(p, ForgeArray) else np.atleast_2d(p)
+            m = 0.0
+            s = 1.0
+            if mu is not None:
+                m = float(mu.data.flat[0]) if isinstance(mu, ForgeArray) else float(mu)
+            if sigma is not None:
+                s = float(sigma.data.flat[0]) if isinstance(sigma, ForgeArray) else float(sigma)
+            result = m + s * np.sqrt(2) * erfinv(2 * data - 1)
+            return ForgeArray(result)
+
+        # Register R142 functions
+        session._engine.functions["accumdim"] = forge_accumdim
+        session._engine.functions["rref"] = forge_rref
+        session._engine.functions["planerot"] = forge_planerot
+        session._engine.functions["vecnorm"] = forge_vecnorm
+        session._engine.functions["normest"] = forge_normest
+        session._engine.functions["condest"] = forge_condest
+        session._engine.functions["condeig"] = forge_condeig
+        session._engine.functions["repelem"] = forge_repelem
+        session._engine.functions["logspace"] = forge_logspace2
+        session._engine.functions["meshgrid"] = forge_meshgrid2
+        session._engine.functions["peaks"] = forge_peaks
+        session._engine.functions["histcounts"] = forge_histcounts2
+        session._engine.functions["tabulate"] = forge_tabulate
+        session._engine.functions["corrcoef"] = forge_corrcoef2
+        session._engine.functions["cov"] = forge_cov2
+        session._engine.functions["mvnrnd"] = forge_mvnrnd
+        session._engine.functions["normpdf"] = forge_normpdf
+        session._engine.functions["normcdf"] = forge_normcdf
+        session._engine.functions["norminv"] = forge_norminv
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 

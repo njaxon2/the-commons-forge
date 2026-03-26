@@ -472,4 +472,17 @@ check("strrep_test", "strrep('abcabc', 'b', 'x')", "axcaxc")
 check("double_char", "x = double('A'); x(1)", "65")
 check("logical_conv", "x = logical([1 0 1]); sum(x)", "2")
 
+
+print("\nR142 rref, stats, array extras:")
+check("rref_2x3", "R = rref([1 2 3; 4 5 6]); R(1,1)", "1")
+check("rref_ident", "R = rref([2 0; 0 3]); R(2,2)", "1")
+check("repelem_2", "x = repelem([1 2 3], 1, 2); length(x)", "6")
+check("logspace_3", "x = logspace(0, 2, 3); abs(x(2) - 10) < 1e-10", "1")
+check("meshgrid_sz", "[X, Y] = meshgrid(1:3, 1:2); size(X, 1)", "2")
+check("normpdf_0", "abs(normpdf(0) - 1/sqrt(2*pi)) < 1e-10", "1")
+check("normcdf_0", "abs(normcdf(0) - 0.5) < 1e-10", "1")
+check("norminv_05", "abs(norminv(0.5)) < 1e-10", "1")
+check("vecnorm_2", "abs(vecnorm([3 4]) - 5) < 1e-10", "1")
+check("peaks_size", "[X, Y, Z] = peaks(10); size(Z, 1)", "10")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
