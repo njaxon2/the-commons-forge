@@ -128,4 +128,10 @@ check("cat dim1", "cat(1, [1 2], [3 4])", contains="3")
 check("num2cell", 'class(num2cell([1 2 3]))', "cell")
 check("cell2mat", "cell2mat({1, 2, 3})", contains="2")
 
+# --- File I/O (R94) ---
+print("\nFile I/O (R94):")
+check("fopen/fclose", 'fid = fopen("/tmp/e2e_io.txt", "w"); fclose(fid)', "0")
+check("fileread", 'dlmwrite("/tmp/e2e_data.csv", [1 2; 3 4]); dlmread("/tmp/e2e_data.csv", ",")', contains="3")
+check("tempdir", "tempdir", contains="/tmp")
+
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
