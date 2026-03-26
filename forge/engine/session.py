@@ -254,5 +254,6 @@ class ForgeSession:
             ('format', forge_format),
             ('run', forge_run),
             ('clc', forge_clc),
+            ('source', forge_run),
         ]:
             self._engine.functions[name] = fn
