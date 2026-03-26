@@ -606,4 +606,136 @@ class ForgeSession:
         self._engine.functions["deal"] = _deal_builtin
         self._engine.functions["structfun"] = _structfun_builtin
 
+        # ODE Solvers (R97)
+        def forge_ode45(func, tspan, y0, *args):
+            """Solve ODE using Runge-Kutta 4(5) method (Dormand-Prince)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeCell
+            import numpy as np
+            from scipy.integrate import solve_ivp
+
+            # Extract tspan
+            if isinstance(tspan, ForgeArray):
+                tspan_arr = tspan.data.ravel()
+            else:
+                tspan_arr = np.asarray(tspan).ravel()
+
+            # Extract y0
+            if isinstance(y0, ForgeArray):
+                y0_arr = y0.data.ravel()
+            else:
+                y0_arr = np.atleast_1d(np.asarray(y0, dtype=np.float64))
+
+            t_eval = None
+            if len(tspan_arr) > 2:
+                t_eval = tspan_arr
+                t_span = (tspan_arr[0], tspan_arr[-1])
+            else:
+                t_span = (float(tspan_arr[0]), float(tspan_arr[-1]))
+
+            # Wrap the Forge function for scipy
+            def rhs(t, y):
+                t_fa = ForgeArray(np.float64(t))
+                y_fa = ForgeArray(np.array(y, dtype=np.float64).reshape(-1, 1))
+                result = func(t_fa, y_fa)
+                if isinstance(result, ForgeArray):
+                    return result.data.ravel()
+                return np.asarray(result, dtype=np.float64).ravel()
+
+            sol = solve_ivp(rhs, t_span, y0_arr.astype(np.float64),
+                           method='RK45', t_eval=t_eval, rtol=1e-6, atol=1e-9)
+
+            t_out = ForgeArray(sol.t.reshape(1, -1))
+            y_out = ForgeArray(sol.y)  # n_vars x n_points
+            return (t_out, y_out)
+
+        def forge_ode23(func, tspan, y0, *args):
+            """Solve ODE using Bogacki-Shampine method."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.integrate import solve_ivp
+
+            if isinstance(tspan, ForgeArray):
+                tspan_arr = tspan.data.ravel()
+            else:
+                tspan_arr = np.asarray(tspan).ravel()
+
+            if isinstance(y0, ForgeArray):
+                y0_arr = y0.data.ravel()
+            else:
+                y0_arr = np.atleast_1d(np.asarray(y0, dtype=np.float64))
+
+            t_eval = tspan_arr if len(tspan_arr) > 2 else None
+            t_span = (float(tspan_arr[0]), float(tspan_arr[-1]))
+
+            def rhs(t, y):
+                t_fa = ForgeArray(np.float64(t))
+                y_fa = ForgeArray(np.array(y, dtype=np.float64).reshape(-1, 1))
+                result = func(t_fa, y_fa)
+                if isinstance(result, ForgeArray):
+                    return result.data.ravel()
+                return np.asarray(result, dtype=np.float64).ravel()
+
+            sol = solve_ivp(rhs, t_span, y0_arr.astype(np.float64),
+                           method='RK23', t_eval=t_eval, rtol=1e-3, atol=1e-6)
+
+            t_out = ForgeArray(sol.t.reshape(1, -1))
+            y_out = ForgeArray(sol.y)
+            return (t_out, y_out)
+
+        def forge_ode15s(func, tspan, y0, *args):
+            """Solve stiff ODE using BDF method."""
+            from forge.engine.types import ForgeArray
+            import numpy as np
+            from scipy.integrate import solve_ivp
+
+            if isinstance(tspan, ForgeArray):
+                tspan_arr = tspan.data.ravel()
+            else:
+                tspan_arr = np.asarray(tspan).ravel()
+
+            if isinstance(y0, ForgeArray):
+                y0_arr = y0.data.ravel()
+            else:
+                y0_arr = np.atleast_1d(np.asarray(y0, dtype=np.float64))
+
+            t_eval = tspan_arr if len(tspan_arr) > 2 else None
+            t_span = (float(tspan_arr[0]), float(tspan_arr[-1]))
+
+            def rhs(t, y):
+                t_fa = ForgeArray(np.float64(t))
+                y_fa = ForgeArray(np.array(y, dtype=np.float64).reshape(-1, 1))
+                result = func(t_fa, y_fa)
+                if isinstance(result, ForgeArray):
+                    return result.data.ravel()
+                return np.asarray(result, dtype=np.float64).ravel()
+
+            sol = solve_ivp(rhs, t_span, y0_arr.astype(np.float64),
+                           method='BDF', t_eval=t_eval, rtol=1e-6, atol=1e-9)
+
+            t_out = ForgeArray(sol.t.reshape(1, -1))
+            y_out = ForgeArray(sol.y)
+            return (t_out, y_out)
+
+        def forge_odeset(*args):
+            """Create ODE options struct (stub)."""
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            from forge.engine.types import ForgeArray
+            opts = ForgeStruct()
+            i = 0
+            while i < len(args) - 1:
+                key = args[i]
+                val = args[i+1]
+                if isinstance(key, ForgeChar):
+                    key = key.to_str()
+                opts._fields[str(key)] = val
+                i += 2
+            return opts
+
+        self._engine.functions["ode45"] = forge_ode45
+        self._engine.functions["ode23"] = forge_ode23
+        self._engine.functions["ode15s"] = forge_ode15s
+        self._engine.functions["odeset"] = forge_odeset
+
+
 
