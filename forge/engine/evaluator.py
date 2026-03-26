@@ -1069,6 +1069,28 @@ class Session:
 
     def _do_index(self, target, args):
         """Perform array indexing with evaluated args."""
+        from forge.engine.containers import ForgeChar
+        # ForgeChar indexing returns a char substring
+        if isinstance(target, ForgeChar):
+            s = target.to_str()
+            if len(args) == 1:
+                idx = args[0]
+                if idx is None:
+                    return ForgeChar(s)
+                if isinstance(idx, ForgeArray):
+                    raw_idx = _unwrap(idx)
+                    if raw_idx.dtype == np.bool_:
+                        chars = [s[i] for i in range(len(s)) if raw_idx.ravel()[i]]
+                        return ForgeChar(''.join(chars))
+                    else:
+                        indices = raw_idx.astype(int).ravel() - 1
+                        chars = [s[i] for i in indices if 0 <= i < len(s)]
+                        return ForgeChar(''.join(chars))
+                idx_int = int(_to_py(idx)) - 1
+                if 0 <= idx_int < len(s):
+                    return ForgeChar(s[idx_int])
+                raise IndexError(f"String index {idx_int+1} out of range (length {len(s)})")
+            raise IndexError("Too many indices for string")
         if not isinstance(target, ForgeArray):
             raise TypeError(f"Cannot index {type(target).__name__}")
         data = _unwrap(target)
