@@ -712,28 +712,102 @@ def forge_sombrero(*args):
 # Formatting
 # ===================================================================
 
-def forge_title(t: str):
-    _cur_ax().set_title(str(t))
+
+def _parse_text_kwargs(args):
+    """Extract MATLAB-style keyword pairs from args list.
+    Returns (text_string, matplotlib_kwargs)."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+
+    text = None
+    kw = {}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        # First non-keyword arg is the text
+        if text is None:
+            if isinstance(a, ForgeChar):
+                text = a.to_str()
+            elif hasattr(a, 'to_str'):
+                text = a.to_str()
+            else:
+                text = str(a)
+            i += 1
+            continue
+        # Remaining: check for keyword pairs
+        if isinstance(a, (str, ForgeChar)):
+            key = a.to_str() if isinstance(a, ForgeChar) else a
+            if key.lower() in ("fontsize", "fontweight", "fontname", "color",
+                               "horizontalalignment", "verticalalignment",
+                               "interpreter", "rotation") and i + 1 < len(args):
+                val = args[i + 1]
+                if isinstance(val, ForgeChar):
+                    val = val.to_str()
+                elif hasattr(val, 'to_str'):
+                    val = val.to_str()
+                elif isinstance(val, ForgeArray):
+                    val = float(val.data.flat[0])
+                kw[key.lower()] = val
+                i += 2
+                continue
+        i += 1
+    return text or "", kw
+
+def forge_title(*args):
+    """title(str) or title(str, 'FontSize', 14, ...)."""
+    text, kw = _parse_text_kwargs(args)
+    # Map to matplotlib kwargs
+    mpl_kw = {}
+    if "fontsize" in kw:
+        mpl_kw["fontsize"] = kw["fontsize"]
+    if "fontweight" in kw:
+        mpl_kw["fontweight"] = kw["fontweight"]
+    if "color" in kw:
+        mpl_kw["color"] = kw["color"]
+    _cur_ax().set_title(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_xlabel(label: str):
-    _cur_ax().set_xlabel(str(label))
+def forge_xlabel(*args):
+    """xlabel(str) or xlabel(str, 'FontSize', 12, ...)."""
+    text, kw = _parse_text_kwargs(args)
+    mpl_kw = {}
+    if "fontsize" in kw:
+        mpl_kw["fontsize"] = kw["fontsize"]
+    if "fontweight" in kw:
+        mpl_kw["fontweight"] = kw["fontweight"]
+    if "color" in kw:
+        mpl_kw["color"] = kw["color"]
+    _cur_ax().set_xlabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_ylabel(label: str):
-    _cur_ax().set_ylabel(str(label))
+def forge_ylabel(*args):
+    """ylabel(str) or ylabel(str, 'FontSize', 12, ...)."""
+    text, kw = _parse_text_kwargs(args)
+    mpl_kw = {}
+    if "fontsize" in kw:
+        mpl_kw["fontsize"] = kw["fontsize"]
+    if "fontweight" in kw:
+        mpl_kw["fontweight"] = kw["fontweight"]
+    if "color" in kw:
+        mpl_kw["color"] = kw["color"]
+    _cur_ax().set_ylabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
 
 
-def forge_zlabel(label: str):
+def forge_zlabel(*args):
+    """zlabel(str) or zlabel(str, 'FontSize', 12, ...)."""
+    text, kw = _parse_text_kwargs(args)
     ax = _cur_ax()
     if hasattr(ax, "set_zlabel"):
-        ax.set_zlabel(str(label))
+        mpl_kw = {}
+        if "fontsize" in kw:
+            mpl_kw["fontsize"] = kw["fontsize"]
+        ax.set_zlabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
 
@@ -784,10 +858,33 @@ def forge_legend(*args, **kwargs):
             else:
                 labels.append(str(str_args[i]))
             i += 1
+    ax = _cur_ax()
     if labels:
-        _cur_ax().legend(labels, **kwargs)
+        # Collect all plottable handles in creation order
+        from matplotlib.container import BarContainer
+        from matplotlib.lines import Line2D
+        from matplotlib.collections import PathCollection
+        handles = []
+        # First: bar containers (in order)
+        for c in ax.containers:
+            if isinstance(c, BarContainer):
+                handles.append(c)
+        # Then: lines and collections
+        for artist in ax.get_children():
+            if isinstance(artist, Line2D) and not artist.get_label().startswith('_'):
+                handles.append(artist)
+            elif isinstance(artist, PathCollection):
+                handles.append(artist)
+        # Also check for unlabeled lines (created by plot())
+        for line in ax.lines:
+            if line not in handles:
+                handles.append(line)
+        if len(labels) <= len(handles):
+            ax.legend(handles[:len(labels)], labels, **kwargs)
+        else:
+            ax.legend(labels, **kwargs)
     else:
-        _cur_ax().legend(**kwargs)
+        ax.legend(**kwargs)
     plt.draw()
     plt.pause(0.01)
 
