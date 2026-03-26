@@ -5655,6 +5655,668 @@ class ForgeSession:
         session._engine.functions["histeq"] = forge_histeq
         session._engine.functions["fwrite"] = forge_fwrite
         session._engine.functions["fread"] = forge_fread
+
+        # R147: Plotting, utilities, string ops
+
+        # --- Plotting functions (stubs that record calls) ---
+        def forge_plot(*args):
+            """plot(x, y, ...) — 2D line plot (stub)."""
+            pass
+
+        def forge_plot3(*args):
+            """plot3(x, y, z, ...) — 3D line plot (stub)."""
+            pass
+
+        def forge_scatter_func(*args):
+            """scatter(x, y, ...) — scatter plot (stub)."""
+            pass
+
+        def forge_scatter3_func(*args):
+            """scatter3(x, y, z, ...) — 3D scatter plot (stub)."""
+            pass
+
+        def forge_bar_func(*args):
+            """bar(x, y, ...) — bar chart (stub)."""
+            pass
+
+        def forge_barh_func(*args):
+            """barh(x, y, ...) — horizontal bar chart (stub)."""
+            pass
+
+        def forge_surf_func(*args):
+            """surf(X, Y, Z, ...) — surface plot (stub)."""
+            pass
+
+        def forge_mesh_func(*args):
+            """mesh(X, Y, Z, ...) — mesh plot (stub)."""
+            pass
+
+        def forge_contour_func(*args):
+            """contour(X, Y, Z, ...) — contour plot (stub)."""
+            pass
+
+        def forge_contourf_func(*args):
+            """contourf(X, Y, Z, ...) — filled contour (stub)."""
+            pass
+
+        def forge_quiver_func(*args):
+            """quiver(X, Y, U, V, ...) — vector field (stub)."""
+            pass
+
+        def forge_semilogx_func(*args):
+            """semilogx(x, y, ...) — log x plot (stub)."""
+            pass
+
+        def forge_semilogy_func(*args):
+            """semilogy(x, y, ...) — log y plot (stub)."""
+            pass
+
+        def forge_loglog_func(*args):
+            """loglog(x, y, ...) — log-log plot (stub)."""
+            pass
+
+        def forge_stem_func(*args):
+            """stem(x, y, ...) — stem plot (stub)."""
+            pass
+
+        def forge_stairs_func(*args):
+            """stairs(x, y, ...) — stairstep plot (stub)."""
+            pass
+
+        def forge_area_func(*args):
+            """area(x, y, ...) — area plot (stub)."""
+            pass
+
+        def forge_pie_func(*args):
+            """pie(x, ...) — pie chart (stub)."""
+            pass
+
+        def forge_polar_func(*args):
+            """polar(theta, rho, ...) — polar plot (stub)."""
+            pass
+
+        def forge_errorbar_func(*args):
+            """errorbar(x, y, err, ...) — error bars (stub)."""
+            pass
+
+        def forge_fill_func(*args):
+            """fill(x, y, ...) — fill polygon (stub)."""
+            pass
+
+        def forge_patch_func(*args):
+            """patch(x, y, ...) — patch object (stub)."""
+            pass
+
+        def forge_line_func(*args):
+            """line(x, y, ...) — line object (stub)."""
+            pass
+
+        def forge_rectangle_func(*args):
+            """rectangle(x, y, ...) — rectangle (stub)."""
+            pass
+
+        def forge_text_func(*args):
+            """text(x, y, str, ...) — text annotation (stub)."""
+            pass
+
+        def forge_annotation_func(*args):
+            """annotation(...) — figure annotation (stub)."""
+            pass
+
+        def forge_cla_func(*args):
+            """cla — clear current axes (stub)."""
+            pass
+
+        def forge_clf_func(*args):
+            """clf — clear current figure (stub)."""
+            pass
+
+        def forge_gca_func(*args):
+            """gca — get current axes handle (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1))
+
+        def forge_gcf_func(*args):
+            """gcf — get current figure handle (stub)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1))
+
+        def forge_imshow_func(*args):
+            """imshow(img, ...) — display image (stub)."""
+            pass
+
+        def forge_imagesc_func(*args):
+            """imagesc(data, ...) — scaled image (stub)."""
+            pass
+
+        def forge_image_func(*args):
+            """image(data, ...) — display image (stub)."""
+            pass
+
+        def forge_imread_func(fname, *args):
+            """imread(filename) — read image file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            try:
+                from PIL import Image
+                img = np.array(Image.open(fname)).astype(float) / 255.0
+                return ForgeArray(img)
+            except:
+                return ForgeArray(np.array([[]]))
+
+        def forge_imwrite_func(img, fname, *args):
+            """imwrite(img, filename) — write image file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            data = img.data if isinstance(img, ForgeArray) else np.atleast_2d(img)
+            if data.max() <= 1.0:
+                data = (data * 255).astype(np.uint8)
+            try:
+                from PIL import Image
+                Image.fromarray(data.astype(np.uint8)).save(fname)
+            except:
+                pass
+
+        # --- Audio stubs ---
+        def forge_audioread_func(fname, *args):
+            """audioread(filename) — read audio file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            try:
+                import soundfile as sf
+                data, fs = sf.read(fname)
+                return ForgeArray(data.reshape(-1, 1) if data.ndim == 1 else data), ForgeArray(np.float64(fs))
+            except:
+                return ForgeArray(np.array([[]])), ForgeArray(np.float64(44100))
+
+        def forge_audiowrite_func(fname, y, fs):
+            """audiowrite(filename, y, fs) — write audio file."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            data = y.data if isinstance(y, ForgeArray) else np.atleast_2d(y)
+            fsd = int(fs.data.flat[0]) if isinstance(fs, ForgeArray) else int(fs)
+            try:
+                import soundfile as sf
+                sf.write(fname, data.flatten(), fsd)
+            except:
+                pass
+
+        def forge_sound_func(*args):
+            """sound(y, fs) — play audio (stub)."""
+            pass
+
+        def forge_soundsc_func(*args):
+            """soundsc(y, fs) — play scaled audio (stub)."""
+            pass
+
+        # --- Missing utility functions ---
+        def forge_randperm2(n, *args):
+            """randperm(n) or randperm(n, k) — random permutation."""
+            from forge.engine.types import ForgeArray
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            if args and isinstance(args[0], ForgeArray):
+                k = int(args[0].data.flat[0])
+                return ForgeArray(np.random.permutation(nd)[:k].astype(float).reshape(1, -1) + 1)
+            return ForgeArray(np.random.permutation(nd).astype(float).reshape(1, -1) + 1)
+
+        def forge_rng2(seed, *args):
+            """rng(seed) — set random seed."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(seed, ForgeChar):
+                s = seed.to_str()
+                if s == 'shuffle':
+                    np.random.seed(None)
+                elif s == 'default':
+                    np.random.seed(0)
+                return
+            sd = int(seed.data.flat[0]) if isinstance(seed, ForgeArray) else int(seed)
+            np.random.seed(sd)
+
+        def forge_issorted2(x, *args):
+            """issorted(x) — check if sorted."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.float64(1 if np.all(data[:-1] <= data[1:]) else 0))
+
+        def forge_mode2(x, *args):
+            """mode(x) — most frequent value."""
+            from forge.engine.types import ForgeArray
+            from scipy.stats import mode as _mode
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            result = _mode(data, keepdims=False)
+            return ForgeArray(np.float64(result.mode))
+
+        def forge_range2(x, *args):
+            """range(x) — difference between max and min."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.float64(data.max() - data.min()))
+
+        def forge_iqr2(x, *args):
+            """iqr(x) — interquartile range."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.float64(np.percentile(data, 75) - np.percentile(data, 25)))
+
+        def forge_mad2(x, *args):
+            """mad(x) — median absolute deviation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(np.float64(np.median(np.abs(data - np.median(data)))))
+
+        def forge_zscore2(x, *args):
+            """zscore(x) — standardized z-scores."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            mu = np.mean(data)
+            s = np.std(data, ddof=1)
+            if s == 0:
+                return ForgeArray(np.zeros_like(data).reshape(1, -1))
+            return ForgeArray(((data - mu) / s).reshape(1, -1))
+
+        def forge_normalize2(x, *args):
+            """normalize(x) — normalize data."""
+            from forge.engine.types import ForgeArray
+            data = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            if data.shape[0] == 1:
+                mu = np.mean(data)
+                s = np.std(data, ddof=1)
+                if s == 0: s = 1
+                return ForgeArray((data - mu) / s)
+            mu = np.mean(data, axis=0)
+            s = np.std(data, axis=0, ddof=1)
+            s[s == 0] = 1
+            return ForgeArray((data - mu) / s)
+
+        def forge_detrend2(x, *args):
+            """detrend(x) — remove linear trend."""
+            from forge.engine.types import ForgeArray
+            from scipy.signal import detrend as _detrend
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            return ForgeArray(_detrend(data).reshape(1, -1))
+
+        def forge_movmean2(x, k, *args):
+            """movmean(x, k) — moving average."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            result = np.convolve(data, np.ones(kd)/kd, mode='same')
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_movstd2(x, k, *args):
+            """movstd(x, k) — moving standard deviation."""
+            from forge.engine.types import ForgeArray
+            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            kd = int(k.data.flat[0]) if isinstance(k, ForgeArray) else int(k)
+            result = np.zeros_like(data)
+            for i in range(len(data)):
+                lo = max(0, i - kd//2)
+                hi = min(len(data), i + kd//2 + 1)
+                result[i] = np.std(data[lo:hi], ddof=1) if hi - lo > 1 else 0
+            return ForgeArray(result.reshape(1, -1))
+
+        def forge_accumarray2(subs, val, *args):
+            """accumarray(subs, val) — accumulate by subscript."""
+            from forge.engine.types import ForgeArray
+            sd = subs.data.flatten().astype(int) if isinstance(subs, ForgeArray) else np.array(subs).flatten().astype(int)
+            vd = val.data.flatten() if isinstance(val, ForgeArray) else np.array(val).flatten()
+            n = sd.max()
+            result = np.zeros(n)
+            for s, v in zip(sd, vd):
+                result[s - 1] += v
+            return ForgeArray(result.reshape(-1, 1))
+
+        def forge_evalc2(expr):
+            """evalc(expr) — evaluate and capture output."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(expr, ForgeChar): expr = expr.to_str()
+            import io, sys
+            old = sys.stdout
+            sys.stdout = buf = io.StringIO()
+            try:
+                session.eval(expr)
+            finally:
+                sys.stdout = old
+            return ForgeChar(buf.getvalue())
+
+        def forge_genpath2(d):
+            """genpath(dir) — generate path string with subdirs."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(d, ForgeChar): d = d.to_str()
+            paths = [d]
+            for root, dirs, files in os.walk(d):
+                for dn in dirs:
+                    if not dn.startswith('.') and not dn.startswith('+') and not dn.startswith('@'):
+                        paths.append(os.path.join(root, dn))
+            return ForgeChar(os.pathsep.join(paths))
+
+        def forge_what2(*args):
+            """what — list M-files in directory."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            d = os.getcwd()
+            if args:
+                from forge.engine.containers import ForgeChar as FC
+                if isinstance(args[0], FC): d = args[0].to_str()
+            mfiles = sorted([f[:-2] for f in os.listdir(d) if f.endswith('.m')])
+            return ForgeCell._from_list([ForgeChar(f) for f in mfiles])
+
+        def forge_type2(name):
+            """type(name) — display file contents."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(name, ForgeChar): name = name.to_str()
+            for p in session._path:
+                fp = os.path.join(p, name + '.m')
+                if os.path.exists(fp):
+                    with open(fp) as f:
+                        return ForgeChar(f.read())
+            return ForgeChar(f'{name} not found')
+
+        def forge_keyboard2(*args):
+            """keyboard — pause execution (stub)."""
+            pass
+
+        def forge_menu2(title, *args):
+            """menu(title, opt1, ...) — selection menu (stub, returns 1)."""
+            from forge.engine.types import ForgeArray
+            return ForgeArray(np.float64(1))
+
+        # --- More string functions ---
+        def forge_blanks2(n):
+            """blanks(n) — string of n spaces."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            return ForgeChar(' ' * nd)
+
+        def forge_deblank2(s):
+            """deblank(s) — remove trailing blanks."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            return ForgeChar(s.rstrip())
+
+        def forge_strtrim2(s):
+            """strtrim(s) — remove leading/trailing whitespace."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            return ForgeChar(s.strip())
+
+        def forge_pad2(s, n, *args):
+            """pad(s, n, side) — pad string."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            side = 'right'
+            if args and isinstance(args[0], ForgeChar):
+                side = args[0].to_str()
+            if side == 'left':
+                return ForgeChar(s.rjust(nd))
+            elif side == 'both':
+                return ForgeChar(s.center(nd))
+            return ForgeChar(s.ljust(nd))
+
+        def forge_contains2(s, pat):
+            """contains(s, pattern) — check if string contains pattern."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            return ForgeArray(np.float64(1 if pat in s else 0))
+
+        def forge_startsWith2(s, pat):
+            """startsWith(s, prefix) — check prefix."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            return ForgeArray(np.float64(1 if s.startswith(pat) else 0))
+
+        def forge_endsWith2(s, pat):
+            """endsWith(s, suffix) — check suffix."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            return ForgeArray(np.float64(1 if s.endswith(pat) else 0))
+
+        def forge_erase2(s, pat):
+            """erase(s, pattern) — remove pattern from string."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            return ForgeChar(s.replace(pat, ''))
+
+        def forge_replace2(s, old, new):
+            """replace(s, old, new) — replace in string."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(old, ForgeChar): old = old.to_str()
+            if isinstance(new, ForgeChar): new = new.to_str()
+            return ForgeChar(s.replace(old, new))
+
+        def forge_count2(s, pat):
+            """count(s, pattern) — count occurrences."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            return ForgeArray(np.float64(s.count(pat)))
+
+        def forge_extractBefore2(s, pat):
+            """extractBefore(s, pattern) — extract before pattern."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            idx = s.find(pat)
+            if idx < 0: return ForgeChar(s)
+            return ForgeChar(s[:idx])
+
+        def forge_extractAfter2(s, pat):
+            """extractAfter(s, pattern) — extract after pattern."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            idx = s.find(pat)
+            if idx < 0: return ForgeChar(s)
+            return ForgeChar(s[idx + len(pat):])
+
+        def forge_insertBefore2(s, pat, ins):
+            """insertBefore(s, pattern, insert) — insert before pattern."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            if isinstance(ins, ForgeChar): ins = ins.to_str()
+            return ForgeChar(s.replace(pat, ins + pat))
+
+        def forge_insertAfter2(s, pat, ins):
+            """insertAfter(s, pattern, insert) — insert after pattern."""
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            if isinstance(pat, ForgeChar): pat = pat.to_str()
+            if isinstance(ins, ForgeChar): ins = ins.to_str()
+            return ForgeChar(s.replace(pat, pat + ins))
+
+        def forge_compose2(fmt, *args):
+            """compose(formatSpec, args) — compose formatted string."""
+            from forge.engine.containers import ForgeChar
+            from forge.engine.types import ForgeArray
+            if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
+            vals = []
+            for a in args:
+                if isinstance(a, ForgeArray):
+                    vals.append(float(a.data.flat[0]))
+                elif isinstance(a, ForgeChar):
+                    vals.append(a.to_str())
+                else:
+                    vals.append(a)
+            try:
+                return ForgeChar(fmt % tuple(vals))
+            except:
+                return ForgeChar(fmt)
+
+        def forge_join2(sep, *args):
+            """join(delimiter, strs) — join strings."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            if isinstance(sep, ForgeChar): sep = sep.to_str()
+            parts = []
+            for a in args:
+                if isinstance(a, ForgeCell):
+                    for i in range(a._shape[0] * a._shape[1]):
+                        v = a._data[i]
+                        if isinstance(v, ForgeChar):
+                            parts.append(v.to_str())
+                elif isinstance(a, ForgeChar):
+                    parts.append(a.to_str())
+            return ForgeChar(sep.join(parts))
+
+        # --- Bitwise ops (aliases if missing) ---
+        def forge_bitand2(a, b):
+            """bitand(a, b) — bitwise AND."""
+            from forge.engine.types import ForgeArray
+            ad = int(a.data.flat[0]) if isinstance(a, ForgeArray) else int(a)
+            bd = int(b.data.flat[0]) if isinstance(b, ForgeArray) else int(b)
+            return ForgeArray(np.float64(ad & bd))
+
+        def forge_bitor2(a, b):
+            """bitor(a, b) — bitwise OR."""
+            from forge.engine.types import ForgeArray
+            ad = int(a.data.flat[0]) if isinstance(a, ForgeArray) else int(a)
+            bd = int(b.data.flat[0]) if isinstance(b, ForgeArray) else int(b)
+            return ForgeArray(np.float64(ad | bd))
+
+        def forge_bitxor2(a, b):
+            """bitxor(a, b) — bitwise XOR."""
+            from forge.engine.types import ForgeArray
+            ad = int(a.data.flat[0]) if isinstance(a, ForgeArray) else int(a)
+            bd = int(b.data.flat[0]) if isinstance(b, ForgeArray) else int(b)
+            return ForgeArray(np.float64(ad ^ bd))
+
+        # --- Table stubs ---
+        def forge_readtable2(fname, *args):
+            """readtable(filename) — read CSV as table."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            try:
+                data = np.genfromtxt(fname, delimiter=',', skip_header=1)
+                t = ForgeStruct()
+                t._fields["data"] = ForgeArray(data)
+                return t
+            except:
+                return ForgeStruct()
+
+        def forge_writetable2(tbl, fname, *args):
+            """writetable(table, filename) — write table to CSV."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            if isinstance(fname, ForgeChar): fname = fname.to_str()
+            if isinstance(tbl, ForgeStruct) and "data" in tbl._fields:
+                data = tbl._fields["data"]
+                if isinstance(data, ForgeArray):
+                    np.savetxt(fname, data.data, delimiter=',')
+
+        def forge_height2(x):
+            """height(x) — number of rows."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(x.data.shape[0]))
+            return ForgeArray(np.float64(1))
+
+        def forge_width2(x):
+            """width(x) — number of columns."""
+            from forge.engine.types import ForgeArray
+            if isinstance(x, ForgeArray):
+                return ForgeArray(np.float64(x.data.shape[1] if x.data.ndim > 1 else 1))
+            return ForgeArray(np.float64(1))
+
+        # Register all R147 functions
+        session._engine.functions["plot"] = forge_plot
+        session._engine.functions["plot3"] = forge_plot3
+        session._engine.functions["scatter"] = forge_scatter_func
+        session._engine.functions["scatter3"] = forge_scatter3_func
+        session._engine.functions["bar"] = forge_bar_func
+        session._engine.functions["barh"] = forge_barh_func
+        session._engine.functions["surf"] = forge_surf_func
+        session._engine.functions["mesh"] = forge_mesh_func
+        session._engine.functions["contour"] = forge_contour_func
+        session._engine.functions["contourf"] = forge_contourf_func
+        session._engine.functions["quiver"] = forge_quiver_func
+        session._engine.functions["semilogx"] = forge_semilogx_func
+        session._engine.functions["semilogy"] = forge_semilogy_func
+        session._engine.functions["loglog"] = forge_loglog_func
+        session._engine.functions["stem"] = forge_stem_func
+        session._engine.functions["stairs"] = forge_stairs_func
+        session._engine.functions["area"] = forge_area_func
+        session._engine.functions["pie"] = forge_pie_func
+        session._engine.functions["polar"] = forge_polar_func
+        session._engine.functions["errorbar"] = forge_errorbar_func
+        session._engine.functions["fill"] = forge_fill_func
+        session._engine.functions["patch"] = forge_patch_func
+        session._engine.functions["line"] = forge_line_func
+        session._engine.functions["rectangle"] = forge_rectangle_func
+        session._engine.functions["text"] = forge_text_func
+        session._engine.functions["annotation"] = forge_annotation_func
+        session._engine.functions["cla"] = forge_cla_func
+        session._engine.functions["clf"] = forge_clf_func
+        session._engine.functions["gca"] = forge_gca_func
+        session._engine.functions["gcf"] = forge_gcf_func
+        session._engine.functions["imshow"] = forge_imshow_func
+        session._engine.functions["imagesc"] = forge_imagesc_func
+        session._engine.functions["image"] = forge_image_func
+        session._engine.functions["imread"] = forge_imread_func
+        session._engine.functions["imwrite"] = forge_imwrite_func
+        session._engine.functions["audioread"] = forge_audioread_func
+        session._engine.functions["audiowrite"] = forge_audiowrite_func
+        session._engine.functions["sound"] = forge_sound_func
+        session._engine.functions["soundsc"] = forge_soundsc_func
+        session._engine.functions["randperm"] = forge_randperm2
+        session._engine.functions["rng"] = forge_rng2
+        session._engine.functions["issorted"] = forge_issorted2
+        session._engine.functions["mode"] = forge_mode2
+        session._engine.functions["range"] = forge_range2
+        session._engine.functions["iqr"] = forge_iqr2
+        session._engine.functions["mad"] = forge_mad2
+        session._engine.functions["zscore"] = forge_zscore2
+        session._engine.functions["normalize"] = forge_normalize2
+        session._engine.functions["detrend"] = forge_detrend2
+        session._engine.functions["movmean"] = forge_movmean2
+        session._engine.functions["movstd"] = forge_movstd2
+        session._engine.functions["accumarray"] = forge_accumarray2
+        session._engine.functions["evalc"] = forge_evalc2
+        session._engine.functions["genpath"] = forge_genpath2
+        session._engine.functions["what"] = forge_what2
+        session._engine.functions["type"] = forge_type2
+        session._engine.functions["keyboard"] = forge_keyboard2
+        session._engine.functions["menu"] = forge_menu2
+        session._engine.functions["blanks"] = forge_blanks2
+        session._engine.functions["deblank"] = forge_deblank2
+        session._engine.functions["strtrim"] = forge_strtrim2
+        session._engine.functions["pad"] = forge_pad2
+        session._engine.functions["contains"] = forge_contains2
+        session._engine.functions["startsWith"] = forge_startsWith2
+        session._engine.functions["endsWith"] = forge_endsWith2
+        session._engine.functions["erase"] = forge_erase2
+        session._engine.functions["replace"] = forge_replace2
+        session._engine.functions["count"] = forge_count2
+        session._engine.functions["extractBefore"] = forge_extractBefore2
+        session._engine.functions["extractAfter"] = forge_extractAfter2
+        session._engine.functions["insertBefore"] = forge_insertBefore2
+        session._engine.functions["insertAfter"] = forge_insertAfter2
+        session._engine.functions["compose"] = forge_compose2
+        session._engine.functions["join"] = forge_join2
+        session._engine.functions["bitand"] = forge_bitand2
+        session._engine.functions["bitor"] = forge_bitor2
+        session._engine.functions["bitxor"] = forge_bitxor2
+        session._engine.functions["readtable"] = forge_readtable2
+        session._engine.functions["writetable"] = forge_writetable2
+        session._engine.functions["height"] = forge_height2
+        session._engine.functions["width"] = forge_width2
         session._engine.functions["nthroot"] = forge_nthroot_safe
 
 
@@ -6570,7 +7232,7 @@ class ForgeSession:
                 x = x.data.flatten()
             return ForgeArray(np.float64(np.percentile(x, 75) - np.percentile(x, 25)))
 
-        def forge_zscore(x):
+        def forge_zscore(x, *args):
             """zscore(x) — standardize to zero mean, unit variance."""
             from forge.engine.types import ForgeArray
             if isinstance(x, ForgeArray):
@@ -6578,7 +7240,15 @@ class ForgeSession:
             else:
                 data = np.array(x, dtype=np.float64)
             if data.ndim == 1:
-                data = data.reshape(-1, 1)
+                data = data.reshape(1, -1)
+            # For row vectors or single-row matrices, operate on all elements
+            if data.shape[0] == 1:
+                flat = data.flatten()
+                mu = np.mean(flat)
+                sigma = np.std(flat, ddof=1)
+                if sigma == 0: sigma = 1
+                return ForgeArray(((flat - mu) / sigma).reshape(1, -1))
+            # For matrices, operate column-wise
             mu = np.mean(data, axis=0)
             sigma = np.std(data, axis=0, ddof=1)
             sigma[sigma == 0] = 1
