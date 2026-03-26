@@ -303,8 +303,8 @@ class ForgeMainWindow(QMainWindow):
     def _focus_command_input(self):
         """Focus the command input line."""
         if hasattr(self, "command_widget") and self.command_widget:
-            self.command_widget.input_line.setFocus()
-            self.command_widget.input_line.selectAll()
+            self.command_widget.console.setFocus()
+            pass  # single-pane console
 
     def _reset_layout(self):
         """Remove saved state so next launch uses defaults."""
