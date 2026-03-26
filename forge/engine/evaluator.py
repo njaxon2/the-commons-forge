@@ -93,6 +93,182 @@ class Workspace:
         return self._vars.items()
 
 
+
+# --- Container utility builtins (R90) ---
+import numpy as np
+
+def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
+    """Apply function to each element of a cell array."""
+    from forge.engine.containers import ForgeCell, ForgeChar
+    from forge.engine.types import ForgeArray
+    if isinstance(cell_arg, ForgeCell):
+        items = cell_arg._data
+    elif isinstance(cell_arg, (list, tuple)):
+        items = list(cell_arg)
+    else:
+        items = [cell_arg]
+
+    results = []
+    for item in items:
+        r = func(item)
+        results.append(r)
+
+    # Check if all results are scalars -> return array
+    all_scalar = all(
+        isinstance(r, (int, float, np.integer, np.floating)) or
+        (isinstance(r, ForgeArray) and r.data.size == 1) or
+        (isinstance(r, np.ndarray) and r.size == 1)
+        for r in results
+    )
+    if all_scalar:
+        vals = []
+        for r in results:
+            if isinstance(r, ForgeArray):
+                vals.append(float(r.data.flat[0]))
+            elif isinstance(r, np.ndarray):
+                vals.append(float(r.flat[0]))
+            else:
+                vals.append(float(r))
+        return ForgeArray(np.array(vals, dtype=np.float64))
+    return ForgeCell(results)
+
+
+def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
+    """Apply function element-wise to array(s)."""
+    from forge.engine.types import ForgeArray
+    if isinstance(arr, ForgeArray):
+        data = arr.data
+    elif isinstance(arr, np.ndarray):
+        data = arr
+    else:
+        data = np.atleast_1d(np.asarray(arr, dtype=np.float64))
+
+    extra_data = []
+    for ea in extra_arrs:
+        if isinstance(ea, ForgeArray):
+            extra_data.append(ea.data)
+        elif isinstance(ea, np.ndarray):
+            extra_data.append(ea)
+        else:
+            extra_data.append(np.atleast_1d(np.asarray(ea, dtype=np.float64)))
+
+    results = []
+    flat = data.ravel()
+    extra_flat = [e.ravel() for e in extra_data]
+    for i in range(len(flat)):
+        call_args = [flat[i]] + [ef[i] if i < len(ef) else ef[-1] for ef in extra_flat]
+        r = func(*call_args)
+        if isinstance(r, ForgeArray):
+            results.append(float(r.data.flat[0]))
+        elif isinstance(r, np.ndarray):
+            results.append(float(r.flat[0]))
+        else:
+            results.append(float(r))
+
+    result = np.array(results, dtype=np.float64).reshape(data.shape)
+    return ForgeArray(result)
+
+
+def _num2cell_builtin(arr, *args):
+    """Convert array to cell array."""
+    from forge.engine.containers import ForgeCell
+    from forge.engine.types import ForgeArray
+    if isinstance(arr, ForgeArray):
+        data = arr.data
+    elif isinstance(arr, np.ndarray):
+        data = arr
+    else:
+        return ForgeCell([arr])
+
+    return ForgeCell([ForgeArray(np.atleast_1d(np.array(x))) for x in data.ravel()])
+
+
+def _cell2mat_builtin(c):
+    """Convert cell array of matrices to a single matrix."""
+    from forge.engine.containers import ForgeCell
+    from forge.engine.types import ForgeArray
+    if not isinstance(c, ForgeCell):
+        return c
+
+    items = c._data
+    vals = []
+    for item in items:
+        if isinstance(item, ForgeArray):
+            vals.append(item.data)
+        elif isinstance(item, np.ndarray):
+            vals.append(item)
+        elif isinstance(item, (int, float)):
+            vals.append(np.array(item))
+        else:
+            vals.append(np.array(float(item)))
+
+    shape = c.shape
+    if len(shape) == 2 and shape[0] > 1:
+        rows = []
+        idx = 0
+        for i in range(shape[0]):
+            row_blocks = []
+            for j in range(shape[1]):
+                row_blocks.append(np.atleast_2d(vals[idx]))
+                idx += 1
+            rows.append(np.hstack(row_blocks))
+        result = np.vstack(rows)
+    else:
+        result = np.concatenate([np.atleast_1d(v) for v in vals])
+
+    return ForgeArray(result)
+
+
+def _rmfield_builtin(s, field):
+    """Remove field from struct."""
+    from forge.engine.containers import ForgeStruct, ForgeChar
+    if isinstance(field, ForgeChar):
+        field = field.to_str()
+    field = str(field)
+    if not isinstance(s, ForgeStruct):
+        raise ValueError("First argument must be a struct")
+    new_s = ForgeStruct()
+    for k, v in s._fields.items():
+        if k != field:
+            new_s._fields[k] = v
+    return new_s
+
+
+def _cat_builtin(dim, *arrays):
+    """Concatenate arrays along dimension dim."""
+    from forge.engine.types import ForgeArray
+    dim = int(dim) - 1  # Convert to 0-based
+    np_arrays = []
+    for a in arrays:
+        if isinstance(a, ForgeArray):
+            np_arrays.append(a.data)
+        elif isinstance(a, np.ndarray):
+            np_arrays.append(a)
+        else:
+            np_arrays.append(np.atleast_1d(np.asarray(a, dtype=np.float64)))
+
+    if dim == 0:
+        processed = []
+        for a in np_arrays:
+            if a.ndim == 1:
+                processed.append(a.reshape(1, -1))
+            else:
+                processed.append(a)
+        result = np.vstack(processed)
+    elif dim == 1:
+        processed = []
+        for a in np_arrays:
+            if a.ndim == 1:
+                processed.append(a.reshape(1, -1))
+            else:
+                processed.append(a)
+        result = np.hstack(processed)
+    else:
+        result = np.concatenate(np_arrays, axis=dim)
+
+    return ForgeArray(result)
+
+
 class Session:
     """Forge execution session — holds workspace, output, and function registry."""
 

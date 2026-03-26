@@ -292,3 +292,16 @@ class ForgeSession:
             ('source', forge_run),
         ]:
             self._engine.functions[name] = fn
+
+        # Container utilities (R90)
+        from forge.engine.evaluator import (
+            _cellfun_builtin, _arrayfun_builtin, _num2cell_builtin,
+            _cell2mat_builtin, _rmfield_builtin, _cat_builtin
+        )
+        self._engine.functions["cellfun"] = _cellfun_builtin
+        self._engine.functions["arrayfun"] = _arrayfun_builtin
+        self._engine.functions["num2cell"] = _num2cell_builtin
+        self._engine.functions["cell2mat"] = _cell2mat_builtin
+        self._engine.functions["rmfield"] = _rmfield_builtin
+        self._engine.functions["cat"] = _cat_builtin
+

@@ -880,3 +880,125 @@ def forge_strcat(*args):
             result += str(a)
     return ForgeChar(result)
 
+
+
+@_tb("strrep")
+def forge_strrep(s, old, new):
+    """Replace occurrences of old with new in string s."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(old, ForgeChar):
+        old = old.to_str()
+    if isinstance(new, ForgeChar):
+        new = new.to_str()
+    return ForgeChar(str(s).replace(str(old), str(new)))
+
+
+@_tb("strfind")
+def forge_strfind(s, pattern):
+    """Find occurrences of pattern in string. Returns 1-based indices."""
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    import numpy as np
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(pattern, ForgeChar):
+        pattern = pattern.to_str()
+    s, pattern = str(s), str(pattern)
+    indices = []
+    start = 0
+    while True:
+        idx = s.find(pattern, start)
+        if idx == -1:
+            break
+        indices.append(idx + 1)  # 1-based
+        start = idx + 1
+    if not indices:
+        return ForgeArray(np.array([], dtype=np.float64))
+    return ForgeArray(np.array(indices, dtype=np.float64))
+
+
+@_tb("regexp")
+def forge_regexp(s, pat, *args):
+    """Regular expression matching. Returns match start indices or tokens."""
+    import re
+    import numpy as np
+    from forge.engine.containers import ForgeChar, ForgeCell
+    from forge.engine.types import ForgeArray
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(pat, ForgeChar):
+        pat = pat.to_str()
+    s, pat = str(s), str(pat)
+
+    # Parse output options
+    out_types = []
+    for a in args:
+        if isinstance(a, ForgeChar):
+            out_types.append(a.to_str())
+        elif isinstance(a, str):
+            out_types.append(a)
+        else:
+            out_types.append(str(a))
+
+    matches = list(re.finditer(pat, s))
+
+    if not out_types or "start" in out_types:
+        if not matches:
+            return ForgeArray(np.array([], dtype=np.float64))
+        return ForgeArray(np.array([m.start() + 1 for m in matches], dtype=np.float64))
+    elif "match" in out_types:
+        if not matches:
+            return ForgeCell([])
+        return ForgeCell([ForgeChar(m.group()) for m in matches])
+    elif "tokens" in out_types:
+        result = []
+        for m in matches:
+            groups = m.groups()
+            if groups:
+                result.append(ForgeCell([ForgeChar(g) if g else ForgeChar("") for g in groups]))
+            else:
+                result.append(ForgeCell([ForgeChar(m.group())]))
+        return ForgeCell(result) if result else ForgeCell([])
+    elif "names" in out_types:
+        from forge.engine.containers import ForgeStruct
+        result = []
+        for m in matches:
+            d = m.groupdict()
+            if d:
+                st = ForgeStruct()
+                for k, v in d.items():
+                    st._fields[k] = ForgeChar(v if v else "")
+                result.append(st)
+        return ForgeCell(result) if result else ForgeCell([])
+    else:
+        if not matches:
+            return ForgeArray(np.array([], dtype=np.float64))
+        return ForgeArray(np.array([m.start() + 1 for m in matches], dtype=np.float64))
+
+
+@_tb("regexpi")
+def forge_regexpi(s, pat, *args):
+    """Case-insensitive regexp."""
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(pat, ForgeChar):
+        pat = pat.to_str()
+    pat = "(?i)" + str(pat)
+    return forge_regexp(ForgeChar(str(s)), ForgeChar(pat), *args)
+
+
+@_tb("regexprep")
+def forge_regexprep(s, pat, rep):
+    """Regular expression replace."""
+    import re
+    from forge.engine.containers import ForgeChar
+    if isinstance(s, ForgeChar):
+        s = s.to_str()
+    if isinstance(pat, ForgeChar):
+        pat = pat.to_str()
+    if isinstance(rep, ForgeChar):
+        rep = rep.to_str()
+    return ForgeChar(re.sub(str(pat), str(rep), str(s)))
