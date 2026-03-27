@@ -18,6 +18,10 @@ from PySide6.QtWidgets import (
     QApplication, QLabel,
 )
 
+from forge.gui.commons_integration import (
+    UpdateChecker, AMSConnector, FeatureRequestDialog,
+)
+
 
 class ForgeMainWindow(QMainWindow):
     """Top-level application window for the Forge IDE."""
@@ -40,6 +44,9 @@ class ForgeMainWindow(QMainWindow):
         self._create_status_bar()
         self._set_default_layout()
         self._restore_state()
+
+        # TheCommons integration
+        self._setup_commons()
 
     # ==================================================================
     # Engine integration
@@ -184,6 +191,14 @@ class ForgeMainWindow(QMainWindow):
         self.act_docs = QAction("&Documentation", self, shortcut="F1")
         self.act_docs.triggered.connect(self._show_docs)
 
+        # TheCommons actions
+        self.act_check_updates = QAction("Check for &Updates...", self)
+        self.act_check_updates.triggered.connect(self._check_for_updates)
+        self.act_feature_request = QAction("Submit &Feature Request...", self)
+        self.act_feature_request.triggered.connect(self._open_feature_request)
+        self.act_ams_toggle = QAction("AMS &Telemetry...", self)
+        self.act_ams_toggle.triggered.connect(self._toggle_ams)
+
     # ==================================================================
     # Menus
     # ==================================================================
@@ -255,6 +270,11 @@ class ForgeMainWindow(QMainWindow):
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.act_about)
         help_menu.addAction(self.act_docs)
+        help_menu.addSeparator()
+        help_menu.addAction(self.act_check_updates)
+        help_menu.addAction(self.act_feature_request)
+        help_menu.addSeparator()
+        help_menu.addAction(self.act_ams_toggle)
 
     # ==================================================================
     # Toolbar
@@ -539,6 +559,64 @@ class ForgeMainWindow(QMainWindow):
         self.help_dock.setVisible(True)
         self.help_dock.raise_()
         self.help_widget.search_edit.setFocus()
+
+    # ==================================================================
+    # TheCommons integration
+    # ==================================================================
+
+    def _setup_commons(self):
+        """Initialize TheCommons services (update checker, AMS)."""
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+
+        # Update checker
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.update_available.connect(self._on_update_available)
+        self._update_checker.start()
+
+        # AMS connector
+        self._ams = AMSConnector(self)
+
+    def _on_update_available(self, version, url):
+        """Show non-intrusive update notification in status bar."""
+        self.statusBar().showMessage(
+            f"Forge update available: v{version}  —  Visit thecommons.earth to download",
+            0,  # permanent until cleared
+        )
+
+    def _check_for_updates(self):
+        """Manual update check triggered from Help menu."""
+        self.set_status("Checking for updates...")
+        self._update_checker.check_now()
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(3000, lambda: self.set_status("Ready"))
+
+    def _open_feature_request(self):
+        """Open the feature request dialog."""
+        dlg = FeatureRequestDialog(self)
+        dlg.exec()
+
+    def _toggle_ams(self):
+        """Toggle AMS telemetry via opt-in dialog."""
+        if self._ams.enabled:
+            from PySide6.QtWidgets import QMessageBox
+            result = QMessageBox.question(
+                self, "AMS Telemetry",
+                "Anonymized telemetry is currently <b>enabled</b>.<br>"
+                "Would you like to disable it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if result == QMessageBox.StandardButton.Yes:
+                self._ams.disconnect()
+                self.set_status("AMS telemetry disabled")
+            else:
+                self.set_status("AMS telemetry remains enabled")
+        else:
+            opted_in = self._ams.show_opt_in_dialog(self)
+            if opted_in:
+                self.set_status("AMS telemetry enabled")
+            else:
+                self.set_status("AMS telemetry remains disabled")
 
     def _show_about(self):
         from PySide6.QtWidgets import QMessageBox
