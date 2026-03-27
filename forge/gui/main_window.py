@@ -37,6 +37,7 @@ class ForgeMainWindow(QMainWindow):
         # creates a tab group instead of hiding it.
         self.setDockNestingEnabled(True)
 
+        self._recent_files = self._load_recent_files()
         self._create_actions()
         self._create_docks()
         self._create_menus()
@@ -68,6 +69,16 @@ class ForgeMainWindow(QMainWindow):
         if hasattr(self, '_func_count_label'):
             n = len(session._engine.functions) if hasattr(session, '_engine') else 0
             self._func_count_label.setText(f"{n} functions")
+
+        # Feed function names to editor autocomplete
+        if hasattr(session, '_engine'):
+            func_names = list(session._engine.functions.keys())
+            for i in range(self.editor_widget.tabs.count()):
+                editor = self.editor_widget.tabs.widget(i)
+                if hasattr(editor, 'set_function_names'):
+                    editor.set_function_names(func_names)
+            # Store for new tabs
+            self.editor_widget._engine_func_names = func_names
 
     def _connect_signals(self):
         self.command_widget.command_executed.connect(self._update_workspace)
@@ -214,6 +225,9 @@ class ForgeMainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self.act_save)
         file_menu.addAction(self.act_save_as)
+        file_menu.addSeparator()
+        self.recent_menu = file_menu.addMenu("Recent Files")
+        self._update_recent_menu()
         file_menu.addSeparator()
         file_menu.addAction(self.act_exit)
 
@@ -482,6 +496,7 @@ class ForgeMainWindow(QMainWindow):
         if path:
             self.editor_widget.open_file(path)
             self.editor_dock.raise_()
+            self._add_recent_file(path)
 
     def _on_save_file(self):
         editor = self.editor_widget.get_current_editor()
@@ -518,6 +533,52 @@ class ForgeMainWindow(QMainWindow):
         """Public method to open a file in the editor (used by 'edit' command)."""
         self.editor_widget.open_file(path)
         self.editor_dock.raise_()
+
+    # ------------------------------------------------------------------
+    # Recent files
+    # ------------------------------------------------------------------
+
+    def _load_recent_files(self):
+        s = self._settings()
+        files = s.value("recentFiles", [])
+        if isinstance(files, str):
+            files = [files] if files else []
+        return files[:10]
+
+    def _save_recent_files(self):
+        s = self._settings()
+        s.setValue("recentFiles", self._recent_files[:10])
+
+    def _add_recent_file(self, path):
+        if path in self._recent_files:
+            self._recent_files.remove(path)
+        self._recent_files.insert(0, path)
+        self._recent_files = self._recent_files[:10]
+        self._save_recent_files()
+        self._update_recent_menu()
+
+    def _update_recent_menu(self):
+        if not hasattr(self, 'recent_menu'):
+            return
+        self.recent_menu.clear()
+        for path in self._recent_files:
+            name = os.path.basename(path)
+            act = QAction(f"{name}  ({path})", self)
+            act.triggered.connect(lambda checked=False, p=path: self._open_recent(p))
+            self.recent_menu.addAction(act)
+        if not self._recent_files:
+            act = QAction("(No recent files)", self)
+            act.setEnabled(False)
+            self.recent_menu.addAction(act)
+
+    def _open_recent(self, path):
+        if os.path.exists(path):
+            self.editor_widget.open_file(path)
+            self.editor_dock.raise_()
+        else:
+            self._recent_files.remove(path)
+            self._save_recent_files()
+            self._update_recent_menu()
 
     def _on_find(self):
         """Open find/replace bar in the editor."""

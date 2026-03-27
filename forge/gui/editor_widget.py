@@ -607,6 +607,9 @@ class EditorWidget(QWidget):
         editor = CodeEditor(self)
         editor.cursorPositionChanged.connect(self._update_status)
         editor.help_requested.connect(self.help_requested.emit)
+        # Feed engine function names for autocomplete
+        if hasattr(self, '_engine_func_names'):
+            editor.set_function_names(self._engine_func_names)
         idx = self.tabs.addTab(editor, "untitled")
         self.tabs.setCurrentIndex(idx)
         return editor
@@ -622,6 +625,8 @@ class EditorWidget(QWidget):
         editor = CodeEditor(self)
         editor.cursorPositionChanged.connect(self._update_status)
         editor.help_requested.connect(self.help_requested.emit)
+        if hasattr(self, '_engine_func_names'):
+            editor.set_function_names(self._engine_func_names)
         editor.file_path = path
         with open(path, "r", encoding="utf-8") as fh:
             editor.setPlainText(fh.read())
