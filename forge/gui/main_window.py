@@ -104,6 +104,7 @@ class ForgeMainWindow(QMainWindow):
 
         # Help-on-function: right-click context menus in command & editor
         self.command_widget.help_requested.connect(self._show_help_for)
+        self.command_widget.edit_requested.connect(self.open_file_in_editor)
         self.editor_widget.help_requested.connect(self._show_help_for)
         self.editor_widget.eval_requested.connect(self._eval_in_command)
 

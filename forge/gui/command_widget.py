@@ -825,6 +825,18 @@ class CommandWidget(QWidget):
             self._clear_output()
             return
 
+        # Check for edit request
+        if self.engine and hasattr(self.engine, '_edit_request') and self.engine._edit_request:
+            path = self.engine._edit_request
+            self.engine._edit_request = None
+            self.edit_requested.emit(path)
+
+        # Check for doc request
+        if self.engine and hasattr(self.engine, '_doc_request') and self.engine._doc_request:
+            name = self.engine._doc_request
+            self.engine._doc_request = None
+            self.help_requested.emit(name)
+
         self._write_prompt()
         self.command_executed.emit(full_text)
 

@@ -294,3 +294,44 @@ class WorkspaceBrowserWidget(QWidget):
             if name not in ('pi', 'e', 'eps', 'inf', 'Inf', 'nan', 'NaN',
                            'i', 'j', 'true', 'false', 'realmin', 'realmax'):
                 self.variable_delete_requested.emit(name)
+
+    def _save_workspace(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(self, 'Save Workspace', '', 'Forge Workspace (*.fws);;All (*)')
+        if path:
+            import json
+            workspace = {}
+            if self._session and hasattr(self._session, '_workspace'):
+                for name, val in self._session._workspace.items():
+                    try:
+                        import numpy as np
+                        if isinstance(val, np.ndarray):
+                            workspace[name] = {'type': 'ndarray', 'data': val.tolist(), 'dtype': str(val.dtype)}
+                        elif isinstance(val, (int, float, str, bool)):
+                            workspace[name] = {'type': 'scalar', 'data': val}
+                        else:
+                            workspace[name] = {'type': str(type(val).__name__), 'data': str(val)}
+                    except Exception:
+                        workspace[name] = {'type': 'unknown', 'data': str(val)}
+            with open(path, 'w') as f:
+                json.dump(workspace, f, indent=2)
+
+    def _load_workspace(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(self, 'Load Workspace', '', 'Forge Workspace (*.fws);;All (*)')
+        if path:
+            import json, numpy as np
+            try:
+                with open(path, 'r') as f:
+                    workspace = json.load(f)
+                if self._session and hasattr(self._session, '_workspace'):
+                    for name, info in workspace.items():
+                        if info['type'] == 'ndarray':
+                            self._session._workspace[name] = np.array(info['data'])
+                        elif info['type'] == 'scalar':
+                            self._session._workspace[name] = info['data']
+                    self.refresh()
+            except Exception as e:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, 'Load Error', str(e))
+
