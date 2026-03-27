@@ -10652,6 +10652,13 @@ class ForgeSession:
             return ""
         session._engine.functions["edit"] = forge_edit
 
+        def forge_clc(args, nargout=0):
+            """Clear command window."""
+            self._clc_request = True
+            return ""
+        session._engine.functions["clc"] = forge_clc
+
+
 
 
 

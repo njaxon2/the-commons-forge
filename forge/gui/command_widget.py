@@ -772,6 +772,12 @@ class CommandWidget(QWidget):
         elif not self.engine and full_text.strip():
             self._append_error("(no engine connected)\n")
 
+        # Check for clc request
+        if self.engine and hasattr(self.engine, '_clc_request') and self.engine._clc_request:
+            self.engine._clc_request = False
+            self._clear_output()
+            return
+
         self._write_prompt()
         self.command_executed.emit(full_text)
 
@@ -798,6 +804,16 @@ class CommandWidget(QWidget):
         self.console.ensureCursorVisible()
 
     def append_output(self, text: str):
-        """Public method for external code to write output."""
-        self._append_text(text + "\n")
+        """Public method for external code to write output, coloring errors red and warnings yellow."""
+        if not text:
+            return
+        lines = text.split('\n')
+        for line in lines:
+            stripped = line.strip().lower()
+            if stripped.startswith('error') or stripped.startswith('err:') or ': error' in stripped:
+                self._append_text_colored(line + '\n', '#f38ba8')  # red
+            elif stripped.startswith('warning') or stripped.startswith('warn:') or ': warning' in stripped:
+                self._append_text_colored(line + '\n', '#f9e2af')  # yellow
+            else:
+                self._append_text(line + '\n')
         self.console.ensureCursorVisible()
