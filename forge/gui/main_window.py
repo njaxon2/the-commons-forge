@@ -54,6 +54,13 @@ class ForgeMainWindow(QMainWindow):
         if hasattr(session, 'path'):
             self.file_browser_widget.set_search_paths(session.path)
         self._update_workspace()
+        # Connect help viewer
+        if hasattr(self, 'help_widget'):
+            self.help_widget.set_session(session)
+        # Show function count in toolbar
+        if hasattr(self, '_func_count_label'):
+            n = len(session._engine.functions) if hasattr(session, '_engine') else 0
+            self._func_count_label.setText(f"{n} functions")
 
     def _connect_signals(self):
         self.command_widget.command_executed.connect(self._update_workspace)
@@ -169,7 +176,8 @@ class ForgeMainWindow(QMainWindow):
         # Help
         self.act_about = QAction("&About Forge", self)
         self.act_about.triggered.connect(self._show_about)
-        self.act_docs = QAction("&Documentation", self)
+        self.act_docs = QAction("&Documentation", self, shortcut="F1")
+        self.act_docs.triggered.connect(self._show_docs)
 
     # ==================================================================
     # Menus
@@ -210,6 +218,7 @@ class ForgeMainWindow(QMainWindow):
         panels_menu.addAction(self.editor_dock.toggleViewAction())
         panels_menu.addAction(self.file_browser_dock.toggleViewAction())
         panels_menu.addAction(self.workspace_dock.toggleViewAction())
+        panels_menu.addAction(self.help_dock.toggleViewAction())
 
         # Theme submenu
         theme_menu = view_menu.addMenu("Theme")
@@ -247,10 +256,20 @@ class ForgeMainWindow(QMainWindow):
     # ==================================================================
 
     def _create_toolbar(self):
+        from PySide6.QtCore import QSize
+        from PySide6.QtWidgets import QStyle
+
         tb = QToolBar("Main Toolbar", self)
         tb.setObjectName("MainToolbar")
-        tb.setIconSize(__import__('PySide6.QtCore', fromlist=['QSize']).QSize(20, 20))
+        tb.setIconSize(QSize(18, 18))
         self.addToolBar(tb)
+
+        style = self.style()
+        self.act_new.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+        self.act_open.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
+        self.act_save.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
+        self.act_run.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.act_stop.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaStop))
 
         tb.addAction(self.act_new)
         tb.addAction(self.act_open)
@@ -258,6 +277,20 @@ class ForgeMainWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction(self.act_run)
         tb.addAction(self.act_stop)
+
+        # Spacer to push function count to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(
+            __import__('PySide6.QtWidgets', fromlist=['QSizePolicy']).QSizePolicy.Expanding,
+            __import__('PySide6.QtWidgets', fromlist=['QSizePolicy']).QSizePolicy.Preferred
+        )
+        tb.addWidget(spacer)
+
+        self._func_count_label = QLabel("")
+        self._func_count_label.setStyleSheet(
+            "color: #89b4fa; font-size: 11px; padding: 0 12px;"
+        )
+        tb.addWidget(self._func_count_label)
 
     # ==================================================================
     # Dock widgets
@@ -268,6 +301,7 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.editor_widget import EditorWidget
         from forge.gui.file_browser import FileBrowserWidget
         from forge.gui.workspace_browser import WorkspaceBrowserWidget
+        from forge.gui.help_viewer import HelpViewerWidget
 
         # Command Window (bottom)
         self.command_widget = CommandWidget(self)
@@ -293,6 +327,15 @@ class ForgeMainWindow(QMainWindow):
         # Tab workspace with file browser so they share space
         self.tabifyDockWidget(self.file_browser_dock, self.workspace_dock)
         self.file_browser_dock.raise_()  # File browser on top initially
+
+        # Help Viewer (left, tabbed with file browser and workspace)
+        self.help_widget = HelpViewerWidget(parent=self)
+        self.help_dock = self._make_dock(
+            "Documentation", "HelpDock", self.help_widget
+        )
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.help_dock)
+        self.tabifyDockWidget(self.workspace_dock, self.help_dock)
+        self.file_browser_dock.raise_()
 
         # Editor (right — takes majority of horizontal space)
         self.editor_widget = EditorWidget(self)
@@ -471,13 +514,27 @@ class ForgeMainWindow(QMainWindow):
         self._set_default_layout()
         self.set_status("Layout reset")
 
+    def _show_docs(self):
+        """Show the documentation panel."""
+        self.help_dock.setVisible(True)
+        self.help_dock.raise_()
+        self.help_widget.search_edit.setFocus()
+
     def _show_about(self):
         from PySide6.QtWidgets import QMessageBox
+        func_count = 0
+        if self.session and hasattr(self.session, '_engine'):
+            func_count = len(self.session._engine.functions)
         QMessageBox.about(
             self,
             "About Forge",
-            "<h2>Forge IDE</h2>"
-            "<p>Octave-Compatible Computing Environment</p>"
+            "<div style='text-align:center;'>"
+            "<h2 style='color:#89b4fa;'>Forge IDE</h2>"
+            "<p><b>Octave-Compatible Computing Environment</b></p>"
+            "<hr>"
+            f"<p>{func_count} built-in functions</p>"
             "<p>Built with PySide6, NumPy, SciPy, and Matplotlib</p>"
             "<p>Version 0.1.0</p>"
+            "<p style='color:#6c7086;'>Licensed under MIT</p>"
+            "</div>"
         )
