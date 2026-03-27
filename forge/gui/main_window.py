@@ -17,9 +17,11 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence, QFont, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QToolBar, QMenuBar, QStatusBar, QWidget,
-    QApplication, QLabel, QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
+    QApplication, QLabel, QDialog, QVBoxLayout, QLineEdit, QListWidget,
+    QListWidgetItem, QPushButton,
 )
 
+from forge.gui.notification_center import NotificationCenter
 from forge.gui.commons_integration import (
     UpdateChecker, AMSConnector, FeatureRequestDialog,
 )
@@ -45,6 +47,12 @@ class ForgeMainWindow(QMainWindow):
         self._create_menus()
         self._create_toolbar()
         self._create_status_bar()
+
+        # ---- Notification Center ----
+        self._notification_center = NotificationCenter(self)
+        self._notification_center.navigate_to_file.connect(
+            self._on_notification_navigate
+        )
         self._set_default_layout()
         self._restore_state()
 
@@ -314,6 +322,10 @@ class ForgeMainWindow(QMainWindow):
             self._inspect_variable
         )
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
+        # Breadcrumb directory clicks navigate file browser
+        self.editor_widget.directory_open_requested.connect(
+            self._open_directory_in_browser
+        )
 
         # Update status bar from editor cursor position
         self.editor_widget.tabs.currentChanged.connect(self._update_status_bar)
@@ -888,6 +900,46 @@ class ForgeMainWindow(QMainWindow):
         self._sb_theme.setStyleSheet("color: #6c7086; font-size: 11px; padding: 0 8px;")
         sb.addPermanentWidget(self._sb_theme)
 
+        # ---- Mode Indicator ----
+        self._mode_indicator = QLabel("Normal")
+        self._mode_indicator.setStyleSheet(
+            "QLabel { color: #569cd6; font-weight: bold; font-size: 11px; "
+            "padding: 1px 8px; background: #252526; border-radius: 3px; }"
+        )
+        self._mode_indicator.setToolTip("Current editor mode")
+        self.statusBar().addPermanentWidget(self._mode_indicator)
+
+        # ---- LSP / Engine Connection Status ----
+        self._connection_status = QLabel("● Disconnected")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #e74c3c; font-size: 11px; padding: 1px 6px; }"
+        )
+        self._connection_status.setToolTip("LSP / Engine connection status")
+        self.statusBar().addPermanentWidget(self._connection_status)
+
+        # ---- Notification Bell ----
+        self._bell_btn = QPushButton("🔔")
+        self._bell_btn.setToolTip("Notifications")
+        self._bell_btn.setFixedSize(28, 22)
+        self._bell_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; font-size: 14px; }"
+            "QPushButton:hover { background: #333; border-radius: 3px; }"
+        )
+        self._bell_btn.clicked.connect(self._toggle_notification_center)
+
+        self._bell_badge = QLabel("0", self._bell_btn)
+        self._bell_badge.setFixedSize(16, 14)
+        self._bell_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._bell_badge.setStyleSheet(
+            "QLabel { background: #e74c3c; color: white; font-size: 9px; "
+            "font-weight: bold; border-radius: 7px; }"
+        )
+        self._bell_badge.move(14, 0)
+        self._bell_badge.hide()
+
+        self.statusBar().addPermanentWidget(self._bell_btn)
+
+
     def set_status(self, msg: str):
         self._status_msg.setText(msg)
 
@@ -917,6 +969,16 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.shortcuts_overlay import ShortcutsOverlay
         overlay = ShortcutsOverlay(self)
         overlay.exec()
+
+    def _goto_symbol(self):
+        """Open the Go to Symbol dialog for the active editor."""
+        if hasattr(self, 'editor_widget'):
+            self.editor_widget.go_to_symbol()
+
+    def _open_directory_in_browser(self, path):
+        """Navigate the file browser to the given directory."""
+        if hasattr(self, 'file_browser_widget'):
+            self.file_browser_widget._set_root(path)
 
     def closeEvent(self, event):
         self._save_window_state()
@@ -1266,6 +1328,16 @@ class ForgeMainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _show_toast(self, message: str, duration_ms: int = 2000):
+        # Log to notification center
+        if hasattr(self, "_notification_center"):
+            _nc_msg = str(message) if message is not None else ""
+            _nc_level = "info"
+            if "error" in _nc_msg.lower():
+                _nc_level = "error"
+            elif "warn" in _nc_msg.lower():
+                _nc_level = "warning"
+            self._log_notification(_nc_msg, level=_nc_level)
+
         """Show a brief overlay message near the bottom of the window."""
         toast = QLabel(message, self)
         toast.setStyleSheet(
@@ -1689,6 +1761,42 @@ class ForgeMainWindow(QMainWindow):
             dlg.exec()
         except Exception as e:
             self._show_toast(f"Theme editor error: {e}", 3000, "error")
+
+    def _toggle_notification_center(self):
+        """Toggle the notification center panel."""
+        if hasattr(self, '_notification_center'):
+            nc = self._notification_center
+            if nc.isVisible():
+                nc.hide()
+            else:
+                nc.setGeometry(
+                    self.width() - 350, 40,
+                    340, self.height() - 80
+                )
+                nc.show()
+                nc.raise_()
+
+    def _update_bell_badge(self):
+        """Update the notification bell badge count."""
+        if hasattr(self, '_notification_center') and hasattr(self, '_bell_btn'):
+            count = self._notification_center.unread_count
+            if count > 0:
+                self._bell_btn.setText(f"🔔 {count}")
+            else:
+                self._bell_btn.setText("🔔")
+
+    def _on_notification_navigate(self, file_path, line_number):
+        """Navigate to a file/line from notification click."""
+        if file_path:
+            self.editor_widget.open_file(file_path)
+            if line_number > 0:
+                editor = self.editor_widget.get_current_editor()
+                if editor:
+                    from PySide6.QtGui import QTextCursor
+                    block = editor.document().findBlockByNumber(line_number - 1)
+                    cursor = QTextCursor(block)
+                    editor.setTextCursor(cursor)
+                    editor.centerCursor()
 
     def _show_toast(self, message, duration=3000, level="info"):
         """Show a brief toast notification at the bottom of the window."""
