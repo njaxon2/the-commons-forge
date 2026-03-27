@@ -162,6 +162,14 @@ class FileBrowserWidget(QWidget):
         index = self.tree.indexAt(pos)
         menu = QMenu(self)
 
+        act_new_mfile = QAction("New M-File...", self)
+        act_new_mfile.triggered.connect(self._new_mfile)
+        menu.addAction(act_new_mfile)
+
+        act_new_func = QAction("New Function...", self)
+        act_new_func.triggered.connect(self._new_function_file)
+        menu.addAction(act_new_func)
+
         act_new_file = QAction("New File", self)
         act_new_file.triggered.connect(lambda: self._new_item(is_dir=False))
         menu.addAction(act_new_file)
@@ -278,3 +286,53 @@ class FileBrowserWidget(QWidget):
                 shutil.rmtree(path)
             else:
                 os.remove(path)
+
+    def _new_mfile(self):
+        """Create a new .m script file from template."""
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "New M-File", "File name (without .m):")
+        if ok and name:
+            path = os.path.join(self._current_path(), f"{name}.m")
+            template = (
+                f"% {name}.m \u2014 Description\n"
+                f"% Created: {__import__('datetime').datetime.now().strftime('%Y-%m-%d')}\n"
+                f"\n"
+                f"% Your code here\n"
+            )
+            with open(path, 'w') as f:
+                f.write(template)
+            self.file_open_requested.emit(path)
+
+    def _new_function_file(self):
+        """Create a new function .m file from template."""
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "New Function", "Function name:")
+        if ok and name:
+            path = os.path.join(self._current_path(), f"{name}.m")
+            template = (
+                f"function result = {name}(varargin)\n"
+                f"% {name.upper()} - Description\n"
+                f"%\n"
+                f"%   result = {name}(arg1, arg2, ...)\n"
+                f"%\n"
+                f"% See also: \n"
+                f"\n"
+                f"    % Your code here\n"
+                f"    result = [];\n"
+                f"\n"
+                f"end\n"
+            )
+            with open(path, 'w') as f:
+                f.write(template)
+            self.file_open_requested.emit(path)
+
+    def _current_path(self):
+        """Get the current directory from the file browser."""
+        idx = self.tree.currentIndex()
+        if idx.isValid():
+            path = self.model.filePath(idx)
+            if os.path.isfile(path):
+                return os.path.dirname(path)
+            return path
+        return os.path.expanduser("~")
+

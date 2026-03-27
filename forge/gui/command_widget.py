@@ -472,8 +472,19 @@ class CommandWidget(QWidget):
         return False
 
     def _context_menu_event(self, event):
-        """Custom context menu with Help and Run Selection options."""
+        """Custom context menu with Help, Run Selection, Clear, Copy All."""
         menu = self.console.createStandardContextMenu()
+
+        # Add Clear and Copy All at the top
+        menu.insertSeparator(menu.actions()[0] if menu.actions() else None)
+        act_clear = QAction("Clear Command Window", menu)
+        act_clear.triggered.connect(self._clear_output)
+        menu.insertAction(menu.actions()[0] if menu.actions() else None, act_clear)
+
+        act_copy_all = QAction("Copy All Output", menu)
+        act_copy_all.triggered.connect(self._copy_all_output)
+        menu.insertAction(menu.actions()[1] if len(menu.actions()) > 1 else None, act_copy_all)
+
         word = self._word_under_cursor()
 
         if word:
