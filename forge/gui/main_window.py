@@ -288,6 +288,9 @@ class ForgeMainWindow(QMainWindow):
         self.recent_menu = file_menu.addMenu("Recent Files")
         self._update_recent_menu()
         file_menu.addSeparator()
+        act_compare = file_menu.addAction("Compare Files...")
+        act_compare.triggered.connect(self._compare_files)
+        file_menu.addSeparator()
         file_menu.addAction(self.act_exit)
 
         # ── Edit ──
@@ -1328,6 +1331,29 @@ class ForgeMainWindow(QMainWindow):
 
 
 
+
+    def _compare_files(self):
+        """Open a diff viewer to compare two files."""
+        from PySide6.QtWidgets import QFileDialog
+        path_a, _ = QFileDialog.getOpenFileName(self, "Select First File", "", "All Files (*)")
+        if not path_a:
+            return
+        path_b, _ = QFileDialog.getOpenFileName(self, "Select Second File", "", "All Files (*)")
+        if not path_b:
+            return
+        try:
+            with open(path_a, 'r') as f:
+                text_a = f.read()
+            with open(path_b, 'r') as f:
+                text_b = f.read()
+            from forge.gui.diff_viewer import DiffViewer
+            viewer = DiffViewer(text_a, text_b,
+                              os.path.basename(path_a),
+                              os.path.basename(path_b),
+                              self)
+            viewer.exec()
+        except Exception as e:
+            self._show_toast(f"Compare failed: {e}", 3000, "error")
 
     def _show_toast(self, message, duration=3000, level="info"):
         """Show a brief toast notification at the bottom of the window."""
