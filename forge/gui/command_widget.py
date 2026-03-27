@@ -218,6 +218,7 @@ class CommandWidget(QWidget):
 
     command_executed = Signal(str)
     help_requested = Signal(str)   # emitted when user right-clicks > Help on 'func'
+    edit_requested = Signal(str)   # emitted when edit() command is run
 
     PROMPT = ">> "
     CONTINUATION = ".. "
