@@ -168,6 +168,38 @@ class OctaveSyntaxHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text: str):
         p = get_palette()
+
+        # Multi-line block comment support (%{ ... %})
+        if self.previousBlockState() == 1:
+            end_idx = text.find('%}')
+            if end_idx >= 0:
+                fmt = QTextCharFormat()
+                fmt.setForeground(QColor(p.get('comment', '#585b70')))
+                fmt.setFontItalic(True)
+                self.setFormat(0, end_idx + 2, fmt)
+                self.setCurrentBlockState(0)
+                return
+            else:
+                fmt = QTextCharFormat()
+                fmt.setForeground(QColor(p.get('comment', '#585b70')))
+                fmt.setFontItalic(True)
+                self.setFormat(0, len(text), fmt)
+                self.setCurrentBlockState(1)
+                return
+
+        bc_start = text.find('%{')
+        if bc_start >= 0:
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor(p.get('comment', '#585b70')))
+            fmt.setFontItalic(True)
+            bc_end = text.find('%}', bc_start + 2)
+            if bc_end >= 0:
+                self.setFormat(bc_start, bc_end + 2 - bc_start, fmt)
+                self.setCurrentBlockState(0)
+            else:
+                self.setFormat(bc_start, len(text) - bc_start, fmt)
+                self.setCurrentBlockState(1)
+
         for pattern, key in self._rules:
             fmt = QTextCharFormat()
             color = p.get(key, "#cccccc")
