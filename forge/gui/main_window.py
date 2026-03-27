@@ -323,9 +323,10 @@ class ForgeMainWindow(QMainWindow):
         )
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
         # Breadcrumb directory clicks navigate file browser
-        self.editor_widget.directory_open_requested.connect(
-            self._open_directory_in_browser
-        )
+        if hasattr(self.editor_widget, 'directory_open_requested'):
+            self.editor_widget.directory_open_requested.connect(
+                self._open_directory_in_browser
+            )
 
         # Update status bar from editor cursor position
         self.editor_widget.tabs.currentChanged.connect(self._update_status_bar)
