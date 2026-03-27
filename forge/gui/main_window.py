@@ -190,6 +190,9 @@ class ForgeMainWindow(QMainWindow):
         self.act_close_tab.triggered.connect(lambda: self.editor_widget._close_tab(self.editor_widget.tabs.currentIndex()))
         self.addAction(self.act_close_tab)
 
+        self.act_search_files = QAction("Search in &Files...", self, shortcut="Ctrl+Shift+F")
+        self.act_search_files.triggered.connect(self._show_search_in_files)
+
         self.act_find = QAction("&Find...", self, shortcut=QKeySequence.Find)
         self.act_find.triggered.connect(self._on_find)
         self.act_preferences = QAction("Preferences...", self, shortcut="Ctrl+,")
@@ -268,6 +271,7 @@ class ForgeMainWindow(QMainWindow):
         edit_menu.addAction(self.act_paste)
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_find)
+        edit_menu.addAction(self.act_search_files)
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_preferences)
 
@@ -915,6 +919,20 @@ class ForgeMainWindow(QMainWindow):
         self.help_dock.raise_()
         self.help_widget.search_edit.setText(func_name)
         self.help_widget.show_help(func_name)
+
+    def _show_search_in_files(self):
+        """Show and focus the Search in Files panel."""
+        if hasattr(self, '_bottom_tabs') and hasattr(self, '_search_panel'):
+            self._bottom_tabs.setCurrentWidget(self._search_panel)
+            self._search_panel._search_input.setFocus()
+            self._search_panel._search_input.selectAll()
+
+    def _open_search_result(self, file_path, line_num):
+        """Open a file from search results at a specific line."""
+        self.open_file_in_editor(file_path)
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(editor, '_goto_line'):
+            editor._goto_line(line_num)
 
     def _eval_in_command(self, code):
         """Evaluate code from editor selection in the command window."""
