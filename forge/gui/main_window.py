@@ -775,6 +775,43 @@ class ForgeMainWindow(QMainWindow):
             self._save_recent_files()
             self._update_recent_menu()
 
+    def _split_editor(self, direction):
+        """Split the editor view."""
+        from PySide6.QtWidgets import QSplitter
+        from PySide6.QtCore import Qt as QtCore_Qt
+
+        # Get the editor dock widget content
+        editor_container = self.editor_dock.widget()
+        if isinstance(editor_container, QSplitter):
+            # Already split, don't split again
+            return
+
+        # Create a new editor widget for the split
+        from forge.gui.editor_widget import EditorWidget
+        self._split_editor_widget = EditorWidget(self)
+
+        # Create splitter
+        orientation = QtCore_Qt.Horizontal if direction == 'right' else QtCore_Qt.Vertical
+        splitter = QSplitter(orientation)
+        splitter.addWidget(self.editor_widget)
+        splitter.addWidget(self._split_editor_widget)
+        splitter.setSizes([500, 500])
+
+        self.editor_dock.setWidget(splitter)
+        self._editor_splitter = splitter
+
+    def _unsplit_editor(self):
+        """Remove editor split."""
+        if hasattr(self, '_editor_splitter') and self._editor_splitter:
+            # Remove the split editor
+            if hasattr(self, '_split_editor_widget'):
+                self._split_editor_widget.setParent(None)
+                self._split_editor_widget.deleteLater()
+                del self._split_editor_widget
+
+            self.editor_dock.setWidget(self.editor_widget)
+            self._editor_splitter = None
+
     def _toggle_word_wrap(self, checked):
         from PySide6.QtWidgets import QPlainTextEdit
         mode = QPlainTextEdit.WidgetWidth if checked else QPlainTextEdit.NoWrap
