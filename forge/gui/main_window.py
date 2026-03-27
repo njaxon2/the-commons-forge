@@ -359,6 +359,10 @@ class ForgeMainWindow(QMainWindow):
 
         view_menu.addSeparator()
         view_menu.addAction(self.act_reset_layout)
+        view_menu.addSeparator()
+        view_menu.addAction(self._git_dock.toggleViewAction()) if hasattr(self, '_git_dock') else None
+        view_menu.addAction(self._bookmarks_dock.toggleViewAction()) if hasattr(self, '_bookmarks_dock') else None
+        
 
         # ── Debug ──
         debug_menu = mb.addMenu("&Debug")
@@ -514,6 +518,7 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.file_browser import FileBrowserWidget
         from forge.gui.workspace_browser import WorkspaceBrowserWidget
         from forge.gui.help_viewer import HelpViewerWidget
+        from forge.gui.git_panel import GitPanel
 
         # Command Window (bottom)
         self.command_widget = CommandWidget(self)
@@ -525,6 +530,7 @@ class ForgeMainWindow(QMainWindow):
 
         # Terminal (bottom, tabbed with command window)
         from forge.gui.terminal_widget import TerminalWidget
+        from forge.gui.bookmarks_panel import BookmarksPanel
         self._terminal_widget = TerminalWidget(self)
         self._terminal_dock = self._make_dock(
             "Terminal", "TerminalDock", self._terminal_widget
@@ -532,6 +538,13 @@ class ForgeMainWindow(QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, self._terminal_dock)
         self.tabifyDockWidget(self.command_dock, self._terminal_dock)
         self.command_dock.raise_()  # Command window on top initially
+
+        # Bookmarks Panel (bottom, tabbed with command/terminal)
+        self._bookmarks_panel = BookmarksPanel(self)
+        self._bookmarks_dock = self._make_dock("Bookmarks", "BookmarksDock", self._bookmarks_panel)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self._bookmarks_dock)
+        self.tabifyDockWidget(self._terminal_dock, self._bookmarks_dock)
+        self.command_dock.raise_()
 
         # File Browser (left)
         self.file_browser_widget = FileBrowserWidget(parent=self)
@@ -557,6 +570,12 @@ class ForgeMainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.LeftDockWidgetArea, self.help_dock)
         self.tabifyDockWidget(self.workspace_dock, self.help_dock)
+
+        # Git Panel (left, tabbed with others)
+        self._git_panel = GitPanel(self)
+        self._git_dock = self._make_dock("Git", "GitDock", self._git_panel)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self._git_dock)
+        self.tabifyDockWidget(self.help_dock, self._git_dock)
         self.file_browser_dock.raise_()
 
         # Editor (right — takes majority of horizontal space)
