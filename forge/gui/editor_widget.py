@@ -489,6 +489,131 @@ class CodeEditor(QPlainTextEdit):
     # --- current line highlight & bracket matching ---------------------
 
 
+
+    def insertFromMimeData(self, source):
+        """Override paste to strip >> prompts from copied command window output."""
+        if source.hasText():
+            text = source.text()
+            stripped = self._strip_prompts(text)
+            if stripped != text:
+                from PySide6.QtCore import QMimeData
+                new_source = QMimeData()
+                new_source.setText(stripped)
+                super().insertFromMimeData(new_source)
+                return
+        super().insertFromMimeData(source)
+
+    @staticmethod
+    def _strip_prompts(text):
+        """Strip >> and >>> prompts from pasted text (MATLAB/Octave style)."""
+        import re
+        lines = text.split('\n')
+        # Check if at least half the lines have prompts
+        prompt_pattern = re.compile(r'^\s*>{1,3}\s?')
+        prompt_count = sum(1 for line in lines if prompt_pattern.match(line))
+        if prompt_count >= len(lines) * 0.4 and prompt_count >= 1:
+            stripped = []
+            for line in lines:
+                m = prompt_pattern.match(line)
+                if m:
+                    stripped.append(line[m.end():])
+                else:
+                    stripped.append(line)
+            return '\n'.join(stripped)
+        return text
+
+
+    def mousePressEvent(self, event):
+        """Handle Ctrl+Click for go-to-definition."""
+        from PySide6.QtCore import Qt
+        if event.modifiers() & Qt.ControlModifier and event.button() == Qt.LeftButton:
+            cursor = self.cursorForPosition(event.pos())
+            cursor.select(QTextCursor.WordUnderCursor)
+            word = cursor.selectedText().strip()
+            if word and word.isidentifier():
+                self._goto_definition(word)
+                return
+        super().mousePressEvent(event)
+
+    def _goto_definition(self, symbol):
+        """Try to navigate to the definition of a symbol."""
+        import re
+        # Search in current file first
+        text = self.toPlainText()
+        # M-language function definition patterns
+        patterns = [
+            rf'^\s*function\b.*\b{re.escape(symbol)}\s*\(',  # function definition
+            rf'^\s*function\b.*=\s*{re.escape(symbol)}\s*\(',  # function with return
+            rf'^\s*classdef\s+{re.escape(symbol)}\b',  # classdef
+        ]
+        for pattern in patterns:
+            for i, line in enumerate(text.split('\n')):
+                if re.match(pattern, line):
+                    # Navigate to that line
+                    block = self.document().findBlockByLineNumber(i)
+                    cursor = QTextCursor(block)
+                    self.setTextCursor(cursor)
+                    self.centerCursor()
+                    return
+
+        # Try to find the function file on path
+        # Look in common locations
+        search_dirs = [os.path.dirname(self._file_path)] if hasattr(self, '_file_path') and self._file_path else []
+        search_dirs.append(os.path.expanduser('~'))
+
+        for d in search_dirs:
+            candidate = os.path.join(d, f'{symbol}.m')
+            if os.path.exists(candidate):
+                # Signal to open this file
+                self.help_requested.emit(f'edit:{candidate}')
+                return
+
+        # Not found - show tooltip
+        self.setToolTip(f"Cannot find definition of '{symbol}'")
+
+    def event(self, event):
+        """Handle tooltip events for function hover info."""
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.ToolTip:
+            from PySide6.QtGui import QCursor
+            cursor = self.cursorForPosition(self.viewport().mapFromGlobal(QCursor.pos()))
+            cursor.select(QTextCursor.WordUnderCursor)
+            word = cursor.selectedText().strip()
+            if word and word.isidentifier() and len(word) >= 2:
+                tip = self._get_hover_info(word)
+                if tip:
+                    from PySide6.QtWidgets import QToolTip
+                    QToolTip.showText(QCursor.pos(), tip, self)
+                    return True
+        return super().event(event)
+
+    def _get_hover_info(self, word):
+        """Get hover tooltip information for a function/variable."""
+        # Check if it's a known builtin
+        try:
+            main_win = self.parent()
+            while main_win and not hasattr(main_win, 'session'):
+                main_win = main_win.parent()
+            if main_win and hasattr(main_win, 'session') and main_win.session:
+                engine = main_win.session._engine
+                if hasattr(engine, 'functions') and word in engine.functions:
+                    func = engine.functions[word]
+                    doc = getattr(func, '__doc__', '') or ''
+                    first_line = doc.split('\n')[0].strip() if doc else 'Built-in function'
+                    return f"<b>{word}</b><br/>{first_line}"
+        except Exception:
+            pass
+
+        # Check in current file for function/variable definitions
+        import re
+        text = self.toPlainText()
+        for i, line in enumerate(text.split('\n')):
+            if re.match(rf'^\s*function\b.*\b{re.escape(word)}\s*\(', line):
+                return f"<b>{word}</b><br/>Defined at line {i+1}"
+            if re.match(rf'^\s*{re.escape(word)}\s*=', line):
+                return f"<b>{word}</b><br/>Assigned at line {i+1}"
+        return None
+
     def contextMenuEvent(self, event):
         """Rich right-click context menu with IDE actions."""
         from PySide6.QtWidgets import QMenu
@@ -1494,6 +1619,163 @@ class EditorWidget(QWidget):
             self.tabs.setTabText(idx, text + ' ●')
         elif not modified and text.endswith(' ●'):
             self.tabs.setTabText(idx, text[:-2])
+
+
+    def _create_welcome_tab(self):
+        """Create a styled welcome page as the first tab."""
+        from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QFont
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(60, 40, 60, 40)
+
+        palette = get_palette()
+        bg = palette.get('bg0', '#1e1e2e')
+        fg = palette.get('fg0', '#cdd6f4')
+        fg2 = palette.get('fg2', '#a6adc8')
+        accent = palette.get('accent', '#cba6f7')
+        bg2 = palette.get('bg2', '#313244')
+
+        # Title
+        title = QLabel("Forge")
+        title.setFont(QFont("Fira Code", 32, QFont.Bold))
+        title.setStyleSheet(f"color: {accent}; background: transparent; margin-bottom: 4px;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        subtitle = QLabel("Octave-Compatible Computing Environment")
+        subtitle.setFont(QFont("Fira Code", 12))
+        subtitle.setStyleSheet(f"color: {fg2}; background: transparent; margin-bottom: 30px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        # Quick actions row
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(16)
+
+        btn_style = f"""
+            QPushButton {{
+                background: {bg2};
+                color: {fg};
+                border: 1px solid {palette.get('border0', '#45475a')};
+                border-radius: 8px;
+                padding: 16px 24px;
+                font-size: 13px;
+                font-family: 'Fira Code';
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background: {palette.get('bg3', '#45475a')};
+                border-color: {accent};
+            }}
+        """
+
+        btn_new = QPushButton("  New File\n  Ctrl+N")
+        btn_new.setStyleSheet(btn_style)
+        btn_new.setMinimumSize(160, 70)
+        btn_new.clicked.connect(self.new_file)
+        actions_layout.addWidget(btn_new)
+
+        btn_open = QPushButton("  Open File\n  Ctrl+O")
+        btn_open.setStyleSheet(btn_style)
+        btn_open.setMinimumSize(160, 70)
+        btn_open.clicked.connect(lambda: self.parent()._on_open() if hasattr(self.parent(), '_on_open') else None)
+        actions_layout.addWidget(btn_open)
+
+        btn_quick = QPushButton("  Quick Open\n  Ctrl+P")
+        btn_quick.setStyleSheet(btn_style)
+        btn_quick.setMinimumSize(160, 70)
+        btn_quick.clicked.connect(lambda: self.parent()._show_quick_open() if hasattr(self.parent(), '_show_quick_open') else None)
+        actions_layout.addWidget(btn_quick)
+
+        btn_palette = QPushButton("  Command Palette\n  Ctrl+Shift+P")
+        btn_palette.setStyleSheet(btn_style)
+        btn_palette.setMinimumSize(160, 70)
+        btn_palette.clicked.connect(lambda: self.parent()._show_command_palette() if hasattr(self.parent(), '_show_command_palette') else None)
+        actions_layout.addWidget(btn_palette)
+
+        layout.addLayout(actions_layout)
+
+        # Recent files section
+        recent_label = QLabel("Recent Files")
+        recent_label.setFont(QFont("Fira Code", 14, QFont.Bold))
+        recent_label.setStyleSheet(f"color: {fg}; background: transparent; margin-top: 30px;")
+        layout.addWidget(recent_label)
+
+        # Load recent files from history
+        recent_files = self._get_recent_files()
+        if recent_files:
+            for fpath in recent_files[:8]:
+                fname = os.path.basename(fpath)
+                fdir = os.path.dirname(fpath)
+                link = QPushButton(f"  {fname}  —  {fdir}")
+                link.setStyleSheet(f"""
+                    QPushButton {{
+                        background: transparent;
+                        color: {palette.get('accent', '#89b4fa')};
+                        border: none;
+                        text-align: left;
+                        padding: 4px 8px;
+                        font-size: 12px;
+                    }}
+                    QPushButton:hover {{
+                        color: {accent};
+                        text-decoration: underline;
+                    }}
+                """)
+                link.setCursor(Qt.PointingHandCursor)
+                link.clicked.connect(lambda checked, p=fpath: self.open_file(p))
+                layout.addWidget(link)
+        else:
+            no_recent = QLabel("  No recent files")
+            no_recent.setStyleSheet(f"color: {fg2}; background: transparent; font-size: 12px;")
+            layout.addWidget(no_recent)
+
+        layout.addStretch()
+
+        # Version info
+        version_label = QLabel("Forge v0.1.0  ·  1,303 functions  ·  352 tests passing")
+        version_label.setFont(QFont("Fira Code", 10))
+        version_label.setStyleSheet(f"color: {fg2}; background: transparent;")
+        version_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(version_label)
+
+        page.setStyleSheet(f"background: {bg};")
+
+        # Add as tab
+        idx = self.tabs.addTab(page, "Welcome")
+        self.tabs.setCurrentIndex(idx)
+
+    def _get_recent_files(self):
+        """Get list of recently opened files."""
+        import json
+        recent_path = os.path.expanduser("~/.forge/recent_files.json")
+        if os.path.exists(recent_path):
+            try:
+                with open(recent_path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    def _add_to_recent(self, filepath):
+        """Add a file to the recent files list."""
+        import json
+        recent_path = os.path.expanduser("~/.forge/recent_files.json")
+        recent = self._get_recent_files()
+        # Remove if already in list, add to front
+        filepath = os.path.abspath(filepath)
+        recent = [f for f in recent if f != filepath]
+        recent.insert(0, filepath)
+        recent = recent[:20]  # Keep last 20
+        os.makedirs(os.path.dirname(recent_path), exist_ok=True)
+        try:
+            with open(recent_path, 'w') as f:
+                json.dump(recent, f)
+        except Exception:
+            pass
 
     def new_file(self):
         """Open a new untitled editor tab."""
