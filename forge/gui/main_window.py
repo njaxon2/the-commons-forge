@@ -715,6 +715,7 @@ class ForgeMainWindow(QMainWindow):
         if editor.file_path:
             self.editor_widget.save_file()
             self.set_status(f"Saved {os.path.basename(editor.file_path)}")
+            self._show_toast(f"Saved {os.path.basename(editor.file_path)}", 2000, "success")
         else:
             self._on_save_as()
 
@@ -1323,6 +1324,43 @@ class ForgeMainWindow(QMainWindow):
         dialog.exec()
 
 
+
+
+    def _show_toast(self, message, duration=3000, level="info"):
+        """Show a brief toast notification at the bottom of the window."""
+        from PySide6.QtWidgets import QLabel
+        from PySide6.QtCore import QTimer, Qt, QPropertyAnimation
+        from PySide6.QtGui import QColor
+
+        colors = {
+            "info": ("#89b4fa", "#1e1e2e"),
+            "success": ("#a6e3a1", "#1e1e2e"),
+            "warning": ("#f9e2af", "#1e1e2e"),
+            "error": ("#f38ba8", "#1e1e2e"),
+        }
+        fg, bg = colors.get(level, colors["info"])
+
+        toast = QLabel(f"  {message}  ", self)
+        toast.setStyleSheet(f"""
+            background: {bg};
+            color: {fg};
+            border: 1px solid {fg};
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: bold;
+        """)
+        toast.setAlignment(Qt.AlignCenter)
+        toast.adjustSize()
+
+        # Position at bottom center
+        x = (self.width() - toast.width()) // 2
+        y = self.height() - toast.height() - 40
+        toast.move(x, y)
+        toast.show()
+        toast.raise_()
+
+        QTimer.singleShot(duration, toast.deleteLater)
 
     def _update_window_title(self):
         """Update window title with current file name."""

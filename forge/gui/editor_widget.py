@@ -660,6 +660,79 @@ class CodeEditor(QPlainTextEdit):
                 return f"<b>{word}</b><br/>Assigned at line {i+1}"
         return None
 
+
+    def _lint_code(self):
+        """Run basic lint checks on the current code."""
+        import re
+        text = self.toPlainText()
+        lines = text.split('\n')
+        diagnostics = []
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Check for common issues
+            # 1. Missing semicolons on lines that produce output
+            if stripped and not stripped.startswith('%') and not stripped.startswith('#'):
+                if '=' in stripped and not stripped.endswith(';') and not stripped.endswith('...'):
+                    # Assignment without semicolon (informational)
+                    if not any(stripped.startswith(k) for k in ['if', 'for', 'while', 'function',
+                        'switch', 'case', 'try', 'catch', 'else', 'elseif', 'end', 'return',
+                        'break', 'continue', 'global', 'persistent', 'classdef', 'properties',
+                        'methods', 'events']):
+                        pass  # Could add hint about missing semicolon
+
+            # 2. Check for unbalanced brackets on single line
+            for char_open, char_close in [('(', ')'), ('[', ']'), ('{', '}')]:
+                opens = stripped.count(char_open)
+                closes = stripped.count(char_close)
+                # Only flag if clearly unbalanced and not continuation
+                if opens > closes + 1 and not stripped.endswith('...'):
+                    diagnostics.append({
+                        'line': i,
+                        'col': stripped.index(char_open),
+                        'message': f'Possibly unbalanced {char_open}{char_close}',
+                        'severity': 'warning'
+                    })
+
+            # 3. Check for == in conditions (common MATLAB issue: = vs ==)
+            if re.match(r'\s*if\s+.*[^=!<>~]=[^=]', stripped):
+                if '==' not in stripped and '~=' not in stripped:
+                    diagnostics.append({
+                        'line': i,
+                        'col': stripped.index('='),
+                        'message': 'Assignment in if condition - did you mean ==?',
+                        'severity': 'warning'
+                    })
+
+        return diagnostics
+
+    def _apply_lint_decorations(self, diagnostics):
+        """Apply squiggly underline decorations for lint warnings."""
+        from PySide6.QtGui import QTextCharFormat, QPen
+        extra = [s for s in self.extraSelections()
+                 if not hasattr(s, '_is_lint')]
+
+        for diag in diagnostics:
+            from PySide6.QtWidgets import QPlainTextEdit
+            sel = QPlainTextEdit.ExtraSelection()
+            fmt = QTextCharFormat()
+            if diag['severity'] == 'error':
+                fmt.setUnderlineColor(QColor("#f38ba8"))
+            else:
+                fmt.setUnderlineColor(QColor("#f9e2af"))
+            fmt.setUnderlineStyle(QTextCharFormat.WaveUnderline)
+
+            block = self.document().findBlockByLineNumber(diag['line'])
+            cursor = QTextCursor(block)
+            cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+            sel.cursor = cursor
+            sel.format = fmt
+            sel._is_lint = True
+            extra.append(sel)
+
+        self.setExtraSelections(extra)
+
     def contextMenuEvent(self, event):
         """Rich right-click context menu with IDE actions."""
         from PySide6.QtWidgets import QMenu
