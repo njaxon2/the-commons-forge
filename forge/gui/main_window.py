@@ -545,6 +545,8 @@ class ForgeMainWindow(QMainWindow):
 
         # Theme submenu
         act_cycle_theme = view_menu.addAction("Cycle Theme")
+        act_customize = view_menu.addAction("Customize Theme...")
+        act_customize.triggered.connect(self._open_theme_editor)
         act_cycle_theme.setShortcut(QKeySequence("Ctrl+Shift+T"))
         act_cycle_theme.triggered.connect(self._cycle_theme)
 
@@ -1635,6 +1637,15 @@ class ForgeMainWindow(QMainWindow):
         editor = self.editor_widget.get_current_editor()
         if editor and hasattr(editor, "open_snippet_dialog"):
             editor.open_snippet_dialog()
+
+    def _open_theme_editor(self):
+        """Open the visual theme customization dialog."""
+        try:
+            from forge.gui.theme_editor import ThemeEditorDialog
+            dlg = ThemeEditorDialog(self)
+            dlg.exec()
+        except Exception as e:
+            self._show_toast(f"Theme editor error: {e}", 3000, "error")
 
     def _show_toast(self, message, duration=3000, level="info"):
         """Show a brief toast notification at the bottom of the window."""

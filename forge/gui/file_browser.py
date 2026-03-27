@@ -7,13 +7,13 @@ Right-click context menu allows adding/removing folders from the path.
 
 import os
 
-from PySide6.QtCore import QFileInfo, Qt, Signal, QDir, QModelIndex
-from PySide6.QtGui import QAction, QColor, QBrush
+from PySide6.QtCore import QFileInfo, Qt, Signal, QDir, QModelIndex, QSortFilterProxyModel, QMimeData, QUrl
+from PySide6.QtGui import QAction, QColor, QBrush, QKeySequence, QIcon, QDrag, QShortcut
 from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTreeView,
     QPushButton, QFileSystemModel, QMenu, QInputDialog, QMessageBox,
-    QStyle,
+    QStyle, QComboBox, QApplication,
 )
 
 
@@ -41,10 +41,121 @@ class PathAwareFSModel(QFileSystemModel):
         return super().data(index, role)
 
 
+
+class FileIconProvider(QFileIconProvider):
+    """Provides coloured icons based on file extension."""
+
+    # Colour-coded SVG circle with a letter overlay
+    _ICON_CACHE: dict = {}
+
+    _EXT_MAP = {
+        # (letter, colour)
+        ".m":    ("M", "#FF8C00"),   # orange
+        ".mat":  ("M", "#FF8C00"),
+        ".py":   ("Py", "#3572A5"),  # blue
+        ".pyw":  ("Py", "#3572A5"),
+        ".txt":  ("T", "#888888"),   # gray
+        ".md":   ("T", "#888888"),
+        ".rst":  ("T", "#888888"),
+        ".log":  ("T", "#888888"),
+        ".json": ("J", "#2E7D32"),   # green
+        ".yaml": ("Y", "#2E7D32"),
+        ".yml":  ("Y", "#2E7D32"),
+        ".toml": ("C", "#2E7D32"),
+        ".csv":  ("C", "#00897B"),   # teal
+        ".xlsx": ("X", "#00897B"),
+        ".xls":  ("X", "#00897B"),
+        ".tsv":  ("C", "#00897B"),
+    }
+
+    @classmethod
+    def _make_icon(cls, letter: str, colour: str) -> "QIcon":
+        key = (letter, colour)
+        if key in cls._ICON_CACHE:
+            return cls._ICON_CACHE[key]
+
+
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">'
+            f'<rect x="2" y="2" width="28" height="28" rx="6" '
+            f'fill="{colour}" opacity="0.85"/>'
+            f'<text x="16" y="22" text-anchor="middle" '
+            f'font-family="sans-serif" font-size="14" font-weight="bold" '
+            f'fill="white">{letter}</text></svg>'
+        )
+        renderer = QSvgRenderer(QByteArray(svg.encode()))
+        pix = QPixmap(32, 32)
+        pix.fill(Qt.transparent)
+        painter = QPainter(pix)
+        renderer.render(painter)
+        painter.end()
+        icon = QIcon(pix)
+        cls._ICON_CACHE[key] = icon
+        return icon
+
+    # QFileIconProvider overrides ----------------------------------------
+    def icon(self, info_or_type):
+        if isinstance(info_or_type, QFileInfo):
+            if info_or_type.isDir():
+                return super().icon(info_or_type)
+            ext = os.path.splitext(info_or_type.fileName())[1].lower()
+            if ext in self._EXT_MAP:
+                letter, colour = self._EXT_MAP[ext]
+                return self._make_icon(letter, colour)
+        return super().icon(info_or_type)
+
+
+
+class GlobFilterProxyModel(QSortFilterProxyModel):
+    """Filters QFileSystemModel rows by glob pattern (e.g. *.m, *.py)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._glob = ""
+        self._filter_type = "All Files"
+        self.setRecursiveFilteringEnabled(True)
+
+    # --- public API ---------------------------------------------------
+    def set_glob(self, pattern: str):
+        self._glob = pattern.strip()
+        self.invalidateFilter()
+
+    def set_filter_type(self, label: str):
+        self._filter_type = label
+        self.invalidateFilter()
+
+    # --- override -----------------------------------------------------
+    def filterAcceptsRow(self, source_row, source_parent):
+        model = self.sourceModel()
+        idx = model.index(source_row, 0, source_parent)
+        if not idx.isValid():
+            return False
+        # Always show directories so the tree stays navigable
+        if model.isDir(idx):
+            return True
+        name = model.fileName(idx)
+        # Apply filter-type preset
+        if self._filter_type == "M-Files" and not name.lower().endswith(".m"):
+            return False
+        elif self._filter_type == "Python" and not name.lower().endswith((".py", ".pyw")):
+            return False
+        elif self._filter_type == "Text" and not name.lower().endswith(
+            (".txt", ".md", ".rst", ".log")
+        ):
+            return False
+        # Apply glob
+        if self._glob:
+            import fnmatch
+            if not fnmatch.fnmatch(name, self._glob):
+                return False
+        return True
+
+
 class FileBrowserWidget(QWidget):
     """Tree-based file browser with path-aware folder highlighting."""
 
     file_open_requested = Signal(str)
+    open_terminal_requested = Signal(str)
     path_changed = Signal(list)
 
     def __init__(self, root_path=None, parent=None):
@@ -118,6 +229,25 @@ class FileBrowserWidget(QWidget):
         self.fs_model.setFilter(QDir.AllDirs | QDir.Files | QDir.NoDotAndDotDot)
 
         self.tree = QTreeView(self)
+        self.tree.setDragEnabled(True)
+
+
+    def _resolve_index(self, proxy_index):
+        """Map a proxy QModelIndex back to the source QFileSystemModel index."""
+        if hasattr(self, "_proxy") and self._proxy is not None:
+            return self._proxy.mapToSource(proxy_index)
+        return proxy_index
+
+    def _resolve_source_to_proxy(self, source_index):
+        """Map a source QModelIndex to the proxy index (for tree selection)."""
+        if hasattr(self, "_proxy") and self._proxy is not None:
+            return self._proxy.mapFromSource(source_index)
+        return source_index
+
+        self._rename_shortcut = QShortcut(QKeySequence("F2"), self.tree)
+        self._rename_shortcut.activated.connect(self._shortcut_rename)
+
+        self.tree.setDragDropMode(QTreeView.DragOnly)
         self.tree.setModel(self.fs_model)
         self.tree.setRootIndex(self.fs_model.index(self._root))
         self.tree.setHeaderHidden(False)
@@ -125,6 +255,167 @@ class FileBrowserWidget(QWidget):
         self.tree.doubleClicked.connect(self._on_double_click)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._context_menu)
+
+        # --- filter / search bar -------------------------------------------
+
+    # --- enhanced context menu -----------------------------------------
+    def _show_context_menu(self, pos):
+        """Right-click menu with file operations."""
+        index = self.tree.indexAt(pos)
+        menu = QMenu(self)
+
+        # Map proxy index -> source index for path resolution
+        if hasattr(self, "_proxy") and self._proxy is not None:
+            source_index = self._proxy.mapToSource(index)
+        else:
+            source_index = index
+
+        model = self.model
+        path = model.filePath(source_index) if source_index.isValid() else ""
+        is_dir = model.isDir(source_index) if source_index.isValid() else False
+        parent_dir = path if is_dir else os.path.dirname(path) if path else ""
+
+        # -- New File / Folder --
+        if parent_dir:
+            new_file_act = menu.addAction("New File...")
+            new_file_act.triggered.connect(lambda: self._action_new_file(parent_dir))
+            new_folder_act = menu.addAction("New Folder...")
+            new_folder_act.triggered.connect(lambda: self._action_new_folder(parent_dir))
+            menu.addSeparator()
+
+        # -- Rename / Delete --
+        if path and source_index.isValid():
+            rename_act = menu.addAction("Rename...\tF2")
+            rename_act.triggered.connect(lambda: self._action_rename(path))
+            delete_act = menu.addAction("Delete")
+            delete_act.triggered.connect(lambda: self._action_delete(path))
+            menu.addSeparator()
+
+        # -- Copy Path --
+        if path:
+            copy_act = menu.addAction("Copy Path")
+            copy_act.triggered.connect(lambda: self._action_copy_path(path))
+
+        # -- Open in Terminal --
+        if parent_dir:
+            term_act = menu.addAction("Open in Terminal")
+            term_act.triggered.connect(lambda: self._action_open_terminal(parent_dir))
+
+        # -- Reveal in file manager --
+        if path:
+            reveal_act = menu.addAction("Reveal in System File Manager")
+            reveal_act.triggered.connect(lambda: self._action_reveal(path))
+
+        # -- legacy root-path actions (add / remove watched path) --
+        menu.addSeparator()
+        add_act = menu.addAction("Add Path...")
+        add_act.triggered.connect(self._add_root_path)
+        if path:
+            remove_act = menu.addAction("Remove Path")
+            remove_act.triggered.connect(lambda: self._remove_root_path_by_selection(source_index))
+
+        if not menu.isEmpty():
+            menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    # --- action helpers ------------------------------------------------
+    def _action_new_file(self, directory):
+        name, ok = QInputDialog.getText(self, "New File", "File name:")
+        if ok and name:
+            fpath = os.path.join(directory, name)
+            try:
+                open(fpath, "w").close()
+            except OSError as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+    def _action_new_folder(self, directory):
+        name, ok = QInputDialog.getText(self, "New Folder", "Folder name:")
+        if ok and name:
+            fpath = os.path.join(directory, name)
+            try:
+                os.makedirs(fpath, exist_ok=True)
+            except OSError as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+    def _action_rename(self, path):
+        old_name = os.path.basename(path)
+        new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=old_name)
+        if ok and new_name and new_name != old_name:
+            new_path = os.path.join(os.path.dirname(path), new_name)
+            try:
+                os.rename(path, new_path)
+            except OSError as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+    def _action_delete(self, path):
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Delete '{os.path.basename(path)}'?\n\nThis cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+            except OSError as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+    def _action_copy_path(self, path):
+        QApplication.clipboard().setText(path)
+
+    def _action_open_terminal(self, directory):
+        """Emit signal so the main window can open a terminal widget."""
+        if hasattr(self, "open_terminal_requested"):
+            self.open_terminal_requested.emit(directory)
+
+    def _action_reveal(self, path):
+        import subprocess, sys
+        target = path if os.path.isdir(path) else os.path.dirname(path)
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", target])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", target])
+        else:
+            subprocess.Popen(["xdg-open", target])
+
+
+
+    # --- drag support (file URLs for editor drop) ----------------------
+    def _start_file_drag(self):
+        """Called internally; creates a QDrag with file URL mime data."""
+        index = self.tree.currentIndex()
+        if hasattr(self, "_proxy") and self._proxy is not None:
+            index = self._proxy.mapToSource(index)
+        if not index.isValid():
+            return
+        path = self.model.filePath(index)
+        if not path or self.model.isDir(index):
+            return
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(path)])
+        mime.setText(path)
+        drag.setMimeData(mime)
+        drag.exec(Qt.CopyAction)
+
+        self._filter_row = QHBoxLayout()
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Filter (glob): e.g. *.m, *.py")
+        self._search_edit.setClearButtonEnabled(True)
+        self._search_edit.textChanged.connect(self._on_filter_glob_changed)
+
+        self._filter_combo = QComboBox()
+        self._filter_combo.addItems(["All Files", "M-Files", "Python", "Text"])
+        self._filter_combo.currentTextChanged.connect(self._on_filter_type_changed)
+        self._filter_combo.setFixedWidth(100)
+
+        self._filter_row.addWidget(self._search_edit)
+        self._filter_row.addWidget(self._filter_combo)
+
+        # add filter row to the parent layout
+        # (detect the layout variable name)
+        layout.addLayout(self._filter_row)
         layout.addWidget(self.tree)
 
     # -- Navigation --
@@ -290,7 +581,6 @@ class FileBrowserWidget(QWidget):
 
     def _new_mfile(self):
         """Create a new .m script file from template."""
-        from PySide6.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(self, "New M-File", "File name (without .m):")
         if ok and name:
             path = os.path.join(self._current_path(), f"{name}.m")
@@ -306,7 +596,6 @@ class FileBrowserWidget(QWidget):
 
     def _new_function_file(self):
         """Create a new function .m file from template."""
-        from PySide6.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(self, "New Function", "Function name:")
         if ok and name:
             path = os.path.join(self._current_path(), f"{name}.m")
