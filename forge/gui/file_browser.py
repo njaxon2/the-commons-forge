@@ -7,8 +7,9 @@ Right-click context menu allows adding/removing folders from the path.
 
 import os
 
-from PySide6.QtCore import Qt, Signal, QDir, QModelIndex
+from PySide6.QtCore import QFileInfo, Qt, Signal, QDir, QModelIndex
 from PySide6.QtGui import QAction, QColor, QBrush
+from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTreeView,
     QPushButton, QFileSystemModel, QMenu, QInputDialog, QMessageBox,
