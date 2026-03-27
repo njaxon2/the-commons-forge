@@ -1824,6 +1824,73 @@ class EditorWidget(QWidget):
             self.tabs.setTabText(idx, text[:-2])
 
 
+
+
+    def save_current(self):
+        """Save the current file. Returns the path saved to, or None."""
+        idx = self.tabs.currentIndex()
+        if idx < 0:
+            return None
+
+        editor = self.tabs.widget(idx)
+        if not hasattr(editor, 'toPlainText'):
+            return None
+
+        path = getattr(editor, '_file_path', None)
+        if not path:
+            return self.save_as()
+
+        try:
+            with open(path, 'w') as f:
+                f.write(editor.toPlainText())
+            editor.document().setModified(False)
+            # Remove modified indicator
+            tab_text = self.tabs.tabText(idx)
+            if tab_text.endswith(' \u25cf'):
+                self.tabs.setTabText(idx, tab_text[:-2])
+            return path
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Save Error", str(e))
+            return None
+
+    def save_as(self):
+        """Save current file with a new name."""
+        from PySide6.QtWidgets import QFileDialog
+        idx = self.tabs.currentIndex()
+        if idx < 0:
+            return None
+
+        editor = self.tabs.widget(idx)
+        if not hasattr(editor, 'toPlainText'):
+            return None
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save As",
+            os.path.expanduser("~"),
+            "M-files (*.m);;Python (*.py);;All Files (*)"
+        )
+        if not path:
+            return None
+
+        try:
+            with open(path, 'w') as f:
+                f.write(editor.toPlainText())
+            # Update tab name
+            fname = os.path.basename(path)
+            self.tabs.setTabText(idx, fname)
+            # Store path on editor
+            editor._file_path = path
+            # Mark as unmodified
+            editor.document().setModified(False)
+            if hasattr(self, '_add_to_recent'):
+                self._add_to_recent(path)
+            return path
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Save Error", str(e))
+            return None
+
     def _create_welcome_tab(self):
         """Create a styled welcome page as the first tab."""
         from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
