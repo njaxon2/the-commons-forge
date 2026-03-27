@@ -112,6 +112,9 @@ class ForgeMainWindow(QMainWindow):
     # Workspace helpers
     # ==================================================================
 
+        # Update outline when editor content changes
+        self.editor_widget.tabs.currentChanged.connect(self._update_outline)
+
     def _update_workspace(self, _text=None):
         if self.session:
             ws_dict = self.session.get_workspace_dict()
@@ -926,6 +929,22 @@ class ForgeMainWindow(QMainWindow):
             self._bottom_tabs.setCurrentWidget(self._search_panel)
             self._search_panel._search_input.setFocus()
             self._search_panel._search_input.selectAll()
+
+    def _update_outline(self, _=None):
+        """Update the outline panel for the current editor."""
+        if not hasattr(self, '_outline'):
+            return
+        editor = self.editor_widget.get_current_editor()
+        if editor:
+            text = editor.toPlainText()
+            file_path = getattr(editor, 'file_path', None)
+            self._outline.update_outline(text, file_path)
+
+    def _goto_outline_line(self, line_num):
+        """Navigate editor to line from outline panel."""
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(editor, '_goto_line'):
+            editor._goto_line(line_num)
 
     def _open_search_result(self, file_path, line_num):
         """Open a file from search results at a specific line."""
