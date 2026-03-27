@@ -467,6 +467,24 @@ class CommandWidget(QWidget):
     # Mouse handling & context menu
     # ------------------------------------------------------------------
 
+
+    def wheelEvent(self, event):
+        """Handle Ctrl+Scroll for zoom."""
+        from PySide6.QtCore import Qt
+        if event.modifiers() & Qt.ControlModifier:
+            delta = event.angleDelta().y()
+            font = self._output.font()
+            size = font.pointSize()
+            if delta > 0 and size < 24:
+                font.setPointSize(size + 1)
+            elif delta < 0 and size > 8:
+                font.setPointSize(size - 1)
+            self._output.setFont(font)
+            self._input.setFont(font)
+            event.accept()
+            return
+        super().wheelEvent(event)
+
     def _mouse_press(self, event):
         QPlainTextEdit.mousePressEvent(self.console, event)
 
