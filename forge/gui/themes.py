@@ -193,6 +193,10 @@ QMenuBar::item:pressed {{
 
 /* ── Menus (Dropdown) ────────────────────────────────────────── */
 QMenu {{
+    background: {bg1};
+    border: 1px solid {border0};
+    border-radius: 8px;
+    padding: 4px 0px;
     background-color: {c["bg1"]};
     color: {c["fg0"]};
     border: 1px solid {c["border1"]};
@@ -201,12 +205,17 @@ QMenu {{
 }}
 
 QMenu::item {{
+    padding: 6px 28px 6px 20px;
+    border-radius: 4px;
+    margin: 2px 4px;
     padding: 8px 32px 8px 20px;
     border-radius: 4px;
     margin: 2px 6px;
 }}
 
 QMenu::item:selected {{
+    background: {accent_dim};
+    color: {accent};
     background-color: {c["accent_bg"]};
     color: {c["accent_h"]};
 }}
@@ -216,6 +225,9 @@ QMenu::item:disabled {{
 }}
 
 QMenu::separator {{
+    height: 1px;
+    background: {border0};
+    margin: 4px 8px;
     height: 1px;
     background-color: {c["border0"]};
     margin: 6px 12px;
@@ -237,6 +249,10 @@ QMenu::right-arrow {{
 
 /* ── Toolbars ────────────────────────────────────────────────── */
 QToolBar {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {bg2}, stop:1 {bg1});
+    border-bottom: 1px solid {border0};
+    spacing: 2px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 {c["bg3"]}, stop:1 {c["bg1"]});
@@ -246,6 +262,9 @@ QToolBar {{
 }}
 
 QToolBar::separator {{
+    background: {border0};
+    width: 1px;
+    margin: 4px 6px;
     width: 1px;
     background-color: {c["border0"]};
     margin: 4px 6px;
@@ -268,6 +287,8 @@ QToolButton {{
 }}
 
 QToolButton:hover {{
+    background: {accent_dim};
+    border-radius: 4px;
     background-color: {c["accent_bg"]};
     border: 1px solid {c["accent_dim"]};
     color: {c["accent_h"]};
@@ -416,6 +437,10 @@ QTabBar {{
 }}
 
 QTabBar::tab {{
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
     background-color: {c["tab_inactive"]};
     color: {c["fg2"]};
     border: none;
@@ -433,6 +458,8 @@ QTabBar::tab:hover {{
 }}
 
 QTabBar::tab:selected {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {tab_active}, stop:1 {bg1});
     background-color: {c["tab_active"]};
     color: {c["accent"]};
     border-bottom: 3px solid {c["accent"]};
@@ -448,6 +475,8 @@ QTabBar::close-button {{
 }}
 
 QTabBar::close-button:hover {{
+    background: {error};
+    border-radius: 4px;
     background-color: {c["error"]};
 }}
 
@@ -474,6 +503,12 @@ QDockWidget {{
 }}
 
 QDockWidget::title {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {bg3}, stop:1 {bg2});
+    padding: 3px 8px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    font-size: 11px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 {c["bg3"]}, stop:1 {c["bg1"]});
@@ -506,6 +541,10 @@ QDockWidget::float-button:hover {{
 
 /* ── Scroll Bars ─────────────────────────────────────────────── */
 QScrollBar:vertical {{
+    width: 8px;
+    background: transparent;
+    border: none;
+    margin: 0;
     background: transparent;
     width: 10px;
     margin: 0;
@@ -513,6 +552,9 @@ QScrollBar:vertical {{
 }}
 
 QScrollBar::handle:vertical {{
+    background: {scrollbar};
+    border-radius: 4px;
+    min-height: 30px;
     background-color: {c["scrollbar"]};
     border-radius: 5px;
     min-height: 30px;
@@ -520,6 +562,7 @@ QScrollBar::handle:vertical {{
 }}
 
 QScrollBar::handle:vertical:hover {{
+    background: {scrollbar_h};
     background-color: {c["scrollbar_h"]};
 }}
 
@@ -540,6 +583,10 @@ QScrollBar::sub-page:vertical {{
 }}
 
 QScrollBar:horizontal {{
+    height: 8px;
+    background: transparent;
+    border: none;
+    margin: 0;
     background: transparent;
     height: 10px;
     margin: 0;
@@ -547,6 +594,9 @@ QScrollBar:horizontal {{
 }}
 
 QScrollBar::handle:horizontal {{
+    background: {scrollbar};
+    border-radius: 4px;
+    min-width: 30px;
     background-color: {c["scrollbar"]};
     border-radius: 5px;
     min-width: 30px;
@@ -554,6 +604,7 @@ QScrollBar::handle:horizontal {{
 }}
 
 QScrollBar::handle:horizontal:hover {{
+    background: {scrollbar_h};
     background-color: {c["scrollbar_h"]};
 }}
 
@@ -896,6 +947,17 @@ QGroupBox::title {{
 }}
 
 /* ── Status Bar ──────────────────────────────────────────────── */
+    /* ── Hide scrollbar arrows for clean look ── */
+    QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+    QScrollBar::up-arrow:horizontal, QScrollBar::down-arrow:horizontal,
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+        background: none;
+        border: none;
+        width: 0px;
+        height: 0px;
+    }}
+
 QStatusBar {{
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
@@ -949,6 +1011,11 @@ QToolTip {{
 
 /* ── Splitter ────────────────────────────────────────────────── */
 QSplitter::handle {{
+    background: {border0};
+    width: 2px;
+    height: 2px;
+    margin: 1px;
+    border-radius: 1px;
     background-color: {c["border0"]};
 }}
 
@@ -961,6 +1028,7 @@ QSplitter::handle:vertical {{
 }}
 
 QSplitter::handle:hover {{
+    background: {accent};
     background-color: {c["accent"]};
 }}
 

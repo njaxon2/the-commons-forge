@@ -2129,8 +2129,62 @@ class EditorWidget(QWidget):
         if hasattr(self, '_engine_func_names'):
             editor.set_function_names(self._engine_func_names)
         idx = self.tabs.addTab(editor, "untitled")
+        self.tabs.setTabIcon(self.tabs.count() - 1, self._icon_for_file(""))
         self.tabs.setCurrentIndex(idx)
         return editor
+
+
+    # -- file type icons --
+    def _icon_for_file(self, filepath):
+        """Return a QIcon based on file extension."""
+        from PySide6.QtWidgets import QStyle
+        from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush
+        from PySide6.QtCore import Qt
+
+        ext = os.path.splitext(filepath)[1].lower() if filepath else ""
+
+        # Map extensions to colors for simple colored-circle icons
+        ext_colors = {
+            ".py": "#3572A5",   # Python blue
+            ".m": "#E44D26",    # MATLAB/function orange
+            ".mat": "#E44D26",
+            ".txt": "#888888",  # gray
+            ".md": "#519ABA",   # markdown teal
+            ".json": "#F1E05A", # json yellow
+            ".yaml": "#CB171E", # red
+            ".yml": "#CB171E",
+            ".xml": "#F34B7D",  # pink
+            ".html": "#E44D26", # orange
+            ".css": "#563D7C",  # purple
+            ".js": "#F1E05A",   # yellow
+            ".ts": "#2B7489",   # teal
+            ".c": "#555555",
+            ".cpp": "#F34B7D",
+            ".h": "#999999",
+            ".rs": "#DEA584",   # rust
+            ".go": "#00ADD8",   # go
+            ".sh": "#89E051",   # shell green
+            ".bat": "#C1F12E",
+            ".log": "#AAAAAA",
+            ".cfg": "#AAAAAA",
+            ".ini": "#AAAAAA",
+            ".toml": "#9C4121",
+        }
+
+        color_hex = ext_colors.get(ext, "#CCCCCC")
+
+        # Create a small colored circle icon (16x16)
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.transparent)
+        p = QPainter(pixmap)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setBrush(QBrush(QColor(color_hex)))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(2, 2, 12, 12)
+        p.end()
+
+        return QIcon(pixmap)
+
 
     def open_file(self, path: str):
         """Open *path* in a new tab (or focus if already open)."""
@@ -2150,6 +2204,8 @@ class EditorWidget(QWidget):
             editor.setPlainText(fh.read())
         name = os.path.basename(path)
         idx = self.tabs.addTab(editor, name)
+        if hasattr(self, "_icon_for_file"):
+            self.tabs.setTabIcon(idx, self._icon_for_file(path))
         self.tabs.setCurrentIndex(idx)
         return editor
 
@@ -2201,6 +2257,53 @@ class EditorWidget(QWidget):
         import os, json
         recovery_dir = os.path.join(os.path.expanduser("~"), ".forge", "recovery")
         os.makedirs(recovery_dir, exist_ok=True)
+        self.save_session()
+
+
+    # -- session restore --
+    def save_session(self):
+        """Save open file paths and active tab index to ~/.forge/session.json."""
+        import json
+        session_dir = os.path.expanduser("~/.forge")
+        os.makedirs(session_dir, exist_ok=True)
+        session_file = os.path.join(session_dir, "session.json")
+
+        files = []
+        for i in range(self.tabs.count()):
+            editor = self.tabs.widget(i)
+            if editor and hasattr(editor, "file_path") and editor.file_path:
+                files.append(editor.file_path)
+
+        data = {
+            "files": files,
+            "active_tab": self.tabs.currentIndex(),
+        }
+        try:
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
+
+    def restore_session(self):
+        """Restore previously open files from ~/.forge/session.json."""
+        import json
+        session_file = os.path.expanduser("~/.forge/session.json")
+        if not os.path.exists(session_file):
+            return
+        try:
+            with open(session_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return
+
+        for path in data.get("files", []):
+            if os.path.isfile(path):
+                self.open_file(path)
+
+        idx = data.get("active_tab", 0)
+        if 0 <= idx < self.tabs.count():
+            self.tabs.setCurrentIndex(idx)
+
 
         for i in range(self.tabs.count()):
             editor = self.tabs.widget(i)
@@ -2284,3 +2387,40 @@ class EditorWidget(QWidget):
                     self._completer.popup().hide()
             else:
                 self._completer.popup().hide()
+        self._draw_indent_guides(event)
+
+
+    # -- indent guides --
+    def _draw_indent_guides(self, event):
+        """Draw subtle vertical lines at each indentation level."""
+        painter = QPainter(self.viewport())
+        color = QColor(255, 255, 255, 30)  # semi-transparent white/gray
+        painter.setPen(color)
+
+        block = self.firstVisibleBlock()
+        font_metrics = self.fontMetrics()
+        space_width = font_metrics.horizontalAdvance(" ")
+        tab_stop = 4  # spaces per indent level
+
+        while block.isValid():
+            geom = self.blockBoundingGeometry(block).translated(self.contentOffset())
+            if geom.top() > event.rect().bottom():
+                break
+
+            text = block.text()
+            if text:
+                # Count leading spaces
+                stripped = text.lstrip(" ")
+                leading = len(text) - len(stripped)
+                indent_levels = leading // tab_stop
+
+                for level in range(1, indent_levels + 1):
+                    x = int(level * tab_stop * space_width) + self.contentOffset().x()
+                    top = int(geom.top())
+                    bottom = int(geom.bottom())
+                    painter.drawLine(x, top, x, bottom)
+
+            block = block.next()
+
+        painter.end()
+
