@@ -105,6 +105,8 @@ class ForgeMainWindow(QMainWindow):
         # Help-on-function: right-click context menus in command & editor
         self.command_widget.help_requested.connect(self._show_help_for)
         self.command_widget.edit_requested.connect(self.open_file_in_editor)
+        if hasattr(self.command_widget, 'plot_requested'):
+            self.command_widget.plot_requested.connect(self._handle_plot_requests)
         self.editor_widget.help_requested.connect(self._show_help_for)
         self.editor_widget.eval_requested.connect(self._eval_in_command)
 
@@ -989,6 +991,27 @@ class ForgeMainWindow(QMainWindow):
         editor = self.editor_widget.get_current_editor()
         if editor and hasattr(editor, '_goto_line'):
             editor._goto_line(line_num)
+
+    def _handle_plot_requests(self, requests):
+        """Process plot requests from the engine."""
+        from forge.gui.plot_widget import PlotWidget
+        pw = PlotWidget.create_new()
+
+        for req in requests:
+            cmd = req[0]
+            if cmd == 'plot' and len(req) >= 3:
+                pw.ax.plot(req[1], req[2])
+            elif cmd == 'xlabel':
+                pw.ax.set_xlabel(req[1])
+            elif cmd == 'ylabel':
+                pw.ax.set_ylabel(req[1])
+            elif cmd == 'title':
+                pw.ax.set_title(req[1])
+            elif cmd == 'grid':
+                pw.ax.grid(req[1] == 'on')
+
+        pw.canvas.draw()
+        pw.show()
 
     def _eval_in_command(self, code):
         """Evaluate code from editor selection in the command window."""

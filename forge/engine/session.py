@@ -9606,6 +9606,35 @@ class ForgeSession:
         session._engine.functions["format"] = forge_format
         session._engine.functions["help"] = forge_help
         session._engine.functions["doc"] = forge_doc
+
+        # GUI plot request tracking - wraps existing stub functions
+        # Store original functions and augment them with GUI signaling
+        def _make_gui_plot_wrapper(original_func, request_type):
+            """Wrap an existing plot function to also track GUI requests."""
+            def wrapper(*args, **kwargs):
+                result = original_func(*args, **kwargs) if original_func else None
+                if not hasattr(self, '_plot_requests'):
+                    self._plot_requests = []
+                if request_type == 'figure':
+                    fig_num = int(args[0].data.flat[0]) if args and hasattr(args[0], 'data') else 1
+                    self._figure_requests = getattr(self, '_figure_requests', [])
+                    self._figure_requests.append(('figure', fig_num))
+                elif request_type in ('xlabel', 'ylabel', 'title'):
+                    label = str(args[0]) if args else ''
+                    self._plot_requests.append((request_type, label))
+                elif request_type == 'grid':
+                    mode = str(args[0]).lower() if args else 'on'
+                    self._plot_requests.append(('grid', mode))
+                return result
+            wrapper.__doc__ = original_func.__doc__ if original_func else f"{request_type} (GUI)"
+            return wrapper
+
+        # Wrap the existing stub functions to add GUI tracking
+        for fname in ('figure', 'xlabel', 'ylabel', 'title', 'grid'):
+            original = session._engine.functions.get(fname)
+            if original:
+                session._engine.functions[fname] = _make_gui_plot_wrapper(original, fname)
+
         session._engine.functions["lookfor"] = forge_lookfor
         session._engine.functions["version"] = forge_version
         session._engine.functions["ver"] = forge_ver

@@ -218,7 +218,8 @@ class CommandWidget(QWidget):
 
     command_executed = Signal(str)
     help_requested = Signal(str)   # emitted when user right-clicks > Help on 'func'
-    edit_requested = Signal(str)   # emitted when edit() command is run
+    edit_requested = Signal(str)
+    plot_requested = Signal(list)  # list of plot commands   # emitted when edit() command is run
 
     PROMPT = ">> "
     CONTINUATION = ".. "
@@ -859,6 +860,12 @@ class CommandWidget(QWidget):
             name = self.engine._doc_request
             self.engine._doc_request = None
             self.help_requested.emit(name)
+
+        # Check for plot requests
+        if self.engine and hasattr(self.engine, '_plot_requests') and self.engine._plot_requests:
+            requests = list(self.engine._plot_requests)
+            self.engine._plot_requests = []
+            self.plot_requested.emit(requests)
 
         self._write_prompt()
         self.command_executed.emit(full_text)
