@@ -82,6 +82,7 @@ class ForgeMainWindow(QMainWindow):
 
     def _connect_signals(self):
         self.command_widget.command_executed.connect(self._update_workspace)
+        self.command_widget.command_executed.connect(lambda _: self._refresh_problems())
         self.editor_widget.file_run_requested.connect(self._run_file)
         self.file_browser_widget.file_open_requested.connect(
             self.editor_widget.open_file
@@ -192,9 +193,23 @@ class ForgeMainWindow(QMainWindow):
         # Debug
         self.act_run = QAction("&Run File", self, shortcut="F5")
         self.act_run.triggered.connect(self._on_run_file)
+        
+        self.act_run_selection = QAction("Run &Selection", self, shortcut="F9")
+        self.act_run_selection.triggered.connect(self._run_selection)
         self.act_stop = QAction("&Stop", self, shortcut="Shift+F5")
-        self.act_step = QAction("S&tep", self, shortcut="F10")
-        self.act_continue = QAction("&Continue", self, shortcut="F5")
+        
+        self.act_step = QAction("Step &Over", self, shortcut="F10")
+        self.act_step.setEnabled(False)
+        self.act_step_in = QAction("Step &In", self, shortcut="F11")
+        self.act_step_in.setEnabled(False)
+        self.act_step_out = QAction("Step O&ut", self, shortcut="Shift+F11")
+        self.act_step_out.setEnabled(False)
+        self.act_continue = QAction("&Continue", self, shortcut="F8")
+        self.act_continue.setEnabled(False)
+        self.act_toggle_bp = QAction("Toggle &Breakpoint", self, shortcut="F12")
+        self.act_toggle_bp.triggered.connect(lambda: self._editor_action('toggle_bookmark'))
+        self.act_profile = QAction("&Profile Code", self)
+        self.act_profile.triggered.connect(self._profile_current_file)
 
         # Window
         self.act_focus_cmd = QAction("Focus &Command", self, shortcut="Ctrl+0")
@@ -298,10 +313,17 @@ class ForgeMainWindow(QMainWindow):
         # ── Debug ──
         debug_menu = mb.addMenu("&Debug")
         debug_menu.addAction(self.act_run)
+        debug_menu.addAction(self.act_run_selection)
         debug_menu.addAction(self.act_stop)
         debug_menu.addSeparator()
+        debug_menu.addAction(self.act_toggle_bp)
+        debug_menu.addSeparator()
+        debug_menu.addAction(self.act_step_in)
         debug_menu.addAction(self.act_step)
+        debug_menu.addAction(self.act_step_out)
         debug_menu.addAction(self.act_continue)
+        debug_menu.addSeparator()
+        debug_menu.addAction(self.act_profile)
 
         # ── Window ──
         window_menu = mb.addMenu("&Window")
@@ -364,9 +386,76 @@ class ForgeMainWindow(QMainWindow):
         )
         tb.addWidget(self._func_count_label)
 
+        # Debug toolbar
+        debug_tb = QToolBar("Debug", self)
+        debug_tb.setObjectName("DebugToolbar")
+        debug_tb.setIconSize(QSize(18, 18))
+        debug_tb.setMovable(False)
+        debug_tb.addAction(self.act_run)
+        debug_tb.addAction(self.act_run_selection)
+        debug_tb.addAction(self.act_stop)
+        debug_tb.addSeparator()
+        debug_tb.addAction(self.act_step_in)
+        debug_tb.addAction(self.act_step)
+        debug_tb.addAction(self.act_step_out)
+        debug_tb.addAction(self.act_continue)
+        self.addToolBarBreak()
+        self.addToolBar(debug_tb)
+
     # ==================================================================
     # Dock widgets
     # ==================================================================
+
+    def _create_problems_panel(self):
+        """Create the Problems/Diagnostics panel."""
+        from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QHeaderView
+        self._problems_tree = QTreeWidget()
+        self._problems_tree.setHeaderLabels(["Severity", "Message", "File", "Line"])
+        self._problems_tree.setAlternatingRowColors(True)
+        self._problems_tree.setRootIsDecorated(False)
+        header = self._problems_tree.header()
+        header.setStretchLastSection(True)
+        header.resizeSection(0, 60)
+        header.resizeSection(1, 400)
+        header.resizeSection(2, 150)
+        header.resizeSection(3, 50)
+        self._problems_tree.itemDoubleClicked.connect(self._on_problem_clicked)
+        return self._problems_tree
+
+    def _on_problem_clicked(self, item, column):
+        """Navigate to the file/line of a diagnostic."""
+        file_path = item.text(2)
+        line_str = item.text(3)
+        if file_path and os.path.isfile(file_path):
+            self.open_file_in_editor(file_path)
+            if line_str:
+                try:
+                    editor = self.editor_widget.get_current_editor()
+                    if editor:
+                        editor._goto_line(int(line_str))
+                except (ValueError, AttributeError):
+                    pass
+
+    def _refresh_problems(self):
+        """Refresh the problems panel from command widget diagnostics."""
+        if not hasattr(self, '_problems_tree'):
+            return
+        from PySide6.QtWidgets import QTreeWidgetItem
+        self._problems_tree.clear()
+        diagnostics = self.command_widget.get_diagnostics()
+        for d in diagnostics:
+            item = QTreeWidgetItem([
+                d['severity'].upper(),
+                d['text'][:200],
+                d.get('file', '') or '',
+                str(d.get('line', '')) if d.get('line') else '',
+            ])
+            # Color based on severity
+            if d['severity'] == 'error':
+                item.setForeground(0, QColor("#f38ba8"))
+            else:
+                item.setForeground(0, QColor("#f9e2af"))
+            self._problems_tree.addTopLevelItem(item)
 
     def _create_docks(self):
         from forge.gui.command_widget import CommandWidget
@@ -569,6 +658,36 @@ class ForgeMainWindow(QMainWindow):
             idx = self.editor_widget.tabs.currentIndex()
             self.editor_widget.tabs.setTabText(idx, os.path.basename(path))
             self.set_status(f"Saved {os.path.basename(path)}")
+
+    def _run_selection(self):
+        """Run the selected text in the editor."""
+        editor = self.editor_widget.get_current_editor()
+        if editor:
+            cursor = editor.textCursor()
+            selected = cursor.selectedText()
+            if selected:
+                selected = selected.replace('\u2029', '\n')
+                for line in selected.split('\n'):
+                    line = line.strip()
+                    if line:
+                        self.command_widget._execute_command(line)
+
+    def _profile_current_file(self):
+        """Run the current file with basic profiling."""
+        editor = self.editor_widget.get_current_editor()
+        if not editor or not editor.file_path:
+            return
+        path = editor.file_path
+        self.command_widget.append_output(f"Profiling {os.path.basename(path)}...")
+        import time
+        start = time.perf_counter()
+        if hasattr(self, 'session') and self.session:
+            try:
+                self.session.eval(f"source('{path}')")
+            except Exception as e:
+                self.command_widget.append_output(f"Error: {e}")
+        elapsed = time.perf_counter() - start
+        self.command_widget.append_output(f"Profile: {elapsed:.3f}s elapsed")
 
     def _on_run_file(self):
         editor = self.editor_widget.get_current_editor()

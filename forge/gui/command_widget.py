@@ -309,6 +309,20 @@ class CommandWidget(QWidget):
             return self.CONTINUATION
         return self.PROMPT
 
+    def _start_execution_timer(self):
+        """Start timing command execution."""
+        import time
+        self._exec_start_time = time.perf_counter()
+
+    def _stop_execution_timer(self):
+        """Stop timing and optionally display elapsed time."""
+        import time
+        if hasattr(self, '_exec_start_time'):
+            elapsed = time.perf_counter() - self._exec_start_time
+            if elapsed > 0.5:  # Only show for slow commands
+                self._append_text_colored(f"  [{elapsed:.3f}s]\n", '#6c7086')
+            del self._exec_start_time
+
     def _write_prompt(self):
         """Append a prompt and record where editable text begins."""
         prompt = self._current_prompt()
@@ -543,6 +557,39 @@ class CommandWidget(QWidget):
                 menu.addAction(eval_act)
 
         menu.exec(event.globalPos())
+
+    # ------------------------------------------------------------------
+    # Diagnostics / Problems tracking
+    # ------------------------------------------------------------------
+
+    def get_diagnostics(self):
+        """Return list of diagnostic messages from recent execution."""
+        if not hasattr(self, '_diagnostics'):
+            self._diagnostics = []
+        return self._diagnostics
+
+    def _track_diagnostic(self, line, severity='error'):
+        """Track a diagnostic message."""
+        if not hasattr(self, '_diagnostics'):
+            self._diagnostics = []
+        import re
+        # Try to parse "file:line: message" pattern
+        m = re.match(r'(?:(.+):(\d+):\s*)?(.*)', line)
+        entry = {
+            'severity': severity,
+            'message': line,
+            'file': m.group(1) if m and m.group(1) else None,
+            'line': int(m.group(2)) if m and m.group(2) else None,
+            'text': m.group(3) if m else line,
+        }
+        self._diagnostics.append(entry)
+        # Keep only last 100
+        if len(self._diagnostics) > 100:
+            self._diagnostics = self._diagnostics[-100:]
+
+    def clear_diagnostics(self):
+        """Clear all tracked diagnostics."""
+        self._diagnostics = []
 
     # ------------------------------------------------------------------
     # History
