@@ -94,6 +94,13 @@ class ForgeMainWindow(QMainWindow):
         )
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
 
+        # Update status bar from editor cursor position
+        self.editor_widget.tabs.currentChanged.connect(self._update_status_bar)
+        # Also connect first editor
+        editor = self.editor_widget.get_current_editor()
+        if editor:
+            editor.cursorPositionChanged.connect(self._update_status_bar)
+
         # Help-on-function: right-click context menus in command & editor
         self.command_widget.help_requested.connect(self._show_help_for)
         self.editor_widget.help_requested.connect(self._show_help_for)
@@ -435,13 +442,25 @@ class ForgeMainWindow(QMainWindow):
         self._status_msg.setStyleSheet("padding: 0 8px;")
         sb.addWidget(self._status_msg, 1)
 
-        # Function count badge
-        try:
-            from forge.engine.session import ForgeSession
-            s = ForgeSession.__new__(ForgeSession)
-            # We'll update this after engine setup
-        except Exception:
-            pass
+        # Editor position indicator
+        self._sb_position = QLabel("Ln 1, Col 1")
+        self._sb_position.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_position)
+
+        # Language mode
+        self._sb_lang = QLabel("M-code")
+        self._sb_lang.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_lang)
+
+        # Encoding
+        self._sb_encoding = QLabel("UTF-8")
+        self._sb_encoding.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_encoding)
+
+        # Theme indicator
+        self._sb_theme = QLabel("dark")
+        self._sb_theme.setStyleSheet("color: #6c7086; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_theme)
 
     def set_status(self, msg: str):
         self._status_msg.setText(msg)
@@ -493,6 +512,8 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.themes import apply_theme, get_preferences, save_preferences
         app = QApplication.instance()
         apply_theme(app, theme_name)
+        if hasattr(self, '_sb_theme'):
+            self._sb_theme.setText(theme_name)
         prefs = get_preferences()
         prefs['default_theme'] = theme_name
         save_preferences(prefs)
@@ -666,6 +687,20 @@ class ForgeMainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.workspace_dock)
         self._set_default_layout()
         self.set_status("Layout reset")
+
+    def _update_status_bar(self, _=None):
+        """Update status bar with editor cursor position."""
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(self, '_sb_position'):
+            cursor = editor.textCursor()
+            line = cursor.blockNumber() + 1
+            col = cursor.columnNumber() + 1
+            self._sb_position.setText(f"Ln {line}, Col {col}")
+            # Update language mode based on file extension
+            if editor.file_path:
+                ext = os.path.splitext(editor.file_path)[1].lower()
+                lang_map = {'.m': 'M-code', '.py': 'Python', '.txt': 'Text', '.json': 'JSON'}
+                self._sb_lang.setText(lang_map.get(ext, 'Text'))
 
     def _show_help_for(self, func_name):
         """Open help viewer and show docs for the given function."""
