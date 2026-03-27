@@ -119,6 +119,7 @@ class ForgeMainWindow(QMainWindow):
                 editor.cursorPositionChanged.connect(self._update_cursor_status)
                 self._update_cursor_status()
         self.editor_widget.tabs.currentChanged.connect(lambda _: _connect_editor_cursor())
+        self.editor_widget.tabs.currentChanged.connect(lambda _: self._update_window_title())
         _connect_editor_cursor()
 
     # ==================================================================
@@ -243,6 +244,8 @@ class ForgeMainWindow(QMainWindow):
 
         # Window
         self.act_focus_cmd = QAction("Focus &Command", self, shortcut="Ctrl+0")
+        self.act_focus_editor = QAction("Focus &Editor", self, shortcut="Ctrl+1")
+        self.act_focus_editor.triggered.connect(lambda: self.editor_widget.tabs.currentWidget().setFocus() if self.editor_widget.tabs.currentWidget() else None)
         self.act_focus_cmd.triggered.connect(self._focus_command_input)
         self.addAction(self.act_focus_cmd)
 
@@ -1300,6 +1303,18 @@ class ForgeMainWindow(QMainWindow):
 
         dialog.exec()
 
+
+
+    def _update_window_title(self):
+        """Update window title with current file name."""
+        title = "Forge IDE"
+        if hasattr(self, 'editor_widget'):
+            idx = self.editor_widget.tabs.currentIndex()
+            if idx >= 0:
+                tab_text = self.editor_widget.tabs.tabText(idx).rstrip(' \u25cf')
+                if tab_text and tab_text != "Welcome":
+                    title = f"{tab_text} \u2014 Forge IDE"
+        self.setWindowTitle(title)
 
     def _update_cursor_status(self):
         """Update status bar from editor cursor position."""
