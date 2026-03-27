@@ -768,6 +768,30 @@ class ForgeMainWindow(QMainWindow):
             font.setPointSize(max(6, font.pointSize() + direction))
         app.setFont(font)
 
+    def _show_snippets(self):
+        """Show available code snippets."""
+        from PySide6.QtWidgets import QMessageBox
+        snippets_html = (
+            "<h3>Code Snippets</h3>"
+            "<p>Type a trigger word and press <b>Tab</b> to expand:</p>"
+            "<table cellpadding='4' style='font-size:11px;'>"
+            "<tr><th>Trigger</th><th>Expansion</th></tr>"
+            "<tr><td><code>fori</code></td><td>for i = 1:n ... end</td></tr>"
+            "<tr><td><code>forj</code></td><td>for j = 1:n ... end</td></tr>"
+            "<tr><td><code>ife</code></td><td>if ... else ... end</td></tr>"
+            "<tr><td><code>ifel</code></td><td>if ... elseif ... else ... end</td></tr>"
+            "<tr><td><code>whi</code></td><td>while ... end</td></tr>"
+            "<tr><td><code>swi</code></td><td>switch ... case ... end</td></tr>"
+            "<tr><td><code>tryc</code></td><td>try ... catch ... end</td></tr>"
+            "<tr><td><code>func</code></td><td>function definition</td></tr>"
+            "<tr><td><code>cls</code></td><td>classdef template</td></tr>"
+            "<tr><td><code>plt</code></td><td>figure + plot + labels</td></tr>"
+            "<tr><td><code>fprintf</code></td><td>fprintf template</td></tr>"
+            "<tr><td><code>fopen</code></td><td>fopen/fclose template</td></tr>"
+            "</table>"
+        )
+        QMessageBox.information(self, "Code Snippets", snippets_html)
+
     def _show_shortcuts(self):
         from PySide6.QtWidgets import QMessageBox
         shortcuts = (

@@ -692,7 +692,57 @@ class CodeEditor(QPlainTextEdit):
             return f"<b>{name}</b> — constant"
         return None
 
-    # ---- Line operations -----------------------------------------------
+    # ---- Code snippets -----------------------------------------------
+    _SNIPPETS = {
+        'fori': 'for i = 1:n\n    \nend',
+        'forj': 'for j = 1:n\n    \nend',
+        'ifel': 'if condition\n    \nelseif condition\n    \nelse\n    \nend',
+        'ife': 'if condition\n    \nelse\n    \nend',
+        'whi': 'while condition\n    \nend',
+        'swi': 'switch expr\n    case val\n        \n    otherwise\n        \nend',
+        'tryc': 'try\n    \ncatch err\n    disp(err.message);\nend',
+        'func': "function result = name(args)\n% NAME - Description\n%\n    \nend",
+        'cls': "classdef Name\n    properties\n        \n    end\n    methods\n        function obj = Name()\n        end\n    end\nend",
+        'plt': "figure;\nplot(x, y);\nxlabel('X');\nylabel('Y');\ntitle('Title');\ngrid on;",
+        'sub': 'subplot(2, 1, 1);\nplot();',
+        'fprintf': "fprintf('%s\\n', );",
+        'fopen': "fid = fopen('file.txt', 'r');\n% ...\nfclose(fid);",
+    }
+
+    def _try_expand_snippet(self):
+        """Try to expand a snippet trigger word at the cursor."""
+        cursor = self.textCursor()
+        # Get text before cursor on current line
+        cursor.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+        line_before = cursor.selectedText()
+
+        words = line_before.split()
+        if not words:
+            return False
+
+        trigger = words[-1]
+        if trigger not in self._SNIPPETS:
+            return False
+
+        snippet = self._SNIPPETS[trigger]
+        leading_spaces = len(line_before) - len(line_before.lstrip())
+        indent = ' ' * leading_spaces
+
+        # Select and replace the trigger word
+        cursor = self.textCursor()
+        for _ in range(len(trigger)):
+            cursor.movePosition(QTextCursor.Left, QTextCursor.KeepAnchor)
+
+        lines = snippet.split('\n')
+        expanded = lines[0]
+        for line in lines[1:]:
+            expanded += '\n' + indent + line
+
+        cursor.insertText(expanded)
+        self.setTextCursor(cursor)
+        return True
+
+        # ---- Line operations -----------------------------------------------
 
     def _duplicate_line(self):
         """Duplicate the current line or selection."""
@@ -1100,6 +1150,9 @@ class CodeEditor(QPlainTextEdit):
             if self._completer and self._completer.completionCount() == 1:
                 self._insert_completion(self._completer.currentCompletion())
                 self._completer.popup().hide()
+                return
+            # Check for snippet expansion
+            if self._try_expand_snippet():
                 return
             self.insertPlainText("    ")
         elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
