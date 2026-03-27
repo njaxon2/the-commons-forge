@@ -268,6 +268,20 @@ class MinimapWidget(QWidget):
         painter.drawLine(0, 0, 0, h)
         painter.end()
 
+
+    def wheelEvent(self, event):
+        """Handle Ctrl+Scroll for zoom."""
+        from PySide6.QtCore import Qt
+        if event.modifiers() & Qt.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoomIn(1)
+            elif delta < 0:
+                self.zoomOut(1)
+            event.accept()
+            return
+        super().wheelEvent(event)
+
     def mousePressEvent(self, event):
         self._drag = True
         self._scroll_to_pos(event.pos().y())
@@ -1167,6 +1181,88 @@ class CodeEditor(QPlainTextEdit):
         cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
         self.setTextCursor(cursor)
+
+
+
+    def _select_line(self):
+        """Select entire current line."""
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        self.setTextCursor(cursor)
+
+    def _select_word(self):
+        """Select word under cursor."""
+        cursor = self.textCursor()
+        cursor.select(QTextCursor.WordUnderCursor)
+        self.setTextCursor(cursor)
+
+    def _move_to_matching_bracket(self):
+        """Jump to matching bracket."""
+        cursor = self.textCursor()
+        pos = cursor.position()
+        text = self.toPlainText()
+        if pos < len(text):
+            char = text[pos]
+            pairs = {'(': ')', '[': ']', '{': '}', ')': '(', ']': '[', '}': '{'}
+            if char in pairs:
+                target = pairs[char]
+                is_open = char in '([{'
+                depth = 0
+                if is_open:
+                    for i in range(pos, len(text)):
+                        if text[i] == char: depth += 1
+                        elif text[i] == target: depth -= 1
+                        if depth == 0:
+                            cursor.setPosition(i)
+                            self.setTextCursor(cursor)
+                            return
+                else:
+                    for i in range(pos, -1, -1):
+                        if text[i] == char: depth += 1
+                        elif text[i] == target: depth -= 1
+                        if depth == 0:
+                            cursor.setPosition(i)
+                            self.setTextCursor(cursor)
+                            return
+
+    def _indent_selection(self):
+        """Indent selected lines by one tab stop."""
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            cursor.insertText("    ")
+            return
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        text = cursor.selectedText()
+        lines = text.split('\u2029')  # Qt paragraph separator
+        indented = ['    ' + line for line in lines]
+        cursor.insertText('\n'.join(indented))
+
+    def _outdent_selection(self):
+        """Outdent selected lines by one tab stop."""
+        cursor = self.textCursor()
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        text = cursor.selectedText()
+        lines = text.split('\u2029')
+        outdented = []
+        for line in lines:
+            if line.startswith('    '):
+                outdented.append(line[4:])
+            elif line.startswith('\t'):
+                outdented.append(line[1:])
+            else:
+                outdented.append(line)
+        cursor.insertText('\n'.join(outdented))
 
     def _toggle_comment(self):
         """Toggle % comment on current line or selection."""
