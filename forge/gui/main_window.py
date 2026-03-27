@@ -195,6 +195,9 @@ class ForgeMainWindow(QMainWindow):
         self.act_close_tab.triggered.connect(lambda: self.editor_widget._close_tab(self.editor_widget.tabs.currentIndex()))
         self.addAction(self.act_close_tab)
 
+        self.act_quick_open = QAction("Quick &Open...", self, shortcut="Ctrl+P")
+        self.act_quick_open.triggered.connect(self._show_quick_open)
+
         self.act_search_files = QAction("Search in &Files...", self, shortcut="Ctrl+Shift+F")
         self.act_search_files.triggered.connect(self._show_search_in_files)
 
@@ -257,6 +260,7 @@ class ForgeMainWindow(QMainWindow):
         file_menu = mb.addMenu("&File")
         file_menu.addAction(self.act_new)
         file_menu.addAction(self.act_open)
+        file_menu.addAction(self.act_quick_open)
         file_menu.addSeparator()
         file_menu.addAction(self.act_save)
         file_menu.addAction(self.act_save_as)
@@ -1084,6 +1088,89 @@ class ForgeMainWindow(QMainWindow):
                 self.set_status("AMS telemetry enabled")
             else:
                 self.set_status("AMS telemetry remains disabled")
+
+    def _show_quick_open(self):
+        """Show a quick-open dialog for files."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
+        from PySide6.QtCore import Qt
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Quick Open")
+        dialog.setMinimumSize(500, 400)
+        dialog.setStyleSheet("background: #1e1e2e; border-radius: 8px;")
+
+        layout = QVBoxLayout(dialog)
+
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Type to search files...")
+        search_input.setStyleSheet(
+            "padding: 10px; font-size: 14px; background: #313244; "
+            "color: #cdd6f4; border: 1px solid #45475a; border-radius: 6px;"
+        )
+        layout.addWidget(search_input)
+
+        file_list = QListWidget()
+        file_list.setStyleSheet(
+            "QListWidget { background: #1e1e2e; color: #cdd6f4; border: none; font-size: 13px; }"
+            "QListWidget::item { padding: 6px 8px; }"
+            "QListWidget::item:selected { background: #313244; color: #cba6f7; }"
+        )
+        layout.addWidget(file_list)
+
+        # Collect files: recent files + .m files in current directory
+        all_files = []
+        # Recent files
+        for path in self._recent_files:
+            if os.path.exists(path):
+                all_files.append(path)
+        # .m files in working directory
+        cwd = os.path.expanduser("~")
+        if hasattr(self, 'session') and self.session and hasattr(self.session, '_workspace'):
+            cwd = getattr(self.session, '_cwd', cwd)
+        for root, dirs, files in os.walk(cwd):
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', '__pycache__')]
+            for f in files:
+                if f.endswith('.m') or f.endswith('.py'):
+                    path = os.path.join(root, f)
+                    if path not in all_files:
+                        all_files.append(path)
+            if len(all_files) > 200:
+                break
+
+        def update_list(text):
+            file_list.clear()
+            text = text.lower()
+            for path in all_files:
+                name = os.path.basename(path)
+                if not text or text in name.lower() or text in path.lower():
+                    rel = os.path.relpath(path, cwd)
+                    item = QListWidgetItem(f"{name}  —  {rel}")
+                    item.setData(Qt.UserRole, path)
+                    file_list.addItem(item)
+                    if file_list.count() >= 50:
+                        break
+
+        search_input.textChanged.connect(update_list)
+        update_list("")
+
+        def on_select(item):
+            path = item.data(Qt.UserRole)
+            if path:
+                self.open_file_in_editor(path)
+                dialog.accept()
+
+        file_list.itemDoubleClicked.connect(on_select)
+        file_list.itemActivated.connect(on_select)
+
+        # Enter key opens selected item
+        def on_return():
+            item = file_list.currentItem()
+            if item:
+                on_select(item)
+
+        search_input.returnPressed.connect(on_return)
+
+        dialog.exec()
 
     def _show_about(self):
         from PySide6.QtWidgets import QMessageBox

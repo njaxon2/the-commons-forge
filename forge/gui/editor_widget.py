@@ -1217,10 +1217,19 @@ class EditorWidget(QWidget):
         # Find/Replace bar (hidden by default)
         from forge.gui.find_replace import FindReplaceBar
 
+        # Breadcrumb path bar
+        self._breadcrumb = QLabel("")
+        self._breadcrumb.setStyleSheet(
+            "color: #6c7086; font-size: 11px; padding: 4px 12px; background: transparent;"
+        )
+        self._breadcrumb.hide()
+        layout.addWidget(self._breadcrumb)
+
         self.tabs = QTabWidget(self)
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_tab)
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.currentChanged.connect(self._update_breadcrumb)
         layout.addWidget(self.tabs)
 
         # Find bar placeholder — created per-editor on demand
@@ -1279,6 +1288,20 @@ class EditorWidget(QWidget):
             fh.write(editor.toPlainText())
         editor.document().setModified(False)
         return True
+
+    def _update_breadcrumb(self, index=None):
+        """Update breadcrumb path bar for current file."""
+        editor = self.get_current_editor()
+        if editor and hasattr(editor, 'file_path') and editor.file_path:
+            path = editor.file_path
+            parts = path.replace(os.sep, '/').split('/')
+            if len(parts) > 4:
+                parts = ['...'] + parts[-4:]
+            display = ' > '.join(parts)
+            self._breadcrumb.setText(display)
+            self._breadcrumb.show()
+        else:
+            self._breadcrumb.hide()
 
     def get_current_editor(self) -> CodeEditor | None:
         w = self.tabs.currentWidget()
