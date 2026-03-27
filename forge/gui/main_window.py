@@ -1,9 +1,21 @@
-"""Forge main window -- PySide6 GUI shell (forge/gui/main_window.py)."""
+"""Forge main window — PySide6 GUI shell (forge/gui/main_window.py).
+
+Provides the top-level QMainWindow with dockable panels for:
+  - Command Window (REPL)
+  - Code Editor (tabbed)
+  - File Browser (tree)
+  - Workspace Browser (variable table)
+
+Menu bar: File, Edit, View (theme/docks), Debug, Window, Help
+"""
+
+import os
 
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence, QFont, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QToolBar, QMenuBar, QStatusBar, QWidget,
+    QApplication, QLabel,
 )
 
 
@@ -17,21 +29,21 @@ class ForgeMainWindow(QMainWindow):
 
         self.session = None
 
-        # Enable tabbed docking so dragging one panel onto another
-        # creates a tab group instead of making the panel vanish.
+        # Enable tabbed docking — dragging one panel onto another
+        # creates a tab group instead of hiding it.
         self.setDockNestingEnabled(True)
 
         self._create_actions()
+        self._create_docks()
         self._create_menus()
         self._create_toolbar()
-        self._create_docks()
         self._create_status_bar()
         self._set_default_layout()
         self._restore_state()
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Engine integration
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def setup_engine(self, session):
         """Connect the evaluator engine so widgets can call engine.eval()."""
@@ -39,13 +51,11 @@ class ForgeMainWindow(QMainWindow):
         if self.command_widget is not None:
             self.command_widget.engine = session
         self._connect_signals()
-        # Sync file browser with session's search path
         if hasattr(session, 'path'):
             self.file_browser_widget.set_search_paths(session.path)
         self._update_workspace()
 
     def _connect_signals(self):
-        """Wire inter-widget signals after engine is set."""
         self.command_widget.command_executed.connect(self._update_workspace)
         self.editor_widget.file_run_requested.connect(self._run_file)
         self.file_browser_widget.file_open_requested.connect(
@@ -57,15 +67,11 @@ class ForgeMainWindow(QMainWindow):
         self.workspace_widget.variable_inspect_requested.connect(
             self._inspect_variable
         )
-        self.workspace_widget.variable_inspect_requested.connect(
-            self._inspect_variable
-        )
-        # When search path changes in file browser, sync to session
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Workspace helpers
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _update_workspace(self, _text=None):
         if self.session:
@@ -80,7 +86,6 @@ class ForgeMainWindow(QMainWindow):
             self._update_workspace()
 
     def _inspect_variable(self, name):
-        """Open variable editor dialog for the named variable."""
         try:
             if self.session is None:
                 return
@@ -95,7 +100,6 @@ class ForgeMainWindow(QMainWindow):
             self.command_widget.append_output(f"Error inspecting {name}: {e}")
 
     def _on_variable_edited(self, name, value):
-        """Handle variable edit from variable editor."""
         try:
             self.session.workspace.set(name, value)
             self._update_workspace()
@@ -116,127 +120,148 @@ class ForgeMainWindow(QMainWindow):
         self._update_workspace()
 
     def _on_path_changed(self, new_paths):
-        """Sync file browser path changes back to the session."""
         if self.session and hasattr(self.session, 'path'):
             self.session.path.clear()
             self.session.path.extend(new_paths)
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Actions
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _create_actions(self):
-        self.action_new = QAction("&New", self, shortcut=QKeySequence.New)
-        self.action_open = QAction("&Open...", self, shortcut=QKeySequence.Open)
-        self.action_save = QAction("&Save", self, shortcut=QKeySequence.Save)
-        self.action_save_as = QAction("Save &As...", self, shortcut=QKeySequence.SaveAs)
-        self.action_exit = QAction("E&xit", self, shortcut=QKeySequence.Quit)
-        self.action_exit.triggered.connect(self.close)
+        # File
+        self.act_new = QAction("&New", self, shortcut=QKeySequence.New)
+        self.act_new.triggered.connect(self._on_new_file)
+        self.act_open = QAction("&Open...", self, shortcut=QKeySequence.Open)
+        self.act_open.triggered.connect(self._on_open_file)
+        self.act_save = QAction("&Save", self, shortcut=QKeySequence.Save)
+        self.act_save.triggered.connect(self._on_save_file)
+        self.act_save_as = QAction("Save &As...", self, shortcut=QKeySequence.SaveAs)
+        self.act_save_as.triggered.connect(self._on_save_as)
+        self.act_exit = QAction("E&xit", self, shortcut=QKeySequence.Quit)
+        self.act_exit.triggered.connect(self.close)
 
-        self.action_undo = QAction("&Undo", self, shortcut=QKeySequence.Undo)
-        self.action_redo = QAction("&Redo", self, shortcut=QKeySequence.Redo)
-        self.action_cut = QAction("Cu&t", self, shortcut=QKeySequence.Cut)
-        self.action_copy = QAction("&Copy", self, shortcut=QKeySequence.Copy)
-        self.action_paste = QAction("&Paste", self, shortcut=QKeySequence.Paste)
-        self.action_find = QAction("&Find...", self, shortcut=QKeySequence.Find)
+        # Edit
+        self.act_undo = QAction("&Undo", self, shortcut=QKeySequence.Undo)
+        self.act_redo = QAction("&Redo", self, shortcut=QKeySequence.Redo)
+        self.act_cut = QAction("Cu&t", self, shortcut=QKeySequence.Cut)
+        self.act_copy = QAction("&Copy", self, shortcut=QKeySequence.Copy)
+        self.act_paste = QAction("&Paste", self, shortcut=QKeySequence.Paste)
+        self.act_find = QAction("&Find...", self, shortcut=QKeySequence.Find)
+        self.act_preferences = QAction("Preferences...", self, shortcut="Ctrl+,")
+        self.act_preferences.triggered.connect(self._open_preferences)
 
-        self.action_toggle_command = QAction("Command Window", self, checkable=True, checked=True)
-        self.action_toggle_editor = QAction("Editor", self, checkable=True, checked=True)
-        self.action_toggle_file_browser = QAction("File Browser", self, checkable=True, checked=True)
-        self.action_toggle_workspace = QAction("Workspace", self, checkable=True, checked=True)
+        # Debug
+        self.act_run = QAction("&Run File", self, shortcut="F5")
+        self.act_run.triggered.connect(self._on_run_file)
+        self.act_stop = QAction("&Stop", self, shortcut="Shift+F5")
+        self.act_step = QAction("S&tep", self, shortcut="F10")
+        self.act_continue = QAction("&Continue", self, shortcut="F5")
 
-        self.action_run = QAction("&Run File", self, shortcut=QKeySequence("F5"))
-        self.action_focus_command = QAction("Focus &Command", self, shortcut=QKeySequence("Ctrl+0"))
-        self.action_focus_command.triggered.connect(self._focus_command_input)
-        self.action_stop = QAction("&Stop", self, shortcut=QKeySequence("Shift+F5"))
-        self.action_step = QAction("S&tep", self, shortcut=QKeySequence("F10"))
-        self.action_continue = QAction("&Continue", self, shortcut=QKeySequence("F5"))
+        # Window
+        self.act_focus_cmd = QAction("Focus &Command", self, shortcut="Ctrl+0")
+        self.act_focus_cmd.triggered.connect(self._focus_command_input)
+        self.addAction(self.act_focus_cmd)
 
-        self.action_reset_layout = QAction("Reset Layout", self)
-        self.action_reset_layout.triggered.connect(self._reset_layout)
+        self.act_reset_layout = QAction("Reset Layout", self)
+        self.act_reset_layout.triggered.connect(self._reset_layout)
 
-        self.addAction(self.action_focus_command)  # Make shortcut global
-        self.action_about = QAction("&About", self)
-        self.action_docs = QAction("&Documentation", self)
+        # Help
+        self.act_about = QAction("&About Forge", self)
+        self.act_about.triggered.connect(self._show_about)
+        self.act_docs = QAction("&Documentation", self)
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Menus
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _create_menus(self):
         mb = self.menuBar()
 
+        # ── File ──
         file_menu = mb.addMenu("&File")
-        file_menu.addAction(self.action_new)
-        file_menu.addAction(self.action_open)
+        file_menu.addAction(self.act_new)
+        file_menu.addAction(self.act_open)
         file_menu.addSeparator()
-        file_menu.addAction(self.action_save)
-        file_menu.addAction(self.action_save_as)
+        file_menu.addAction(self.act_save)
+        file_menu.addAction(self.act_save_as)
         file_menu.addSeparator()
-        file_menu.addAction(self.action_exit)
+        file_menu.addAction(self.act_exit)
 
+        # ── Edit ──
         edit_menu = mb.addMenu("&Edit")
-        edit_menu.addAction(self.action_undo)
-        edit_menu.addAction(self.action_redo)
+        edit_menu.addAction(self.act_undo)
+        edit_menu.addAction(self.act_redo)
         edit_menu.addSeparator()
-        edit_menu.addAction(self.action_cut)
-        edit_menu.addAction(self.action_copy)
-        edit_menu.addAction(self.action_paste)
+        edit_menu.addAction(self.act_cut)
+        edit_menu.addAction(self.act_copy)
+        edit_menu.addAction(self.act_paste)
         edit_menu.addSeparator()
-        edit_menu.addAction(self.action_find)
+        edit_menu.addAction(self.act_find)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.act_preferences)
 
+        # ── View ──
         view_menu = mb.addMenu("&View")
-        view_menu.addAction(self.action_toggle_command)
-        view_menu.addAction(self.action_toggle_editor)
-        view_menu.addAction(self.action_toggle_file_browser)
-        view_menu.addAction(self.action_toggle_workspace)
 
+        # Dock panel toggles
+        panels_menu = view_menu.addMenu("Panels")
+        panels_menu.addAction(self.command_dock.toggleViewAction())
+        panels_menu.addAction(self.editor_dock.toggleViewAction())
+        panels_menu.addAction(self.file_browser_dock.toggleViewAction())
+        panels_menu.addAction(self.workspace_dock.toggleViewAction())
+
+        # Theme submenu
+        theme_menu = view_menu.addMenu("Theme")
+        for tname in ("dark", "light", "midnight"):
+            act = QAction(tname.capitalize(), self)
+            act.triggered.connect(
+                lambda checked=False, t=tname: self._switch_theme(t)
+            )
+            theme_menu.addAction(act)
+
+        view_menu.addSeparator()
+        view_menu.addAction(self.act_reset_layout)
+
+        # ── Debug ──
         debug_menu = mb.addMenu("&Debug")
-        debug_menu.addAction(self.action_run)
-        debug_menu.addAction(self.action_stop)
-        debug_menu.addAction(self.action_step)
-        debug_menu.addAction(self.action_continue)
+        debug_menu.addAction(self.act_run)
+        debug_menu.addAction(self.act_stop)
+        debug_menu.addSeparator()
+        debug_menu.addAction(self.act_step)
+        debug_menu.addAction(self.act_continue)
 
+        # ── Window ──
         window_menu = mb.addMenu("&Window")
-        window_menu.addAction(self.action_reset_layout)
+        window_menu.addAction(self.act_focus_cmd)
+        window_menu.addSeparator()
+        window_menu.addAction(self.act_reset_layout)
 
+        # ── Help ──
         help_menu = mb.addMenu("&Help")
-        help_menu.addAction(self.action_about)
-        help_menu.addAction(self.action_docs)
+        help_menu.addAction(self.act_about)
+        help_menu.addAction(self.act_docs)
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Toolbar
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _create_toolbar(self):
         tb = QToolBar("Main Toolbar", self)
         tb.setObjectName("MainToolbar")
+        tb.setIconSize(__import__('PySide6.QtCore', fromlist=['QSize']).QSize(20, 20))
         self.addToolBar(tb)
-        tb.addAction(self.action_new)
-        tb.addAction(self.action_open)
-        tb.addAction(self.action_save)
+
+        tb.addAction(self.act_new)
+        tb.addAction(self.act_open)
+        tb.addAction(self.act_save)
         tb.addSeparator()
-        tb.addAction(self.action_run)
-        tb.addAction(self.action_stop)
+        tb.addAction(self.act_run)
+        tb.addAction(self.act_stop)
 
-    # ------------------------------------------------------------------
-    def _set_default_layout(self):
-        """Set initial dock sizes: command window gets ~40% of vertical space."""
-        # resizeDocks takes a list of docks and a list of sizes
-        # Give command window 320px (40% of 800), file browser 280px width
-        self.resizeDocks(
-            [self.command_dock],
-            [320],
-            Qt.Vertical,
-        )
-        self.resizeDocks(
-            [self.file_browser_dock],
-            [280],
-            Qt.Horizontal,
-        )
-
+    # ==================================================================
     # Dock widgets
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _create_docks(self):
         from forge.gui.command_widget import CommandWidget
@@ -244,50 +269,39 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.file_browser import FileBrowserWidget
         from forge.gui.workspace_browser import WorkspaceBrowserWidget
 
-        # --- Command Window (bottom) ---
+        # Command Window (bottom)
         self.command_widget = CommandWidget(self)
-        self.command_widget.setMinimumHeight(200)
-        self.command_dock = self._make_dock("Command Window", "CommandDock",
-                                           self.command_widget)
+        self.command_widget.setMinimumHeight(180)
+        self.command_dock = self._make_dock(
+            "Command Window", "CommandDock", self.command_widget
+        )
         self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)
-        self.action_toggle_command.toggled.connect(self.command_dock.setVisible)
-        self.command_dock.visibilityChanged.connect(self.action_toggle_command.setChecked)
 
-        # --- Editor (centre-right) ---
-        self.editor_widget = EditorWidget(self)
-        self.editor_dock = self._make_dock("Editor", "EditorDock",
-                                           self.editor_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
-        self.action_toggle_editor.toggled.connect(self.editor_dock.setVisible)
-        self.editor_dock.visibilityChanged.connect(self.action_toggle_editor.setChecked)
-
-        # --- File Browser (left) ---
+        # File Browser (left)
         self.file_browser_widget = FileBrowserWidget(parent=self)
-        self.file_browser_dock = self._make_dock("File Browser", "FileBrowserDock",
-                                                  self.file_browser_widget)
+        self.file_browser_dock = self._make_dock(
+            "File Browser", "FileBrowserDock", self.file_browser_widget
+        )
         self.addDockWidget(Qt.LeftDockWidgetArea, self.file_browser_dock)
-        self.action_toggle_file_browser.toggled.connect(self.file_browser_dock.setVisible)
-        self.file_browser_dock.visibilityChanged.connect(self.action_toggle_file_browser.setChecked)
 
-        # --- Workspace (right) ---
+        # Workspace Browser (left, tabbed with file browser)
         self.workspace_widget = WorkspaceBrowserWidget(self)
-        self.workspace_dock = self._make_dock("Workspace", "WorkspaceDock",
-                                              self.workspace_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.workspace_dock)
-        self.action_toggle_workspace.toggled.connect(self.workspace_dock.setVisible)
-        self.workspace_dock.visibilityChanged.connect(self.action_toggle_workspace.setChecked)
+        self.workspace_dock = self._make_dock(
+            "Workspace", "WorkspaceDock", self.workspace_widget
+        )
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.workspace_dock)
+        # Tab workspace with file browser so they share space
+        self.tabifyDockWidget(self.file_browser_dock, self.workspace_dock)
+        self.file_browser_dock.raise_()  # File browser on top initially
+
+        # Editor (right — takes majority of horizontal space)
+        self.editor_widget = EditorWidget(self)
+        self.editor_dock = self._make_dock(
+            "Editor", "EditorDock", self.editor_widget
+        )
+        self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
 
     def _make_dock(self, title, object_name, widget):
-        """Create a QDockWidget with a close button in the title bar.
-
-        DockWidgetClosable  — adds an X button to the title bar
-        DockWidgetMovable   — allows dragging
-        DockWidgetFloatable — allows floating as a separate window
-
-        When dragged onto another dock, Qt will automatically create
-        a tabbed group (because setDockNestingEnabled is True).
-        Closing the dock just hides it; View menu can re-show it.
-        """
         dock = QDockWidget(title, self)
         dock.setObjectName(object_name)
         dock.setWidget(widget)
@@ -298,18 +312,35 @@ class ForgeMainWindow(QMainWindow):
         )
         return dock
 
-    # ------------------------------------------------------------------
+    def _set_default_layout(self):
+        self.resizeDocks([self.command_dock], [250], Qt.Vertical)
+        self.resizeDocks([self.file_browser_dock], [300], Qt.Horizontal)
+
+    # ==================================================================
     # Status bar
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _create_status_bar(self):
         sb = QStatusBar(self)
         self.setStatusBar(sb)
-        sb.showMessage("Ready")
+        self._status_msg = QLabel("Ready")
+        self._status_msg.setStyleSheet("padding: 0 8px;")
+        sb.addWidget(self._status_msg, 1)
 
-    # ------------------------------------------------------------------
+        # Function count badge
+        try:
+            from forge.engine.session import ForgeSession
+            s = ForgeSession.__new__(ForgeSession)
+            # We'll update this after engine setup
+        except Exception:
+            pass
+
+    def set_status(self, msg: str):
+        self._status_msg.setText(msg)
+
+    # ==================================================================
     # State save / restore
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _settings(self):
         return QSettings("Forge", "ForgeIDE")
@@ -329,14 +360,124 @@ class ForgeMainWindow(QMainWindow):
         s.setValue("windowState", self.saveState())
         super().closeEvent(event)
 
+    # ==================================================================
+    # Preferences & Themes
+    # ==================================================================
+
+    def _open_preferences(self):
+        from forge.gui.preferences_dialog import PreferencesDialog
+        dlg = PreferencesDialog(self)
+        dlg.preferences_changed.connect(self._apply_preferences)
+        dlg.exec()
+
+    def _apply_preferences(self, prefs):
+        from forge.gui.themes import apply_theme
+        app = QApplication.instance()
+        apply_theme(app, prefs.get('default_theme', 'dark'))
+        font = QFont(prefs.get('font_family', 'Consolas'), prefs.get('font_size', 10))
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        app.setFont(font)
+        # Update editor palette
+        from forge.gui.editor_widget import set_editor_palette
+        set_editor_palette(prefs.get('default_theme', 'dark'))
+
+    def _switch_theme(self, theme_name):
+        from forge.gui.themes import apply_theme, get_preferences, save_preferences
+        app = QApplication.instance()
+        apply_theme(app, theme_name)
+        prefs = get_preferences()
+        prefs['default_theme'] = theme_name
+        save_preferences(prefs)
+        # Update editor colours
+        from forge.gui.editor_widget import set_editor_palette
+        set_editor_palette(theme_name)
+
+    # ==================================================================
+    # Helpers
+    # ==================================================================
+
+    # ==================================================================
+    # File actions
+    # ==================================================================
+
+    def _on_new_file(self):
+        self.editor_widget.new_file()
+        self.editor_dock.raise_()
+
+    def _on_open_file(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open File", "",
+            "M-files (*.m);;All Files (*)"
+        )
+        if path:
+            self.editor_widget.open_file(path)
+            self.editor_dock.raise_()
+
+    def _on_save_file(self):
+        editor = self.editor_widget.get_current_editor()
+        if editor is None:
+            return
+        if editor.file_path:
+            self.editor_widget.save_file()
+            self.set_status(f"Saved {os.path.basename(editor.file_path)}")
+        else:
+            self._on_save_as()
+
+    def _on_save_as(self):
+        from PySide6.QtWidgets import QFileDialog
+        editor = self.editor_widget.get_current_editor()
+        if editor is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save As", "",
+            "M-files (*.m);;All Files (*)"
+        )
+        if path:
+            editor.file_path = path
+            self.editor_widget.save_file()
+            idx = self.editor_widget.tabs.currentIndex()
+            self.editor_widget.tabs.setTabText(idx, os.path.basename(path))
+            self.set_status(f"Saved {os.path.basename(path)}")
+
+    def _on_run_file(self):
+        editor = self.editor_widget.get_current_editor()
+        if editor and editor.file_path:
+            self._run_file(editor.file_path)
+
+    def open_file_in_editor(self, path):
+        """Public method to open a file in the editor (used by 'edit' command)."""
+        self.editor_widget.open_file(path)
+        self.editor_dock.raise_()
+
     def _focus_command_input(self):
-        """Focus the command input line."""
-        if hasattr(self, "command_widget") and self.command_widget:
+        if hasattr(self, 'command_widget') and self.command_widget:
             self.command_widget.console.setFocus()
-            pass  # single-pane console
 
     def _reset_layout(self):
-        """Remove saved state so next launch uses defaults."""
+        """Clear saved state and reset docks."""
         s = self._settings()
         s.remove("geometry")
         s.remove("windowState")
+        # Re-dock all panels
+        for dock in [self.command_dock, self.editor_dock,
+                     self.file_browser_dock, self.workspace_dock]:
+            dock.setFloating(False)
+            dock.setVisible(True)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.file_browser_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.workspace_dock)
+        self._set_default_layout()
+        self.set_status("Layout reset")
+
+    def _show_about(self):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.about(
+            self,
+            "About Forge",
+            "<h2>Forge IDE</h2>"
+            "<p>Octave-Compatible Computing Environment</p>"
+            "<p>Built with PySide6, NumPy, SciPy, and Matplotlib</p>"
+            "<p>Version 0.1.0</p>"
+        )

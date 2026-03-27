@@ -1,82 +1,217 @@
 """Forge command widget — single-pane interactive REPL (forge/gui/command_widget.py).
 
-Behaves like MATLAB's command window: a single text area where output and
-input live together.  The user types after the '>> ' prompt at the bottom.
+Behaves like MATLAB/Octave command window: a single text area where output and
+input live together.  The user types after the ">> " prompt at the bottom.
+
+Supports multi-line control structures:  typing "for", "if", "while", "switch",
+"try", or "function" at the >> prompt automatically enters block mode.  Lines
+are collected with a ".." continuation prompt until the matching "end" brings
+the nesting depth back to zero, at which point the whole block is executed.
+
+The legacy "..." line-continuation syntax is also preserved.
 """
 
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat, QSyntaxHighlighter, QTextDocument
+from PySide6.QtGui import (
+    QFont, QTextCursor, QColor, QTextCharFormat,
+    QSyntaxHighlighter, QTextDocument,
+)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
-
 
 import re as _re
 
 
-class _MCodeHighlighter(QSyntaxHighlighter):
-    """Minimal M-code syntax highlighting for the input line."""
+# ======================================================================
+# Syntax highlighter
+# ======================================================================
 
+class _MCodeHighlighter(QSyntaxHighlighter):
+    """Rich M-code / Octave syntax highlighting."""
+
+    # -- token sets ---------------------------------------------------
     KEYWORDS = {
         "for", "end", "if", "else", "elseif", "while", "do", "until",
         "switch", "case", "otherwise", "try", "catch", "function",
         "return", "break", "continue", "global", "persistent",
         "endfor", "endif", "endwhile", "endswitch", "endtry",
-        "true", "false",
+        "unwind_protect", "unwind_protect_cleanup", "end_unwind_protect",
+    }
+
+    CONSTANTS = {
+        "pi", "inf", "Inf", "nan", "NaN", "eps", "true", "false",
+        "i", "j", "e",
     }
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Format: keywords
-        self._kw_fmt = QTextCharFormat()
-        self._kw_fmt.setForeground(QColor("#569cd6"))  # blue
-        self._kw_fmt.setFontWeight(QFont.Bold)
-        # Format: strings
-        self._str_fmt = QTextCharFormat()
-        self._str_fmt.setForeground(QColor("#ce9178"))  # orange
-        # Format: numbers
-        self._num_fmt = QTextCharFormat()
-        self._num_fmt.setForeground(QColor("#b5cea8"))  # green
-        # Format: comments
-        self._cmt_fmt = QTextCharFormat()
-        self._cmt_fmt.setForeground(QColor("#6a9955"))  # green
-        self._cmt_fmt.setFontItalic(True)
-        # Format: operators
-        self._op_fmt = QTextCharFormat()
-        self._op_fmt.setForeground(QColor("#d4d4d4"))  # light gray
-        # Format: functions (built-in calls)
-        self._fn_fmt = QTextCharFormat()
-        self._fn_fmt.setForeground(QColor("#dcdcaa"))  # yellow
 
-        # Compiled patterns
+        # --- formats --------------------------------------------------
+        self._kw_fmt = QTextCharFormat()
+        self._kw_fmt.setForeground(QColor("#569cd6"))       # blue
+        self._kw_fmt.setFontWeight(QFont.Bold)
+
+        self._const_fmt = QTextCharFormat()
+        self._const_fmt.setForeground(QColor("#4ec9b0"))     # teal
+        self._const_fmt.setFontWeight(QFont.Bold)
+
+        self._str_fmt = QTextCharFormat()
+        self._str_fmt.setForeground(QColor("#ce9178"))       # orange
+
+        self._num_fmt = QTextCharFormat()
+        self._num_fmt.setForeground(QColor("#b5cea8"))       # green
+
+        self._cmt_fmt = QTextCharFormat()
+        self._cmt_fmt.setForeground(QColor("#6a9955"))       # olive-green
+        self._cmt_fmt.setFontItalic(True)
+
+        self._op_fmt = QTextCharFormat()
+        self._op_fmt.setForeground(QColor("#d4d4d4"))        # light gray
+
+        self._fn_fmt = QTextCharFormat()
+        self._fn_fmt.setForeground(QColor("#dcdcaa"))        # yellow
+
+        self._paren_fmt = QTextCharFormat()
+        self._paren_fmt.setForeground(QColor("#ffd700"))     # gold
+
+        self._bracket_fmt = QTextCharFormat()
+        self._bracket_fmt.setForeground(QColor("#da70d6"))   # orchid
+
+        self._semicolon_fmt = QTextCharFormat()
+        self._semicolon_fmt.setForeground(QColor("#808080")) # dim gray
+
+        self._assign_fmt = QTextCharFormat()
+        self._assign_fmt.setForeground(QColor("#d4d4d4"))    # light gray
+        self._assign_fmt.setFontWeight(QFont.Bold)
+
+        self._comparison_fmt = QTextCharFormat()
+        self._comparison_fmt.setForeground(QColor("#c586c0")) # purple
+
+        # --- rule list (applied in order; later wins on overlap) ------
         self._rules = [
-            # Comments (% to end of line)
-            (_re.compile(r"%.*$"), self._cmt_fmt),
-            # Strings (double-quoted)
-            (_re.compile(r'"(?:[^"\\]|\\.)*"'), self._str_fmt),
-            # Strings (single-quoted, but not transpose)
-            (_re.compile(r"(?<![\w\)\]\.])'[^']*'"), self._str_fmt),
-            # Numbers (integer, float, scientific)
+            # Multi-char operators first (comparison / element-wise)
+            (_re.compile(r"\.[\*\/\^]"),           self._op_fmt),
+            (_re.compile(r"[=~<>]="),              self._comparison_fmt),
+            (_re.compile(r"&&|\|\|"),              self._comparison_fmt),
+            # Single-char operators
+            (_re.compile(r"[+\-\*\/\^~]"),         self._op_fmt),
+            (_re.compile(r"[<>]"),                 self._comparison_fmt),
+            (_re.compile(r"[&|]"),                 self._comparison_fmt),
+            # Assignment =  (single = not preceded/followed by another operator char)
+            (_re.compile(r"(?<![=~<>!])=(?!=)"),   self._assign_fmt),
+            # Semicolons / commas
+            (_re.compile(r"[;,]"),                 self._semicolon_fmt),
+            # Parentheses
+            (_re.compile(r"[()]"),                 self._paren_fmt),
+            # Brackets
+            (_re.compile(r"[\[\]{}]"),             self._bracket_fmt),
+            # Numbers  (integer, float, scientific, hex)
+            (_re.compile(r"\b0[xX][0-9a-fA-F]+\b"), self._num_fmt),
             (_re.compile(r"\b\d+\.?\d*(?:[eE][+-]?\d+)?\b"), self._num_fmt),
+            (_re.compile(r"\.\d+(?:[eE][+-]?\d+)?\b"), self._num_fmt),
+            # Strings  (double-quoted)
+            (_re.compile(r'"(?:[^"\\]|\\.)*"'),    self._str_fmt),
+            # Strings  (single-quoted — but not the transpose operator)
+            (_re.compile(r"(?<![\w\)\]\.])'[^']*'"), self._str_fmt),
+            # Comments  (% to end of line)  — applied last so it wins
+            (_re.compile(r"%.*$"),                 self._cmt_fmt),
+            # Hash-style comments
+            (_re.compile(r"#\{|#\}"),              self._cmt_fmt),
+            (_re.compile(r"#.*$"),                 self._cmt_fmt),
         ]
 
-    def highlightBlock(self, text):
-        # Only highlight the input line (after prompt)
-        # The prompt position tracking is in the widget, not accessible here easily
-        # So just highlight everything — output lines won't match patterns anyway
-
-        # Keywords
-        for match in _re.finditer(r"\b(\w+)\b", text):
-            word = match.group(1)
+    # -----------------------------------------------------------------
+    def highlightBlock(self, text: str):
+        # 1) Identifiers: keywords, constants, function calls
+        for m in _re.finditer(r"\b([a-zA-Z_]\w*)\b", text):
+            word = m.group(1)
+            start, length = m.start(), m.end() - m.start()
             if word in self.KEYWORDS:
-                self.setFormat(match.start(), match.end() - match.start(), self._kw_fmt)
-            elif _re.match(r"\w+(?=\s*\()", text[match.start():]):
-                # Word followed by ( is a function call
-                self.setFormat(match.start(), match.end() - match.start(), self._fn_fmt)
+                self.setFormat(start, length, self._kw_fmt)
+            elif word in self.CONSTANTS:
+                self.setFormat(start, length, self._const_fmt)
+            else:
+                # Check if it looks like a function call:  name(
+                rest = text[m.end():]
+                if rest and rest.lstrip().startswith("("):
+                    self.setFormat(start, length, self._fn_fmt)
 
-        # Apply pattern rules
+        # 2) Pattern rules (operators, numbers, strings, comments)
         for pattern, fmt in self._rules:
-            for match in pattern.finditer(text):
-                self.setFormat(match.start(), match.end() - match.start(), fmt)
+            for m in pattern.finditer(text):
+                self.setFormat(m.start(), m.end() - m.start(), fmt)
 
+
+# ======================================================================
+# Block-mode helpers
+# ======================================================================
+
+# Tokens that open a new nesting level
+_BLOCK_OPENERS = {"for", "if", "while", "switch", "try", "function",
+                  "do", "unwind_protect"}
+
+# Tokens that close a nesting level
+_BLOCK_CLOSERS = {"end", "endfor", "endif", "endwhile", "endswitch",
+                  "endtry", "end_unwind_protect"}
+
+_IDENT_RE = _re.compile(r"\b([a-zA-Z_]\w*)\b")
+
+# If the word directly follows ( or , it is likely used as an index
+# (e.g. x(end)) and should not change depth.
+_INDEX_CONTEXT_RE = _re.compile(r"[(,]\s*$")
+
+
+def _strip_strings_and_comments(line: str) -> str:
+    """Return *line* with string literals and comments blanked out so
+    keyword scanning is not confused by keywords inside strings."""
+    out = list(line)
+    # blank double-quoted strings
+    for m in _re.finditer(r'"(?:[^"\\]|\\.)*"', line):
+        for i in range(m.start(), m.end()):
+            out[i] = " "
+    # blank single-quoted strings (not transpose)
+    for m in _re.finditer(r"(?<![\w\)\]\.])'[^']*'", line):
+        for i in range(m.start(), m.end()):
+            out[i] = " "
+    # blank comments
+    for m in _re.finditer(r"[%#].*$", line):
+        for i in range(m.start(), m.end()):
+            out[i] = " "
+    return "".join(out)
+
+
+def _compute_depth_delta(line: str) -> int:
+    """Return the net change in nesting depth caused by *line*.
+
+    Positive means more openers than closers; negative means more
+    closers; zero means balanced.
+    """
+    cleaned = _strip_strings_and_comments(line)
+    delta = 0
+    for m in _IDENT_RE.finditer(cleaned):
+        word = m.group(1)
+        before = cleaned[:m.start()]
+        if word in _BLOCK_CLOSERS:
+            if _INDEX_CONTEXT_RE.search(before):
+                continue
+            delta -= 1
+        elif word in _BLOCK_OPENERS:
+            delta += 1
+    return delta
+
+
+def _line_starts_block(line: str) -> bool:
+    """Does *line* open a block without a matching close on the same line?"""
+    return _compute_depth_delta(line) > 0
+
+
+def _depth_after_line(current_depth: int, line: str) -> int:
+    """Return the new nesting depth after processing *line*."""
+    return max(0, current_depth + _compute_depth_delta(line))
+
+
+# ======================================================================
+# Command widget
+# ======================================================================
 
 class CommandWidget(QWidget):
     """Interactive command window — single-pane terminal style."""
@@ -86,6 +221,8 @@ class CommandWidget(QWidget):
     PROMPT = ">> "
     CONTINUATION = ".. "
 
+    INDENT_WIDTH = 2   # spaces per nesting level in block mode
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.engine = None
@@ -93,20 +230,22 @@ class CommandWidget(QWidget):
         # History
         self.history: list[str] = []
         self.history_index: int = -1
-        self._history_tmp: str = ""  # stash current input when browsing history
+        self._history_tmp: str = ""
 
-        # Multi-line accumulation
-        self._accumulator: list[str] = []
+        # --- Multi-line state -----------------------------------------
+        self._accumulator: list[str] = []   # collected lines
+        self._block_depth: int = 0          # current nesting depth
+        self._in_block_mode: bool = False   # True while collecting a structure
+        self._in_continuation: bool = False # True after "..." continuation
 
         # Tab completion
         self._completion_candidates: list[str] = []
         self._completion_index: int = 0
 
         # Prompt tracking
-        self._prompt_pos: int = 0  # character position where editable input starts
+        self._prompt_pos: int = 0
 
         self._build_ui()
-        # Show initial prompt after widget is shown
         QTimer.singleShot(0, self._show_initial_prompt)
 
     # ------------------------------------------------------------------
@@ -130,19 +269,24 @@ class CommandWidget(QWidget):
         self.console.setUndoRedoEnabled(False)
         layout.addWidget(self.console)
 
-        # Syntax highlighting
         self._highlighter = _MCodeHighlighter(self.console.document())
 
-        # Intercept key presses
         self.console.keyPressEvent = self._key_press
-        # Prevent mouse clicks from moving cursor into read-only region
         self.console.mousePressEvent = self._mouse_press
         self.console.mouseDoubleClickEvent = self._mouse_double_click
 
     def _show_initial_prompt(self):
         self.console.clear()
-        self._append_text("Forge 0.1 \u2014 Octave-compatible computing environment\n")
-        self._append_text("Type commands at the >> prompt. Use up/down for history.\n\n")
+        self._append_text(
+            "Forge 0.1 \u2014 Octave-compatible computing environment\n"
+        )
+        self._append_text(
+            "Type commands at the >> prompt. Use up/down for history.\n"
+        )
+        self._append_text(
+            "Multi-line blocks (for/if/while/switch/try/function) are "
+            "collected until matching 'end'.\n\n"
+        )
         self._write_prompt()
 
     # ------------------------------------------------------------------
@@ -150,24 +294,29 @@ class CommandWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _current_prompt(self) -> str:
-        return self.CONTINUATION if self._accumulator else self.PROMPT
+        if self._in_block_mode or self._in_continuation:
+            return self.CONTINUATION
+        return self.PROMPT
 
     def _write_prompt(self):
         """Append a prompt and record where editable text begins."""
         prompt = self._current_prompt()
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
-        # Insert prompt in a slightly different color (gray-blue)
         fmt = QTextCharFormat()
         fmt.setForeground(QColor("#569cd6"))
         cursor.insertText(prompt, fmt)
-        # Record position — everything after this is editable
         self._prompt_pos = cursor.position()
+
+        # Auto-indent in block mode
+        if self._in_block_mode and self._block_depth > 0:
+            indent = " " * (self.INDENT_WIDTH * self._block_depth)
+            cursor.insertText(indent)
+
         self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()
 
     def _get_input_text(self) -> str:
-        """Return the text the user has typed after the current prompt."""
         doc = self.console.document()
         full = doc.toPlainText()
         if self._prompt_pos <= len(full):
@@ -175,7 +324,6 @@ class CommandWidget(QWidget):
         return ""
 
     def _set_input_text(self, text: str):
-        """Replace the user's input text (after prompt) with *text*."""
         cursor = self.console.textCursor()
         cursor.setPosition(self._prompt_pos)
         cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
@@ -187,7 +335,6 @@ class CommandWidget(QWidget):
         return self.console.textCursor().position() >= self._prompt_pos
 
     def _ensure_cursor_editable(self):
-        """Move cursor to end if it's in the read-only region."""
         if not self._cursor_in_editable():
             cursor = self.console.textCursor()
             cursor.movePosition(QTextCursor.End)
@@ -201,11 +348,11 @@ class CommandWidget(QWidget):
         key = event.key()
         modifiers = event.modifiers()
 
-        # --- History navigation ---
-        if key == Qt.Key_Up:
+        # --- History navigation (only when NOT in block mode) ----------
+        if key == Qt.Key_Up and not self._in_block_mode:
             self._history_prev()
             return
-        if key == Qt.Key_Down:
+        if key == Qt.Key_Down and not self._in_block_mode:
             self._history_next()
             return
 
@@ -214,10 +361,12 @@ class CommandWidget(QWidget):
             self._on_return()
             return
 
-        # --- Home key: go to start of editable area ---
+        # --- Home: go to start of editable area ---
         if key == Qt.Key_Home:
             cursor = self.console.textCursor()
-            mode = QTextCursor.KeepAnchor if modifiers & Qt.ShiftModifier else QTextCursor.MoveAnchor
+            mode = (QTextCursor.KeepAnchor
+                    if modifiers & Qt.ShiftModifier
+                    else QTextCursor.MoveAnchor)
             cursor.setPosition(self._prompt_pos, mode)
             self.console.setTextCursor(cursor)
             return
@@ -225,22 +374,19 @@ class CommandWidget(QWidget):
         # --- Backspace: don't delete past prompt ---
         if key == Qt.Key_Backspace:
             if self.console.textCursor().position() <= self._prompt_pos:
-                return  # at or before prompt — ignore
+                return
             QPlainTextEdit.keyPressEvent(self.console, event)
             return
 
-        # --- Ctrl+C: copy if selection, else cancel current input ---
+        # --- Ctrl+C: copy or cancel ---
         if key == Qt.Key_C and modifiers & Qt.ControlModifier:
             if self.console.textCursor().hasSelection():
                 self.console.copy()
             else:
-                # Cancel current input
-                self._accumulator.clear()
-                self._append_text("\n")
-                self._write_prompt()
+                self._cancel_input()
             return
 
-        # --- Ctrl+A: select only the editable portion ---
+        # --- Ctrl+A: select editable portion ---
         if key == Qt.Key_A and modifiers & Qt.ControlModifier:
             cursor = self.console.textCursor()
             cursor.setPosition(self._prompt_pos)
@@ -264,27 +410,38 @@ class CommandWidget(QWidget):
             self._completion_candidates = []
             return
 
-        # --- All other printable keys ---
+        # --- Printable keys ---
         if event.text() and not modifiers & Qt.ControlModifier:
             self._ensure_cursor_editable()
             QPlainTextEdit.keyPressEvent(self.console, event)
             return
 
-        # --- Everything else: arrows, etc. (allow but clamp) ---
-        # Left arrow: don't go past prompt
+        # --- Left arrow: clamp ---
         if key == Qt.Key_Left:
             if self.console.textCursor().position() <= self._prompt_pos:
                 return
+
         QPlainTextEdit.keyPressEvent(self.console, event)
 
     # ------------------------------------------------------------------
-    # Mouse handling — keep editable region protected
+    # Cancel
+    # ------------------------------------------------------------------
+
+    def _cancel_input(self):
+        """Ctrl+C — abandon whatever is being typed."""
+        self._accumulator.clear()
+        self._block_depth = 0
+        self._in_block_mode = False
+        self._in_continuation = False
+        self._append_text("\n")
+        self._write_prompt()
+
+    # ------------------------------------------------------------------
+    # Mouse handling
     # ------------------------------------------------------------------
 
     def _mouse_press(self, event):
         QPlainTextEdit.mousePressEvent(self.console, event)
-        # After click, if cursor is in read-only area, move to end
-        # But allow clicks for selection purposes
 
     def _mouse_double_click(self, event):
         QPlainTextEdit.mouseDoubleClickEvent(self.console, event)
@@ -320,59 +477,63 @@ class CommandWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _get_completion_prefix(self):
-        """Get the word fragment before cursor for completion."""
         text = self._get_input_text()
         cursor = self.console.textCursor()
         pos_in_input = cursor.position() - self._prompt_pos
         if pos_in_input < 0:
             return "", 0
         left = text[:pos_in_input]
-        # Walk backwards to find start of identifier
         i = len(left) - 1
-        while i >= 0 and (left[i].isalnum() or left[i] == '_'):
+        while i >= 0 and (left[i].isalnum() or left[i] == "_"):
             i -= 1
-        prefix = left[i+1:]
+        prefix = left[i + 1:]
         return prefix, len(prefix)
 
     def _get_completions(self, prefix):
-        """Get list of matching completions for prefix."""
         if not prefix:
             return []
         matches = []
-        # 1. Workspace variables
         if self.engine:
             try:
                 ws_names = self.engine._engine.workspace.names()
-                matches.extend(n for n in ws_names if n.startswith(prefix) and not n.startswith('_'))
+                matches.extend(
+                    n for n in ws_names
+                    if n.startswith(prefix) and not n.startswith("_")
+                )
             except Exception:
                 pass
-            # 2. Registered functions
             try:
                 func_names = list(self.engine._engine.functions.keys())
-                matches.extend(n for n in func_names if n.startswith(prefix) and n not in matches)
+                matches.extend(
+                    n for n in func_names
+                    if n.startswith(prefix) and n not in matches
+                )
             except Exception:
                 pass
-        # 3. Keywords
-        keywords = ['break', 'case', 'catch', 'continue', 'do', 'else', 'elseif',
-                     'end', 'endfor', 'endif', 'endwhile', 'endswitch', 'endtry',
-                     'for', 'function', 'global', 'if', 'otherwise', 'persistent',
-                     'return', 'switch', 'try', 'until', 'while']
-        matches.extend(k for k in keywords if k.startswith(prefix) and k not in matches)
+        keywords = sorted(_MCodeHighlighter.KEYWORDS)
+        matches.extend(
+            k for k in keywords if k.startswith(prefix) and k not in matches
+        )
+        constants = sorted(_MCodeHighlighter.CONSTANTS)
+        matches.extend(
+            c for c in constants if c.startswith(prefix) and c not in matches
+        )
         return sorted(set(matches))
 
     def _tab_complete(self):
-        """Handle tab key press for completion."""
         prefix, prefix_len = self._get_completion_prefix()
         if not prefix:
-            # Just insert spaces if no prefix
             self._ensure_cursor_editable()
             cursor = self.console.textCursor()
             cursor.insertText("    ")
             return
 
-        # If we have ongoing completion candidates, cycle through them
-        if self._completion_candidates and prefix == self._completion_candidates[self._completion_index][:len(prefix)]:
-            self._completion_index = (self._completion_index + 1) % len(self._completion_candidates)
+        if (self._completion_candidates
+                and prefix == self._completion_candidates[
+                    self._completion_index][:len(prefix)]):
+            self._completion_index = (
+                (self._completion_index + 1) % len(self._completion_candidates)
+            )
         else:
             self._completion_candidates = self._get_completions(prefix)
             self._completion_index = 0
@@ -381,42 +542,37 @@ class CommandWidget(QWidget):
             return
 
         if len(self._completion_candidates) == 1:
-            # Unique match — complete it
             completion = self._completion_candidates[0]
             self._replace_prefix(prefix_len, completion)
             self._completion_candidates = []
         else:
-            # Multiple matches
-            # First: complete common prefix
             common = self._common_prefix(self._completion_candidates)
             if len(common) > len(prefix):
                 self._replace_prefix(prefix_len, common)
             else:
-                # Show candidates below
-                candidate = self._completion_candidates[self._completion_index]
+                candidate = self._completion_candidates[
+                    self._completion_index
+                ]
                 self._replace_prefix(prefix_len, candidate)
-                # Show all matches as hint
                 if self._completion_index == 0:
-                    matches_str = "  ".join(self._completion_candidates[:20])
+                    matches_str = "  ".join(
+                        self._completion_candidates[:20]
+                    )
                     if len(self._completion_candidates) > 20:
                         matches_str += "  ..."
-                    # Show in output area temporarily
                     cursor = self.console.textCursor()
-                    pos = cursor.position()
                     self._append_text("\n" + matches_str + "\n")
-                    # Move cursor back to input
                     self._write_prompt()
                     self._set_input_text(candidate)
 
     def _replace_prefix(self, prefix_len, replacement):
-        """Replace the prefix at cursor with replacement text."""
         cursor = self.console.textCursor()
         for _ in range(prefix_len):
             cursor.deletePreviousChar()
         cursor.insertText(replacement)
 
-    def _common_prefix(self, strings):
-        """Find longest common prefix of a list of strings."""
+    @staticmethod
+    def _common_prefix(strings):
         if not strings:
             return ""
         prefix = strings[0]
@@ -428,37 +584,86 @@ class CommandWidget(QWidget):
         return prefix
 
     # ------------------------------------------------------------------
-    # Execution
+    # Execution / multi-line logic
     # ------------------------------------------------------------------
 
     def _on_return(self):
-        text = self._get_input_text()
+        raw_text = self._get_input_text()
         self.history_index = -1
         self._history_tmp = ""
 
-        # Move cursor to end and add newline
+        # Echo newline
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         self.console.setTextCursor(cursor)
         self._append_text("\n")
 
-        # Multi-line continuation
-        if text.rstrip().endswith("..."):
-            self._accumulator.append(text.rstrip()[:-3])
+        # ---- Legacy "..." line continuation --------------------------
+        if raw_text.rstrip().endswith("..."):
+            line_to_store = raw_text.rstrip()[:-3]
+            self._accumulator.append(line_to_store)
+            self._in_continuation = True
+            self._write_prompt()
             return
 
-        if self._accumulator:
-            self._accumulator.append(text)
+        # If we were in "..." continuation (not block mode) and this
+        # line does NOT end with "...", this is the final piece.
+        if self._in_continuation and not self._in_block_mode:
+            self._accumulator.append(raw_text)
             full_text = "\n".join(self._accumulator)
             self._accumulator.clear()
-        else:
-            full_text = text
+            self._in_continuation = False
+            self._execute(full_text)
+            return
 
-        # Store in history (skip empty)
+        # ---- Block mode handling -------------------------------------
+        if self._in_block_mode:
+            # Accumulate the line
+            self._accumulator.append(raw_text)
+            # Update depth
+            self._block_depth = _depth_after_line(
+                self._block_depth, raw_text
+            )
+            if self._block_depth <= 0:
+                # Block complete — execute entire accumulated block
+                self._block_depth = 0
+                self._in_block_mode = False
+                full_text = "\n".join(self._accumulator)
+                self._accumulator.clear()
+                self._execute(full_text)
+                return
+            else:
+                # Still inside block — show continuation prompt
+                self._write_prompt()
+                return
+
+        # ---- Not in any multi-line mode yet --------------------------
+        # Check whether this line opens a block
+        if _line_starts_block(raw_text):
+            self._accumulator.append(raw_text)
+            self._block_depth = _compute_depth_delta(raw_text)
+            if self._block_depth <= 0:
+                # Block opened and closed on one line (e.g.
+                #   "for i=1:3; disp(i); end")
+                self._block_depth = 0
+                full_text = "\n".join(self._accumulator)
+                self._accumulator.clear()
+                self._execute(full_text)
+                return
+            self._in_block_mode = True
+            self._write_prompt()
+            return
+
+        # Simple single-line command
+        self._execute(raw_text)
+
+    # ------------------------------------------------------------------
+
+    def _execute(self, full_text: str):
+        """Run *full_text* through the engine and show results."""
         if full_text.strip():
             self.history.append(full_text)
 
-        # Evaluate
         if self.engine is not None and full_text.strip():
             try:
                 result = self.engine.eval(full_text)
@@ -477,7 +682,6 @@ class CommandWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _append_text(self, text: str):
-        """Append plain text to the console."""
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
@@ -487,7 +691,6 @@ class CommandWidget(QWidget):
         self.console.ensureCursorVisible()
 
     def _append_error(self, text: str):
-        """Append error text (red) to the console."""
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
@@ -497,6 +700,6 @@ class CommandWidget(QWidget):
         self.console.ensureCursorVisible()
 
     def append_output(self, text: str):
-        """Public method for external code to write output to the console."""
+        """Public method for external code to write output."""
         self._append_text(text + "\n")
         self.console.ensureCursorVisible()

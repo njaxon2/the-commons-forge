@@ -19,14 +19,20 @@ def main():
     app.setOrganizationName('Forge')
     app.setApplicationVersion('0.1.0')
 
+    # Load user preferences
+    from forge.gui.themes import get_preferences, apply_theme
+    prefs = get_preferences()
+    theme_name = prefs.get('default_theme', 'dark')
+    font_family = prefs.get('font_family', 'Consolas')
+    font_size = prefs.get('font_size', 10)
+
     # Default monospace font for the whole application
-    mono = QFont('Consolas', 10)
+    mono = QFont(font_family, font_size)
     mono.setStyleHint(QFont.StyleHint.Monospace)
     app.setFont(mono)
 
-    # C. Apply theme on startup
-    from forge.gui.themes import apply_theme
-    apply_theme(app, 'light')
+    # Apply theme on startup
+    apply_theme(app, theme_name)
 
     # Create engine session
     from forge.engine.session import ForgeSession
