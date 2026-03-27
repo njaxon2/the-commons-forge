@@ -488,6 +488,151 @@ class CodeEditor(QPlainTextEdit):
 
     # --- current line highlight & bracket matching ---------------------
 
+
+    def contextMenuEvent(self, event):
+        """Rich right-click context menu with IDE actions."""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QAction
+
+        menu = QMenu(self)
+        palette = get_palette()
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background: {palette.get('bg2', '#313244')};
+                color: {palette.get('fg0', '#cdd6f4')};
+                border: 1px solid {palette.get('border0', '#45475a')};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 24px 6px 12px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background: {palette.get('accent', '#cba6f7')};
+                color: {palette.get('bg0', '#1e1e2e')};
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background: {palette.get('border0', '#45475a')};
+                margin: 4px 8px;
+            }}
+        """)
+
+        cursor = self.textCursor()
+        has_selection = cursor.hasSelection()
+
+        # Standard edit actions
+        act_cut = menu.addAction("Cut\tCtrl+X")
+        act_cut.setEnabled(has_selection)
+        act_cut.triggered.connect(self.cut)
+
+        act_copy = menu.addAction("Copy\tCtrl+C")
+        act_copy.setEnabled(has_selection)
+        act_copy.triggered.connect(self.copy)
+
+        act_paste = menu.addAction("Paste\tCtrl+V")
+        act_paste.triggered.connect(self.paste)
+
+        act_select_all = menu.addAction("Select All\tCtrl+A")
+        act_select_all.triggered.connect(self.selectAll)
+
+        menu.addSeparator()
+
+        # Code actions
+        act_comment = menu.addAction("Toggle Comment\tCtrl+/")
+        act_comment.triggered.connect(self._toggle_comment)
+
+        act_dup = menu.addAction("Duplicate Line\tCtrl+D")
+        act_dup.triggered.connect(self._duplicate_line)
+
+        act_del = menu.addAction("Delete Line\tCtrl+Shift+K")
+        act_del.triggered.connect(self._delete_line)
+
+        menu.addSeparator()
+
+        # Word under cursor actions
+        cursor.select(QTextCursor.WordUnderCursor)
+        word = cursor.selectedText().strip()
+        if word and word.isidentifier():
+            act_help = menu.addAction(f"Help on '{word}'\tF1")
+            act_help.triggered.connect(lambda: self.help_requested.emit(word))
+
+            act_find_all = menu.addAction(f"Find All References to '{word}'")
+            act_find_all.triggered.connect(lambda: self._find_all_refs(word))
+
+            act_rename = menu.addAction(f"Rename '{word}'...")
+            act_rename.triggered.connect(lambda: self._rename_symbol(word))
+
+            menu.addSeparator()
+
+        # Folding
+        if hasattr(self, '_fold_regions') and self._fold_regions:
+            line = self.textCursor().blockNumber()
+            for start, end in self._fold_regions:
+                if line == start:
+                    act_fold = menu.addAction("Fold Region")
+                    act_fold.triggered.connect(lambda: self._toggle_fold(start))
+                    break
+
+        act_fold_all = menu.addAction("Fold All")
+        act_fold_all.triggered.connect(self._fold_all)
+
+        act_unfold_all = menu.addAction("Unfold All")
+        act_unfold_all.triggered.connect(self._unfold_all)
+
+        menu.addSeparator()
+
+        # Bookmark
+        act_bookmark = menu.addAction("Toggle Bookmark\tCtrl+F2")
+        act_bookmark.triggered.connect(self.toggle_bookmark)
+
+        # Run
+        if has_selection:
+            act_run = menu.addAction("Run Selection\tF9")
+            act_run.triggered.connect(lambda: self.eval_requested.emit(cursor.selectedText()))
+
+        menu.exec(event.globalPos())
+
+    def _find_all_refs(self, word):
+        """Highlight and list all references to a symbol."""
+        import re
+        text = self.toPlainText()
+        pattern = r'\b' + re.escape(word) + r'\b'
+        count = len(list(re.finditer(pattern, text)))
+        # Flash status
+        self.parent().parent().statusBar().showMessage(f"Found {count} references to '{word}'", 3000) if hasattr(self.parent(), 'parent') else None
+
+    def _rename_symbol(self, old_word):
+        """Rename all occurrences of a symbol in the current file."""
+        from PySide6.QtWidgets import QInputDialog
+        new_word, ok = QInputDialog.getText(
+            self, "Rename Symbol",
+            f"Rename '{old_word}' to:",
+            text=old_word
+        )
+        if ok and new_word and new_word != old_word:
+            import re
+            text = self.toPlainText()
+            pattern = r'\b' + re.escape(old_word) + r'\b'
+            new_text = re.sub(pattern, new_word, text)
+            cursor = self.textCursor()
+            cursor.select(QTextCursor.Document)
+            cursor.insertText(new_text)
+
+    def _fold_all(self):
+        """Fold all foldable regions."""
+        if hasattr(self, '_fold_regions'):
+            for start, end in self._fold_regions:
+                self._fold_region(start, end)
+
+    def _unfold_all(self):
+        """Unfold all folded regions."""
+        if hasattr(self, '_folded_lines'):
+            for line in list(self._folded_lines):
+                self._unfold_region(line)
+
+
     def _on_cursor_moved(self):
         """Handle cursor position change - update bracket matching and highlight occurrences."""
         self._match_brackets()
@@ -1337,6 +1482,18 @@ class EditorWidget(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+
+    def _mark_tab_modified(self, modified=True):
+        """Mark the current tab as modified with a dot indicator."""
+        idx = self.tabs.currentIndex()
+        if idx < 0:
+            return
+        text = self.tabs.tabText(idx)
+        if modified and not text.endswith(' ●'):
+            self.tabs.setTabText(idx, text + ' ●')
+        elif not modified and text.endswith(' ●'):
+            self.tabs.setTabText(idx, text[:-2])
 
     def new_file(self):
         """Open a new untitled editor tab."""
