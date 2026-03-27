@@ -1646,6 +1646,30 @@ class CodeEditor(QPlainTextEdit):
         if event.key() == Qt.Key_Slash and event.modifiers() == Qt.ControlModifier:
             self._toggle_comment()
             return
+        if event.key() == Qt.Key_J and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, '_join_lines'):
+                self._join_lines()
+            return
+        if event.key() == Qt.Key_L and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, '_select_line'):
+                self._select_line()
+            return
+        if event.key() == Qt.Key_BracketRight and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, '_indent_selection'):
+                self._indent_selection()
+            return
+        if event.key() == Qt.Key_BracketLeft and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, '_outdent_selection'):
+                self._outdent_selection()
+            return
+        if event.key() == Qt.Key_M and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, '_move_to_matching_bracket'):
+                self._move_to_matching_bracket()
+            return
+        if event.key() == Qt.Key_U and event.modifiers() == (Qt.ControlModifier | Qt.ShiftModifier):
+            if hasattr(self, '_to_upper'):
+                self._to_upper()
+            return
 
         # Let completer handle its keys
         if self._completer and self._completer.popup().isVisible():
