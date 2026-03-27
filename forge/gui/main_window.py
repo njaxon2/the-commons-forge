@@ -122,6 +122,7 @@ class ForgeMainWindow(QMainWindow):
                 self._update_cursor_status()
         self.editor_widget.tabs.currentChanged.connect(lambda _: _connect_editor_cursor())
         self.editor_widget.tabs.currentChanged.connect(lambda _: self._update_window_title())
+        self.editor_widget.tabs.currentChanged.connect(lambda _: self._update_file_info_status())
         _connect_editor_cursor()
 
     # ==================================================================
@@ -1374,6 +1375,36 @@ class ForgeMainWindow(QMainWindow):
                 if tab_text and tab_text != "Welcome":
                     title = f"{tab_text} \u2014 Forge IDE"
         self.setWindowTitle(title)
+
+
+    def _update_file_info_status(self):
+        """Update encoding and line ending info in status bar."""
+        editor = self.editor_widget.get_current_editor() if hasattr(self.editor_widget, 'get_current_editor') else None
+        if editor is None:
+            return
+
+        # Detect line endings
+        text = editor.toPlainText()
+        if hasattr(self, '_sb_eol'):
+            if '\r\n' in text:
+                self._sb_eol.setText("CRLF")
+            elif '\r' in text:
+                self._sb_eol.setText("CR")
+            else:
+                self._sb_eol.setText("LF")
+
+        # Show file size
+        path = getattr(editor, '_file_path', None) or getattr(editor, 'file_path', None)
+        if path and os.path.exists(path):
+            size = os.path.getsize(path)
+            if size < 1024:
+                size_str = f"{size} B"
+            elif size < 1024 * 1024:
+                size_str = f"{size/1024:.1f} KB"
+            else:
+                size_str = f"{size/1024/1024:.1f} MB"
+            if hasattr(self, '_sb_encoding'):
+                self._sb_encoding.setText(f"UTF-8 ({size_str})")
 
     def _update_cursor_status(self):
         """Update status bar from editor cursor position."""
