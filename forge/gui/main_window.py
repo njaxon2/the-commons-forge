@@ -265,6 +265,27 @@ class ForgeMainWindow(QMainWindow):
             theme_menu.addAction(act)
 
         view_menu.addSeparator()
+
+        # Editor display
+        self.act_word_wrap = QAction("Word Wrap", self, checkable=True)
+        self.act_word_wrap.setChecked(False)
+        self.act_word_wrap.triggered.connect(self._toggle_word_wrap)
+        view_menu.addAction(self.act_word_wrap)
+
+        self.act_zoom_in = QAction("Zoom In", self, shortcut="Ctrl+=")
+        self.act_zoom_in.triggered.connect(lambda: self._zoom(1))
+        view_menu.addAction(self.act_zoom_in)
+
+        self.act_zoom_out = QAction("Zoom Out", self, shortcut="Ctrl+-")
+        self.act_zoom_out.triggered.connect(lambda: self._zoom(-1))
+        view_menu.addAction(self.act_zoom_out)
+
+        self.act_zoom_reset = QAction("Reset Zoom", self, shortcut="Ctrl+0")
+        # Don't add shortcut since Ctrl+0 is focus command — use menu only
+        self.act_zoom_reset.triggered.connect(lambda: self._zoom(0))
+        view_menu.addAction(self.act_zoom_reset)
+
+        view_menu.addSeparator()
         view_menu.addAction(self.act_reset_layout)
 
         # ── Debug ──
@@ -285,6 +306,10 @@ class ForgeMainWindow(QMainWindow):
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.act_about)
         help_menu.addAction(self.act_docs)
+
+        act_shortcuts = QAction("Keyboard Shortcuts", self)
+        act_shortcuts.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(act_shortcuts)
         help_menu.addSeparator()
         help_menu.addAction(self.act_check_updates)
         help_menu.addAction(self.act_feature_request)
@@ -579,6 +604,42 @@ class ForgeMainWindow(QMainWindow):
             self._recent_files.remove(path)
             self._save_recent_files()
             self._update_recent_menu()
+
+    def _toggle_word_wrap(self, checked):
+        from PySide6.QtWidgets import QPlainTextEdit
+        mode = QPlainTextEdit.WidgetWidth if checked else QPlainTextEdit.NoWrap
+        for i in range(self.editor_widget.tabs.count()):
+            editor = self.editor_widget.tabs.widget(i)
+            if hasattr(editor, 'setLineWrapMode'):
+                editor.setLineWrapMode(mode)
+
+    def _zoom(self, direction):
+        app = QApplication.instance()
+        font = app.font()
+        if direction == 0:
+            font.setPointSize(10)
+        else:
+            font.setPointSize(max(6, font.pointSize() + direction))
+        app.setFont(font)
+
+    def _show_shortcuts(self):
+        from PySide6.QtWidgets import QMessageBox
+        shortcuts = (
+            "<table cellpadding='4' style='font-size:11px;'>"
+            "<tr><th>Shortcut</th><th>Action</th></tr>"
+            "<tr><td><code>Ctrl+N</code></td><td>New File</td></tr>"
+            "<tr><td><code>Ctrl+O</code></td><td>Open File</td></tr>"
+            "<tr><td><code>Ctrl+S</code></td><td>Save</td></tr>"
+            "<tr><td><code>Ctrl+F</code></td><td>Find/Replace</td></tr>"
+            "<tr><td><code>F5</code></td><td>Run File</td></tr>"
+            "<tr><td><code>F1</code></td><td>Documentation</td></tr>"
+            "<tr><td><code>Ctrl+,</code></td><td>Preferences</td></tr>"
+            "<tr><td><code>Ctrl+=/-</code></td><td>Zoom In/Out</td></tr>"
+            "<tr><td><code>Tab</code></td><td>Complete/Indent</td></tr>"
+            "<tr><td><code>Up/Down</code></td><td>History</td></tr>"
+            "</table>"
+        )
+        QMessageBox.information(self, "Keyboard Shortcuts", shortcuts)
 
     def _on_find(self):
         """Open find/replace bar in the editor."""

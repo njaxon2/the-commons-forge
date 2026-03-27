@@ -231,6 +231,13 @@ class CodeEditor(QPlainTextEdit):
         # Syntax highlighter
         self._highlighter = OctaveSyntaxHighlighter(self.document())
 
+        # Track modifications for tab title asterisk
+        self.document().modificationChanged.connect(self._on_modification_changed)
+        self._is_modified = False
+
+        # Enable drag & drop
+        self.setAcceptDrops(True)
+
         # Autocomplete
         self._completer = None
         self._setup_completer()
@@ -418,6 +425,38 @@ class CodeEditor(QPlainTextEdit):
             super().insertFromMimeData(new_source)
         else:
             super().insertFromMimeData(source)
+
+    # --- modification tracking & drag-drop -----------------------------
+
+    def _on_modification_changed(self, changed):
+        self._is_modified = changed
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'tabs') and hasattr(parent, '_update_tab_title'):
+                parent._update_tab_title(self)
+                break
+            parent = parent.parent()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                path = url.toLocalFile()
+                if path and os.path.isfile(path):
+                    parent = self.parent()
+                    while parent:
+                        if hasattr(parent, 'open_file'):
+                            parent.open_file(path)
+                            break
+                        parent = parent.parent()
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
 
     # --- autocomplete --------------------------------------------------
 
@@ -642,6 +681,7 @@ class EditorWidget(QWidget):
             return False
         with open(editor.file_path, "w", encoding="utf-8") as fh:
             fh.write(editor.toPlainText())
+        editor.document().setModified(False)
         return True
 
     def get_current_editor(self) -> CodeEditor | None:
@@ -652,8 +692,34 @@ class EditorWidget(QWidget):
     # Internal
     # ------------------------------------------------------------------
 
+    def _update_tab_title(self, editor):
+        """Update tab title with asterisk for unsaved changes."""
+        for i in range(self.tabs.count()):
+            if self.tabs.widget(i) is editor:
+                base = os.path.basename(editor.file_path) if editor.file_path else "untitled"
+                if editor._is_modified:
+                    self.tabs.setTabText(i, f"* {base}")
+                else:
+                    self.tabs.setTabText(i, base)
+                break
+
     def _close_tab(self, index: int):
         if self.tabs.count() > 1:
+            # Check for unsaved changes
+            editor = self.tabs.widget(index)
+            if isinstance(editor, CodeEditor) and editor._is_modified:
+                from PySide6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self, "Unsaved Changes",
+                    f"Save changes to {os.path.basename(editor.file_path) if editor.file_path else 'untitled'}?",
+                    QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+                )
+                if reply == QMessageBox.Cancel:
+                    return
+                if reply == QMessageBox.Save:
+                    if editor.file_path:
+                        with open(editor.file_path, "w", encoding="utf-8") as f:
+                            f.write(editor.toPlainText())
             self.tabs.removeTab(index)
 
     def _on_tab_changed(self, index):
