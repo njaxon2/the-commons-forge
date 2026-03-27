@@ -27,6 +27,12 @@ from forge.gui.commons_integration import (
 )
 
 
+from forge.gui.icons import (
+    icon_new_file, icon_open, icon_save, icon_run, icon_stop,
+    icon_debug, icon_step_in, icon_step_over, icon_step_out,
+    icon_undo, icon_redo, icon_search,
+)
+
 class ForgeMainWindow(QMainWindow):
     """Top-level application window for the Forge IDE."""
 
@@ -647,13 +653,11 @@ class ForgeMainWindow(QMainWindow):
         tb.setObjectName("MainToolbar")
         tb.setIconSize(QSize(18, 18))
         self.addToolBar(tb)
-
-        style = self.style()
-        self.act_new.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon))
-        self.act_open.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
-        self.act_save.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
-        self.act_run.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-        self.act_stop.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaStop))
+        self.act_new.setIcon(icon_new_file())
+        self.act_open.setIcon(icon_open())
+        self.act_save.setIcon(icon_save())
+        self.act_run.setIcon(icon_run())
+        self.act_stop.setIcon(icon_stop())
 
         tb.addAction(self.act_new)
         tb.addAction(self.act_open)
