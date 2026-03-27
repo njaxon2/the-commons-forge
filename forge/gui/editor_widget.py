@@ -13,7 +13,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QTextEdit, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QPlainTextEdit, QLabel, QMenu,
+    QPlainTextEdit, QLabel, QMenu, QCompleter,
 )
 
 
@@ -231,6 +231,10 @@ class CodeEditor(QPlainTextEdit):
         # Syntax highlighter
         self._highlighter = OctaveSyntaxHighlighter(self.document())
 
+        # Autocomplete
+        self._completer = None
+        self._setup_completer()
+
         # Bracket matching
         self._bracket_selections = []
 
@@ -415,6 +419,46 @@ class CodeEditor(QPlainTextEdit):
         else:
             super().insertFromMimeData(source)
 
+    # --- autocomplete --------------------------------------------------
+
+    def _setup_completer(self):
+        """Set up autocomplete with Octave keywords and builtins."""
+        words = list(OctaveSyntaxHighlighter.KEYWORDS)
+        words.extend(OctaveSyntaxHighlighter.BUILTINS)
+        words.extend(OctaveSyntaxHighlighter.CONSTANTS)
+        # Will be extended with engine functions when connected
+        self._completer_words = sorted(set(words))
+
+        completer = QCompleter(self._completer_words, self)
+        completer.setWidget(self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        completer.activated.connect(self._insert_completion)
+        self._completer = completer
+
+    def set_function_names(self, names: list):
+        """Update the completer with engine function names."""
+        words = list(OctaveSyntaxHighlighter.KEYWORDS)
+        words.extend(OctaveSyntaxHighlighter.BUILTINS)
+        words.extend(OctaveSyntaxHighlighter.CONSTANTS)
+        words.extend(names)
+        self._completer_words = sorted(set(words))
+        from PySide6.QtCore import QStringListModel
+        self._completer.setModel(QStringListModel(self._completer_words))
+
+    def _insert_completion(self, completion):
+        """Insert the selected completion."""
+        tc = self.textCursor()
+        # Remove the partial word already typed
+        tc.select(QTextCursor.WordUnderCursor)
+        tc.insertText(completion)
+        self.setTextCursor(tc)
+
+    def _completion_prefix(self):
+        tc = self.textCursor()
+        tc.select(QTextCursor.WordUnderCursor)
+        return tc.selectedText()
+
     # --- context menu with Help ----------------------------------------
 
     def contextMenuEvent(self, event):
@@ -462,7 +506,19 @@ class CodeEditor(QPlainTextEdit):
     # --- auto-indent & tab handling ------------------------------------
 
     def keyPressEvent(self, event: QKeyEvent):
+        # Let completer handle its keys
+        if self._completer and self._completer.popup().isVisible():
+            if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Escape,
+                               Qt.Key_Tab, Qt.Key_Backtab):
+                event.ignore()
+                return
+
         if event.key() == Qt.Key_Tab:
+            # If completer has a single match, complete it
+            if self._completer and self._completer.completionCount() == 1:
+                self._insert_completion(self._completer.currentCompletion())
+                self._completer.popup().hide()
+                return
             self.insertPlainText("    ")
         elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             # Auto-indent: match previous line indentation
@@ -523,11 +579,17 @@ class EditorWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # Find/Replace bar (hidden by default)
+        from forge.gui.find_replace import FindReplaceBar
+
         self.tabs = QTabWidget(self)
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_tab)
         self.tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self.tabs)
+
+        # Find bar placeholder — created per-editor on demand
+        self._find_bar = None
 
         # Status widget
         self.status = EditorStatusWidget(self)
@@ -600,6 +662,22 @@ class EditorWidget(QWidget):
             col = cursor.columnNumber() + 1
             self.status.update_position(line, col)
 
+    def show_find(self):
+        """Show the find/replace bar for the current editor."""
+        editor = self.get_current_editor()
+        if editor is None:
+            return
+        from forge.gui.find_replace import FindReplaceBar
+        if self._find_bar is None:
+            self._find_bar = FindReplaceBar(editor, self)
+            self.layout().insertWidget(1, self._find_bar)  # after tabs
+            self._find_bar.closed.connect(lambda: self._find_bar.setVisible(False))
+        else:
+            self._find_bar.editor = editor
+        # Pre-fill with selection
+        sel = editor.textCursor().selectedText()
+        self._find_bar.show_find(sel)
+
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_F5:
             editor = self.get_current_editor()
@@ -607,3 +685,19 @@ class EditorWidget(QWidget):
                 self.file_run_requested.emit(editor.file_path)
         else:
             super().keyPressEvent(event)
+
+        # Trigger autocomplete
+        if self._completer and event.text() and event.text().isalpha():
+            prefix = self._completion_prefix()
+            if len(prefix) >= 2:
+                self._completer.setCompletionPrefix(prefix)
+                if self._completer.completionCount() > 0:
+                    popup = self._completer.popup()
+                    cr = self.cursorRect()
+                    cr.setWidth(popup.sizeHintForColumn(0) +
+                               popup.verticalScrollBar().sizeHint().width() + 20)
+                    self._completer.complete(cr)
+                else:
+                    self._completer.popup().hide()
+            else:
+                self._completer.popup().hide()

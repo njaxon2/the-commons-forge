@@ -167,6 +167,7 @@ class ForgeMainWindow(QMainWindow):
         self.act_copy = QAction("&Copy", self, shortcut=QKeySequence.Copy)
         self.act_paste = QAction("&Paste", self, shortcut=QKeySequence.Paste)
         self.act_find = QAction("&Find...", self, shortcut=QKeySequence.Find)
+        self.act_find.triggered.connect(self._on_find)
         self.act_preferences = QAction("Preferences...", self, shortcut="Ctrl+,")
         self.act_preferences.triggered.connect(self._open_preferences)
 
@@ -516,6 +517,11 @@ class ForgeMainWindow(QMainWindow):
     def open_file_in_editor(self, path):
         """Public method to open a file in the editor (used by 'edit' command)."""
         self.editor_widget.open_file(path)
+        self.editor_dock.raise_()
+
+    def _on_find(self):
+        """Open find/replace bar in the editor."""
+        self.editor_widget.show_find()
         self.editor_dock.raise_()
 
     def _focus_command_input(self):
