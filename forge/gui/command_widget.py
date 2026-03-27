@@ -518,6 +518,26 @@ class CommandWidget(QWidget):
                     lines.append("  ".join(c.ljust(max_len) for c in row))
                 self._append_text(chr(10) + chr(10).join(lines) + chr(10))
 
+
+    def _show_running_indicator(self):
+        """Show a visual indicator that code is executing."""
+        if not hasattr(self, '_running_label'):
+            from PySide6.QtWidgets import QLabel
+            self._running_label = QLabel("Running...", self)
+            self._running_label.setStyleSheet(
+                "background: #f9e2af; color: #1e1e2e; "
+                "padding: 2px 12px; border-radius: 4px; "
+                "font-size: 11px; font-weight: bold;"
+            )
+        self._running_label.move(self.width() - 100, 4)
+        self._running_label.show()
+        self._running_label.raise_()
+
+    def _hide_running_indicator(self):
+        """Hide the running indicator."""
+        if hasattr(self, '_running_label'):
+            self._running_label.hide()
+
     def wheelEvent(self, event):
         """Handle Ctrl+Scroll for zoom."""
         from PySide6.QtCore import Qt

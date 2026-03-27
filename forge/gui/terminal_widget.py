@@ -20,6 +20,8 @@ class TerminalWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._process = None
+        self._history = []
+        self._history_idx = -1
         self._cwd = os.path.expanduser("~")
         self._signals = TerminalOutputSignal()
         self._signals.output_ready.connect(self._append_output)
