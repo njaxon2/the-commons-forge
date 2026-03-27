@@ -14,9 +14,9 @@ The legacy "..." line-continuation syntax is also preserved.
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import (
     QFont, QTextCursor, QColor, QTextCharFormat,
-    QSyntaxHighlighter, QTextDocument,
+    QSyntaxHighlighter, QTextDocument, QAction,
 )
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QMenu, QApplication
 
 import re as _re
 
@@ -217,6 +217,7 @@ class CommandWidget(QWidget):
     """Interactive command window — single-pane terminal style."""
 
     command_executed = Signal(str)
+    help_requested = Signal(str)   # emitted when user right-clicks > Help on 'func'
 
     PROMPT = ">> "
     CONTINUATION = ".. "
@@ -274,19 +275,27 @@ class CommandWidget(QWidget):
         self.console.keyPressEvent = self._key_press
         self.console.mousePressEvent = self._mouse_press
         self.console.mouseDoubleClickEvent = self._mouse_double_click
+        self.console.contextMenuEvent = self._context_menu_event
 
     def _show_initial_prompt(self):
         self.console.clear()
-        self._append_text(
-            "Forge 0.1 \u2014 Octave-compatible computing environment\n"
+        # Get function count from engine if available
+        func_count = ""
+        if self.engine and hasattr(self.engine, '_engine'):
+            n = len(self.engine._engine.functions)
+            func_count = f" | {n} built-in functions"
+        banner = (
+            f"  Forge 0.1.0{func_count}\n"
+            f"  Octave-Compatible Computing Environment\n"
+            f"  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            f"  Type \u2018help topic\u2019 for help. "
+            f"Press F1 for documentation browser.\n"
+            f"  Multi-line blocks collected until matching \u2018end\u2019.\n\n"
         )
-        self._append_text(
-            "Type commands at the >> prompt. Use up/down for history.\n"
-        )
-        self._append_text(
-            "Multi-line blocks (for/if/while/switch/try/function) are "
-            "collected until matching 'end'.\n\n"
-        )
+        self._append_text(banner)
         self._write_prompt()
 
     # ------------------------------------------------------------------
@@ -437,7 +446,7 @@ class CommandWidget(QWidget):
         self._write_prompt()
 
     # ------------------------------------------------------------------
-    # Mouse handling
+    # Mouse handling & context menu
     # ------------------------------------------------------------------
 
     def _mouse_press(self, event):
@@ -445,6 +454,60 @@ class CommandWidget(QWidget):
 
     def _mouse_double_click(self, event):
         QPlainTextEdit.mouseDoubleClickEvent(self.console, event)
+
+    def _word_under_cursor(self):
+        """Extract the word (potential function name) under the text cursor."""
+        cursor = self.console.textCursor()
+        cursor.select(QTextCursor.WordUnderCursor)
+        word = cursor.selectedText().strip()
+        # Only return if it looks like an identifier
+        if word and _re.match(r'^[a-zA-Z_]\w*$', word):
+            return word
+        return None
+
+    def _is_known_function(self, name):
+        """Check if name is a registered function in the engine."""
+        if self.engine and hasattr(self.engine, '_engine'):
+            return name in self.engine._engine.functions
+        return False
+
+    def _context_menu_event(self, event):
+        """Custom context menu with Help and Run Selection options."""
+        menu = self.console.createStandardContextMenu()
+        word = self._word_under_cursor()
+
+        if word:
+            menu.addSeparator()
+            if self._is_known_function(word):
+                help_act = QAction(f"Help on \u2018{word}\u2019", menu)
+                help_act.triggered.connect(lambda: self.help_requested.emit(word))
+                menu.addAction(help_act)
+
+                # Also offer "Run 'help word'" shortcut
+                run_help_act = QAction(f"Run: help {word}", menu)
+                run_help_act.triggered.connect(
+                    lambda: self._execute_command(f"help {word}")
+                )
+                menu.addAction(run_help_act)
+            else:
+                # Offer to search for it
+                search_act = QAction(f"Search help for \u2018{word}\u2019", menu)
+                search_act.triggered.connect(lambda: self.help_requested.emit(word))
+                menu.addAction(search_act)
+
+        # If there's a selection, offer to run it
+        cursor = self.console.textCursor()
+        if cursor.hasSelection():
+            sel_text = cursor.selectedText().strip()
+            if sel_text and len(sel_text) < 200:
+                menu.addSeparator()
+                eval_act = QAction("Evaluate Selection", menu)
+                eval_act.triggered.connect(
+                    lambda: self._execute_command(sel_text)
+                )
+                menu.addAction(eval_act)
+
+        menu.exec(event.globalPos())
 
     # ------------------------------------------------------------------
     # History

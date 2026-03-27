@@ -9,11 +9,11 @@ import re
 from PySide6.QtCore import Qt, Signal, QRect, QSize, QTimer
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat,
-    QTextCursor, QKeyEvent, QPen, QTextFormat,
+    QTextCursor, QKeyEvent, QPen, QTextFormat, QAction,
 )
 from PySide6.QtWidgets import (
     QTextEdit, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QPlainTextEdit, QLabel,
+    QPlainTextEdit, QLabel, QMenu,
 )
 
 
@@ -209,6 +209,8 @@ class _LineNumberArea(QWidget):
 class CodeEditor(QPlainTextEdit):
     """Text editor with line numbers, bracket matching, prompt stripping,
     auto-indent, and theme-aware syntax highlighting."""
+
+    help_requested = Signal(str)   # right-click > Help on function
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -413,6 +415,50 @@ class CodeEditor(QPlainTextEdit):
         else:
             super().insertFromMimeData(source)
 
+    # --- context menu with Help ----------------------------------------
+
+    def contextMenuEvent(self, event):
+        """Custom context menu with Help on function."""
+        menu = self.createStandardContextMenu()
+        cursor = self.textCursor()
+
+        # Get word under cursor (or at click position)
+        click_cursor = self.cursorForPosition(event.pos())
+        click_cursor.select(QTextCursor.WordUnderCursor)
+        word = click_cursor.selectedText().strip()
+
+        if word and re.match(r'^[a-zA-Z_]\w*$', word):
+            menu.addSeparator()
+            help_act = QAction(f"Help on \u2018{word}\u2019", menu)
+            help_act.triggered.connect(lambda: self.help_requested.emit(word))
+            menu.addAction(help_act)
+
+            # Go to definition stub
+            goto_act = QAction(f"Go to Definition: {word}", menu)
+            goto_act.setEnabled(False)  # stub for future
+            menu.addAction(goto_act)
+
+        # If selection, offer evaluate
+        if cursor.hasSelection():
+            sel = cursor.selectedText().strip()
+            if sel and len(sel) < 500:
+                menu.addSeparator()
+                eval_act = QAction("Evaluate Selection in Command Window", menu)
+                eval_act.triggered.connect(lambda: self._eval_selection(sel))
+                menu.addAction(eval_act)
+
+        menu.exec(event.globalPos())
+
+    def _eval_selection(self, text):
+        """Emit text for evaluation in command window (parent handles routing)."""
+        # Walk up to find the EditorWidget/MainWindow
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'eval_requested'):
+                parent.eval_requested.emit(text)
+                return
+            parent = parent.parent()
+
     # --- auto-indent & tab handling ------------------------------------
 
     def keyPressEvent(self, event: QKeyEvent):
@@ -469,6 +515,8 @@ class EditorWidget(QWidget):
     """Tab container for multiple CodeEditor panes."""
 
     file_run_requested = Signal(str)
+    help_requested = Signal(str)       # bubbled up from CodeEditor context menu
+    eval_requested = Signal(str)       # evaluate selection in command window
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -496,6 +544,7 @@ class EditorWidget(QWidget):
         """Open a new untitled editor tab."""
         editor = CodeEditor(self)
         editor.cursorPositionChanged.connect(self._update_status)
+        editor.help_requested.connect(self.help_requested.emit)
         idx = self.tabs.addTab(editor, "untitled")
         self.tabs.setCurrentIndex(idx)
         return editor
@@ -510,6 +559,7 @@ class EditorWidget(QWidget):
 
         editor = CodeEditor(self)
         editor.cursorPositionChanged.connect(self._update_status)
+        editor.help_requested.connect(self.help_requested.emit)
         editor.file_path = path
         with open(path, "r", encoding="utf-8") as fh:
             editor.setPlainText(fh.read())

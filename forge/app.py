@@ -19,6 +19,47 @@ def main():
     app.setOrganizationName('Forge')
     app.setApplicationVersion('0.1.0')
 
+    # Show splash screen
+    from PySide6.QtWidgets import QSplashScreen
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QFont as QF, QLinearGradient
+    from PySide6.QtCore import QRect
+
+    splash_pix = QPixmap(480, 300)
+    painter = QPainter(splash_pix)
+    # Gradient background
+    grad = QLinearGradient(0, 0, 0, 300)
+    grad.setColorAt(0, QColor("#1e1e2e"))
+    grad.setColorAt(1, QColor("#11111b"))
+    painter.fillRect(0, 0, 480, 300, grad)
+    # Title
+    painter.setPen(QColor("#89b4fa"))
+    title_font = QF("Consolas", 36, QF.Bold)
+    painter.setFont(title_font)
+    painter.drawText(QRect(0, 60, 480, 60), Qt.AlignCenter, "Forge")
+    # Subtitle
+    painter.setPen(QColor("#cdd6f4"))
+    sub_font = QF("Consolas", 12)
+    painter.setFont(sub_font)
+    painter.drawText(QRect(0, 130, 480, 30), Qt.AlignCenter,
+                     "Octave-Compatible Computing Environment")
+    # Version
+    painter.setPen(QColor("#6c7086"))
+    ver_font = QF("Consolas", 10)
+    painter.setFont(ver_font)
+    painter.drawText(QRect(0, 165, 480, 25), Qt.AlignCenter, "v0.1.0")
+    # Loading text
+    painter.setPen(QColor("#585b70"))
+    painter.drawText(QRect(0, 250, 480, 25), Qt.AlignCenter,
+                     "Loading engine...")
+    # Border
+    painter.setPen(QColor("#313244"))
+    painter.drawRect(0, 0, 479, 299)
+    painter.end()
+
+    splash = QSplashScreen(splash_pix)
+    splash.show()
+    app.processEvents()
+
     # Load user preferences
     from forge.gui.themes import get_preferences, apply_theme
     prefs = get_preferences()
@@ -52,6 +93,12 @@ def main():
     window.move(frame_geo.topLeft())
 
     window.show()
+
+    # Close splash
+    try:
+        splash.finish(window)
+    except Exception:
+        pass
 
     sys.exit(app.exec())
 

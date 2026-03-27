@@ -76,6 +76,11 @@ class ForgeMainWindow(QMainWindow):
         )
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
 
+        # Help-on-function: right-click context menus in command & editor
+        self.command_widget.help_requested.connect(self._show_help_for)
+        self.editor_widget.help_requested.connect(self._show_help_for)
+        self.editor_widget.eval_requested.connect(self._eval_in_command)
+
     # ==================================================================
     # Workspace helpers
     # ==================================================================
@@ -513,6 +518,21 @@ class ForgeMainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.workspace_dock)
         self._set_default_layout()
         self.set_status("Layout reset")
+
+    def _show_help_for(self, func_name):
+        """Open help viewer and show docs for the given function."""
+        self.help_dock.setVisible(True)
+        self.help_dock.raise_()
+        self.help_widget.search_edit.setText(func_name)
+        self.help_widget.show_help(func_name)
+
+    def _eval_in_command(self, code):
+        """Evaluate code from editor selection in the command window."""
+        if self.session:
+            result = self.session.eval(code)
+            if result:
+                self.command_widget.append_output(result)
+            self._update_workspace()
 
     def _show_docs(self):
         """Show the documentation panel."""
