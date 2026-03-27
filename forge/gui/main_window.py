@@ -114,8 +114,10 @@ class ForgeMainWindow(QMainWindow):
         def _connect_editor_cursor():
             editor = self.editor_widget.get_current_editor() if hasattr(self.editor_widget, 'get_current_editor') else None
             if editor:
-                try: editor.cursorPositionChanged.disconnect(self._update_cursor_status)
-                except: pass
+                try:
+                    editor.cursorPositionChanged.disconnect(self._update_cursor_status)
+                except (TypeError, RuntimeError):
+                    pass
                 editor.cursorPositionChanged.connect(self._update_cursor_status)
                 self._update_cursor_status()
         self.editor_widget.tabs.currentChanged.connect(lambda _: _connect_editor_cursor())
