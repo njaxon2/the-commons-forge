@@ -692,7 +692,125 @@ class CodeEditor(QPlainTextEdit):
             return f"<b>{name}</b> — constant"
         return None
 
-    # ---- Bookmarks -----------------------------------------------
+    # ---- Line operations -----------------------------------------------
+
+    def _duplicate_line(self):
+        """Duplicate the current line or selection."""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            text = cursor.selectedText()
+            cursor.clearSelection()
+            cursor.insertText(text + '\n' + text)
+        else:
+            cursor.movePosition(QTextCursor.StartOfBlock)
+            cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+            line_text = cursor.selectedText()
+            cursor.movePosition(QTextCursor.EndOfBlock)
+            cursor.insertText('\n' + line_text)
+        self.setTextCursor(cursor)
+
+    def _move_line(self, direction):
+        """Move the current line up (-1) or down (+1)."""
+        cursor = self.textCursor()
+        block_num = cursor.blockNumber()
+        doc = self.document()
+
+        if direction == -1 and block_num == 0:
+            return
+        if direction == 1 and block_num >= doc.blockCount() - 1:
+            return
+
+        cursor.beginEditBlock()
+        # Select current line
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        line_text = cursor.selectedText()
+
+        # Delete current line
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        if direction == -1:
+            cursor.movePosition(QTextCursor.Left, QTextCursor.KeepAnchor)
+        elif direction == 1:
+            cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+
+        # Insert at new position
+        if direction == -1:
+            cursor.movePosition(QTextCursor.EndOfBlock)
+            cursor.insertText('\n' + line_text)
+        else:
+            cursor.movePosition(QTextCursor.StartOfBlock)
+            cursor.insertText(line_text + '\n')
+            cursor.movePosition(QTextCursor.Up)
+
+        cursor.endEditBlock()
+        self.setTextCursor(cursor)
+
+    def _delete_line(self):
+        """Delete the current line."""
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+        self.setTextCursor(cursor)
+
+    def _toggle_comment(self):
+        """Toggle % comment on current line or selection."""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            start = cursor.selectionStart()
+            end = cursor.selectionEnd()
+            cursor.setPosition(start)
+            start_block = cursor.blockNumber()
+            cursor.setPosition(end)
+            end_block = cursor.blockNumber()
+
+            cursor.beginEditBlock()
+            # Check if all lines are commented
+            all_commented = True
+            for block_num in range(start_block, end_block + 1):
+                block = self.document().findBlockByNumber(block_num)
+                if not block.text().lstrip().startswith('%'):
+                    all_commented = False
+                    break
+
+            for block_num in range(start_block, end_block + 1):
+                block = self.document().findBlockByNumber(block_num)
+                cursor.setPosition(block.position())
+                if all_commented:
+                    # Uncomment
+                    text = block.text()
+                    idx = text.index('%')
+                    cursor.setPosition(block.position() + idx)
+                    cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+                    if idx + 1 < len(text) and text[idx + 1] == ' ':
+                        cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+                    cursor.removeSelectedText()
+                else:
+                    # Comment
+                    cursor.insertText('% ')
+
+            cursor.endEditBlock()
+        else:
+            # Single line toggle
+            cursor.movePosition(QTextCursor.StartOfBlock)
+            line = cursor.block().text()
+            cursor.beginEditBlock()
+            if line.lstrip().startswith('%'):
+                idx = line.index('%')
+                cursor.setPosition(cursor.block().position() + idx)
+                cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+                if idx + 1 < len(line) and line[idx + 1] == ' ':
+                    cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+                cursor.removeSelectedText()
+            else:
+                cursor.movePosition(QTextCursor.StartOfBlock)
+                cursor.insertText('% ')
+            cursor.endEditBlock()
+
+        # ---- Bookmarks -----------------------------------------------
 
     def toggle_bookmark(self):
         """Toggle bookmark on current line."""
@@ -953,6 +1071,23 @@ class CodeEditor(QPlainTextEdit):
     # --- auto-indent & tab handling ------------------------------------
 
     def keyPressEvent(self, event: QKeyEvent):
+        # Line operation shortcuts
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
+            self._duplicate_line()
+            return
+        if event.key() == Qt.Key_Up and event.modifiers() == Qt.AltModifier:
+            self._move_line(-1)
+            return
+        if event.key() == Qt.Key_Down and event.modifiers() == Qt.AltModifier:
+            self._move_line(1)
+            return
+        if event.key() == Qt.Key_K and event.modifiers() == (Qt.ControlModifier | Qt.ShiftModifier):
+            self._delete_line()
+            return
+        if event.key() == Qt.Key_Slash and event.modifiers() == Qt.ControlModifier:
+            self._toggle_comment()
+            return
+
         # Let completer handle its keys
         if self._completer and self._completer.popup().isVisible():
             if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Escape,

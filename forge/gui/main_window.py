@@ -782,6 +782,15 @@ class ForgeMainWindow(QMainWindow):
             "<tr><td><code>Ctrl+=/-</code></td><td>Zoom In/Out</td></tr>"
             "<tr><td><code>Tab</code></td><td>Complete/Indent</td></tr>"
             "<tr><td><code>Up/Down</code></td><td>History</td></tr>"
+            "<tr><td><code>Ctrl+D</code></td><td>Duplicate Line</td></tr>"
+            "<tr><td><code>Ctrl+/</code></td><td>Toggle Comment</td></tr>"
+            "<tr><td><code>Alt+Up/Down</code></td><td>Move Line</td></tr>"
+            "<tr><td><code>Ctrl+Shift+K</code></td><td>Delete Line</td></tr>"
+            "<tr><td><code>Ctrl+G</code></td><td>Go to Line</td></tr>"
+            "<tr><td><code>Ctrl+F2</code></td><td>Toggle Bookmark</td></tr>"
+            "<tr><td><code>F2/Shift+F2</code></td><td>Next/Prev Bookmark</td></tr>"
+            "<tr><td><code>F9</code></td><td>Run Selection</td></tr>"
+            "<tr><td><code>F12</code></td><td>Toggle Breakpoint</td></tr>"
             "</table>"
         )
         QMessageBox.information(self, "Keyboard Shortcuts", shortcuts)

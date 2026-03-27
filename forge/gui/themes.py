@@ -933,6 +933,11 @@ QStatusBar QPushButton:hover {{
 }}
 
 /* ── Tooltip ─────────────────────────────────────────────────── */
+QDialog {{
+    background: {c["bg0"]};
+    border-radius: 8px;
+}}
+
 QToolTip {{
     background-color: {c["tooltip_bg"]};
     color: {c["fg0"]};
