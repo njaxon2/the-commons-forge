@@ -384,6 +384,11 @@ class CommandWidget(QWidget):
             return
 
         # --- Enter / Return ---
+        # Tab completion
+        if event.key() == Qt.Key_Tab and self._cursor_in_editable():
+            self._complete_tab()
+            return
+
         if key in (Qt.Key_Return, Qt.Key_Enter):
             self._on_return()
             return
@@ -467,6 +472,51 @@ class CommandWidget(QWidget):
     # Mouse handling & context menu
     # ------------------------------------------------------------------
 
+
+
+    def _complete_tab(self):
+        """Tab-complete the current word using engine function names."""
+        text = self._get_input_text()
+        if not text:
+            return
+
+        import re
+        m = re.search(r'([a-zA-Z_]\w*)$', text)
+        if not m:
+            return
+
+        partial = m.group(1)
+        if len(partial) < 1:
+            return
+
+        completions = []
+        if hasattr(self, 'engine') and self.engine and hasattr(self.engine, '_engine'):
+            funcs = self.engine._engine.functions
+            completions = sorted([name for name in funcs if name.startswith(partial)])
+
+        if hasattr(self, 'engine') and self.engine and hasattr(self.engine, '_workspace'):
+            workspace_names = [name for name in self.engine._workspace if name.startswith(partial)]
+            completions = sorted(set(completions + workspace_names))
+
+        if not completions:
+            return
+
+        if len(completions) == 1:
+            suffix = completions[0][len(partial):]
+            self._set_input_text(text + suffix)
+        else:
+            common = os.path.commonprefix(completions)
+            if len(common) > len(partial):
+                suffix = common[len(partial):]
+                self._set_input_text(text + suffix)
+            else:
+                max_len = max(len(c) for c in completions) + 2
+                cols = max(1, 70 // max_len)
+                lines = []
+                for i in range(0, len(completions), cols):
+                    row = completions[i:i+cols]
+                    lines.append("  ".join(c.ljust(max_len) for c in row))
+                self._append_text(chr(10) + chr(10).join(lines) + chr(10))
 
     def wheelEvent(self, event):
         """Handle Ctrl+Scroll for zoom."""
