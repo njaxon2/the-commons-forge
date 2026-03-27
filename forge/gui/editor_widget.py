@@ -1264,6 +1264,57 @@ class CodeEditor(QPlainTextEdit):
                 outdented.append(line)
         cursor.insertText('\n'.join(outdented))
 
+
+
+
+    def _to_upper(self):
+        """Transform selection to upper case."""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            text = cursor.selectedText()
+            cursor.insertText(text.upper())
+
+    def _to_lower(self):
+        """Transform selection to lower case."""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            text = cursor.selectedText()
+            cursor.insertText(text.lower())
+
+    def _sort_lines(self):
+        """Sort selected lines alphabetically."""
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.StartOfBlock)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
+        text = cursor.selectedText()
+        lines = text.split('\u2029')
+        lines.sort()
+        cursor.insertText('\n'.join(lines))
+
+    def _join_lines(self):
+        """Join the current line with the next line (Ctrl+J)."""
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.EndOfBlock)
+        cursor.movePosition(QTextCursor.NextCharacter, QTextCursor.KeepAnchor)
+        # Remove the newline and leading whitespace of next line
+        if cursor.hasSelection():
+            next_text = cursor.selectedText()
+            cursor.insertText(' ')
+            # Remove leading whitespace on the joined part
+            cursor = self.textCursor()
+            pos = cursor.position()
+            text = self.toPlainText()
+            # Trim extra spaces
+            while pos < len(text) - 1 and text[pos] == ' ' and text[pos + 1] == ' ':
+                cursor.deleteChar()
+                text = self.toPlainText()
+
     def _toggle_comment(self):
         """Toggle % comment on current line or selection."""
         cursor = self.textCursor()
