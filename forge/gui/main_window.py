@@ -279,6 +279,10 @@ class ForgeMainWindow(QMainWindow):
         panels_menu.addAction(self.help_dock.toggleViewAction())
 
         # Theme submenu
+        act_cycle_theme = view_menu.addAction("Cycle Theme")
+        act_cycle_theme.setShortcut(QKeySequence("Ctrl+Shift+T"))
+        act_cycle_theme.triggered.connect(self._cycle_theme)
+
         theme_menu = view_menu.addMenu("Theme")
         for tname in ("dark", "light", "midnight"):
             act = QAction(tname.capitalize(), self)
@@ -602,6 +606,15 @@ class ForgeMainWindow(QMainWindow):
         # Update editor palette
         from forge.gui.editor_widget import set_editor_palette
         set_editor_palette(prefs.get('default_theme', 'dark'))
+
+    def _cycle_theme(self):
+        """Cycle through available themes."""
+        from forge.gui.themes import THEMES
+        theme_names = list(THEMES.keys())
+        current = getattr(self, '_current_theme', 'dark')
+        idx = theme_names.index(current) if current in theme_names else 0
+        next_theme = theme_names[(idx + 1) % len(theme_names)]
+        self._switch_theme(next_theme)
 
     def _switch_theme(self, theme_name):
         from forge.gui.themes import apply_theme, get_preferences, save_preferences

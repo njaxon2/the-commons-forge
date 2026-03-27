@@ -230,7 +230,7 @@ class CommandWidget(QWidget):
         self.engine = None
 
         # History
-        self.history: list[str] = []
+        self.history: list[str] = self._load_persistent_history()
         self.history_index: int = -1
         self._history_tmp: str = ""
 
@@ -596,6 +596,27 @@ class CommandWidget(QWidget):
     # History
     # ------------------------------------------------------------------
 
+    def _load_persistent_history(self):
+        import json, os
+        path = os.path.join(os.path.expanduser('~'), '.forge', 'command_history.json')
+        try:
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f)[-500:]
+        except Exception:
+            pass
+        return []
+
+    def _save_persistent_history(self):
+        import json, os
+        d = os.path.join(os.path.expanduser('~'), '.forge')
+        os.makedirs(d, exist_ok=True)
+        try:
+            with open(os.path.join(d, 'command_history.json'), 'w') as f:
+                json.dump(self.history[-500:], f)
+        except Exception:
+            pass
+
     def _history_prev(self):
         if not self.history:
             return
@@ -809,6 +830,7 @@ class CommandWidget(QWidget):
         """Run *full_text* through the engine and show results."""
         if full_text.strip():
             self.history.append(full_text)
+        self._save_persistent_history()
 
         if self.engine is not None and full_text.strip():
             try:
