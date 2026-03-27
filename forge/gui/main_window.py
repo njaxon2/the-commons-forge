@@ -662,6 +662,25 @@ class ForgeMainWindow(QMainWindow):
         )
         QMessageBox.information(self, "Keyboard Shortcuts", shortcuts)
 
+    def _goto_line_dialog(self):
+        """Show Go to Line dialog."""
+        from PySide6.QtWidgets import QInputDialog
+        editor = self.editor_widget.get_current_editor()
+        if editor:
+            max_line = editor.document().blockCount()
+            line, ok = QInputDialog.getInt(
+                self, "Go to Line", f"Line number (1-{max_line}):",
+                editor.textCursor().blockNumber() + 1, 1, max_line
+            )
+            if ok:
+                editor._goto_line(line)
+
+    def _editor_action(self, action_name):
+        """Dispatch an action to the current editor."""
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(editor, action_name):
+            getattr(editor, action_name)()
+
     def _on_find(self):
         """Open find/replace bar in the editor."""
         self.editor_widget.show_find()

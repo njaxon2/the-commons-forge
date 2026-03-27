@@ -184,6 +184,115 @@ class OctaveSyntaxHighlighter(QSyntaxHighlighter):
 # Line number area with active-line highlight
 # ======================================================================
 
+class MinimapWidget(QWidget):
+    """A compact code overview widget shown at the right edge of the editor."""
+
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+        self.setFixedWidth(80)
+        self.setCursor(Qt.PointingHandCursor)
+        self._drag = False
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor, QPen
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        palette = get_palette()
+        bg = QColor(palette.get('gutter_bg', '#1e1e2e'))
+        bg.setAlpha(180)
+        painter.fillRect(self.rect(), bg)
+
+        doc = self.editor.document()
+        total_lines = doc.blockCount()
+        if total_lines == 0:
+            painter.end()
+            return
+
+        h = self.height()
+        scale = min(h / max(total_lines, 1), 3.0)
+
+        # Visible region highlight
+        first_visible = self.editor.firstVisibleBlock().blockNumber()
+        block_rect = self.editor.blockBoundingRect(self.editor.firstVisibleBlock())
+        block_h = max(1, int(block_rect.height()))
+        visible_lines = max(1, self.editor.viewport().height() // block_h)
+
+        vis_y = int(first_visible * scale)
+        vis_h = max(10, int(visible_lines * scale))
+        vis_color = QColor("#cba6f7")
+        vis_color.setAlpha(40)
+        painter.fillRect(0, vis_y, self.width(), vis_h, vis_color)
+
+        # Draw code lines as colored marks
+        block = doc.begin()
+        y = 0.0
+        keyword_color = QColor(palette.get('keyword', '#cba6f7'))
+        keyword_color.setAlpha(200)
+        comment_color = QColor(palette.get('comment', '#6c7086'))
+        comment_color.setAlpha(150)
+        string_color = QColor(palette.get('string', '#a6e3a1'))
+        string_color.setAlpha(150)
+        normal_color = QColor("#cdd6f4")
+        normal_color.setAlpha(80)
+
+        kw_set = {'function', 'if', 'for', 'while', 'switch', 'try', 'end', 'else', 'return', 'elseif', 'case'}
+        while block.isValid() and y < h:
+            text = block.text().rstrip()
+            if text:
+                stripped = text.lstrip()
+                indent = len(text) - len(stripped)
+                first_word = stripped.split()[0] if stripped.split() else ''
+                if stripped.startswith('%') or stripped.startswith('#'):
+                    color = comment_color
+                elif stripped.startswith("'") or stripped.startswith('"'):
+                    color = string_color
+                elif first_word in kw_set:
+                    color = keyword_color
+                else:
+                    color = normal_color
+
+                x_start = int(indent * 0.5) + 2
+                x_end = min(self.width() - 2, x_start + int(len(stripped) * 0.5))
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(color)
+                line_h = max(1, int(scale * 0.8))
+                painter.drawRect(x_start, int(y), max(1, x_end - x_start), line_h)
+
+            block = block.next()
+            y += scale
+
+        # Border line
+        painter.setPen(QColor("#313244"))
+        painter.drawLine(0, 0, 0, h)
+        painter.end()
+
+    def mousePressEvent(self, event):
+        self._drag = True
+        self._scroll_to_pos(event.pos().y())
+
+    def mouseMoveEvent(self, event):
+        if self._drag:
+            self._scroll_to_pos(event.pos().y())
+
+    def mouseReleaseEvent(self, event):
+        self._drag = False
+
+    def _scroll_to_pos(self, y):
+        total_lines = self.editor.document().blockCount()
+        h = self.height()
+        if h == 0 or total_lines == 0:
+            return
+        scale = min(h / max(total_lines, 1), 3.0)
+        target_line = int(y / scale)
+        target_line = max(0, min(target_line, total_lines - 1))
+        block = self.editor.document().findBlockByNumber(target_line)
+        cursor = QTextCursor(block)
+        self.editor.setTextCursor(cursor)
+        self.editor.centerCursor()
+
+
 class _LineNumberArea(QWidget):
     """Gutter widget drawn beside the code editor."""
 
@@ -238,7 +347,16 @@ class CodeEditor(QPlainTextEdit):
 
         # Enable drag & drop and mouse tracking for hover tooltips
         self.setAcceptDrops(True)
+
+        # Code folding state
+        self._bookmarks = set()  # set of bookmarked line numbers (0-based)
+        self._folded_regions = set()  # set of line numbers (0-based) that are fold headers with folded content
+        self._fold_indicators = {}    # line_num -> end_line_num for foldable blocks
         self.setMouseTracking(True)
+
+        # Minimap
+        self._minimap = MinimapWidget(self)
+        self._minimap_visible = True
 
         # Autocomplete
         self._completer = None
@@ -272,6 +390,13 @@ class CodeEditor(QPlainTextEdit):
         self._line_area.setGeometry(
             QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height())
         )
+        # Position minimap
+        if hasattr(self, '_minimap') and self._minimap_visible:
+            cr = self.contentsRect()
+            self._minimap.setGeometry(cr.right() - 80, cr.top(), 80, cr.height())
+            self._minimap.show()
+        elif hasattr(self, '_minimap'):
+            self._minimap.hide()
 
     def line_number_area_paint(self, event):
         p = get_palette()
@@ -312,6 +437,47 @@ class CodeEditor(QPlainTextEdit):
         self._match_brackets()
         self._line_area.update()  # repaint gutter for active line
 
+    def paintEvent(self, event):
+        """Override to draw indentation guides."""
+        super().paintEvent(event)
+
+        from PySide6.QtGui import QPainter, QColor, QPen
+        painter = QPainter(self.viewport())
+        guide_color = QColor("#313244")
+        guide_color.setAlpha(80)
+        pen = QPen(guide_color, 1, Qt.DotLine)
+        painter.setPen(pen)
+
+        tab_width = self.tabStopDistance()
+        if tab_width <= 0:
+            tab_width = self.fontMetrics().horizontalAdvance(' ') * 4
+
+        block = self.firstVisibleBlock()
+        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        bottom = top + int(self.blockBoundingRect(block).height())
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible():
+                text = block.text()
+                # Count leading spaces
+                indent_chars = len(text) - len(text.lstrip()) if text.strip() else 0
+                if indent_chars > 0:
+                    char_width = self.fontMetrics().horizontalAdvance(' ')
+                    tab_size = 4
+                    num_guides = indent_chars // tab_size
+                    for i in range(1, num_guides + 1):
+                        x = int(self.contentOffset().x()) + i * tab_size * char_width
+                        painter.drawLine(x, top, x, bottom)
+
+            block = block.next()
+            if block.isValid():
+                top = bottom
+                bottom = top + int(self.blockBoundingRect(block).height())
+            else:
+                break
+
+        painter.end()
+
     def _highlight_current_line(self):
         p = get_palette()
         sel = QTextEdit.ExtraSelection()
@@ -323,93 +489,130 @@ class CodeEditor(QPlainTextEdit):
         self.setExtraSelections(selections)
 
     def _match_brackets(self):
-        """Highlight matching bracket pair."""
-        self._bracket_selections = []
+        """Highlight matching brackets with depth-based coloring."""
+        extra_selections = []
         cursor = self.textCursor()
-        doc = self.document()
+        text = self.document().toPlainText()
         pos = cursor.position()
-        text_at = doc.characterAt(pos)
 
-        OPEN = "([{"
-        CLOSE = ")]}"
-        PAIRS = dict(zip(OPEN, CLOSE))
-        RPAIRS = dict(zip(CLOSE, OPEN))
+        if pos <= 0 or pos > len(text):
+            self.setExtraSelections(self._current_line_selections())
+            return
+
+        # Check character before cursor and at cursor
+        pairs = {'(': ')', '[': ']', '{': '}'}
+        close_to_open = {')': '(', ']': '[', '}': '{'}
+
+        # Rainbow bracket colors (depth-cycled)
+        rainbow = ['#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#89b4fa', '#cba6f7']
+
+        def depth_color(depth):
+            return rainbow[depth % len(rainbow)]
+
+        def find_matching_forward(start, open_char, close_char):
+            depth = 1
+            i = start + 1
+            while i < len(text):
+                if text[i] == open_char:
+                    depth += 1
+                elif text[i] == close_char:
+                    depth -= 1
+                    if depth == 0:
+                        return i
+                i += 1
+            return -1
+
+        def find_matching_backward(start, open_char, close_char):
+            depth = 1
+            i = start - 1
+            while i >= 0:
+                if text[i] == close_char:
+                    depth += 1
+                elif text[i] == open_char:
+                    depth -= 1
+                    if depth == 0:
+                        return i
+                i -= 1
+            return -1
+
+        def count_depth_at(position, char):
+            """Count nesting depth at a position."""
+            depth = 0
+            for i in range(position):
+                c = text[i]
+                if c in pairs:
+                    depth += 1
+                elif c in close_to_open:
+                    depth -= 1
+            return max(0, depth)
+
+        char_before = text[pos - 1] if pos > 0 else ''
+        char_at = text[pos] if pos < len(text) else ''
 
         match_pos = -1
+        bracket_pos = -1
+        bracket_depth = 0
 
-        if text_at in OPEN:
-            target = PAIRS[text_at]
-            depth = 0
-            for i in range(pos, doc.characterCount()):
-                c = doc.characterAt(i)
-                if c == text_at:
-                    depth += 1
-                elif c == target:
-                    depth -= 1
-                    if depth == 0:
-                        match_pos = i
-                        break
-        elif text_at in CLOSE:
-            target = RPAIRS[text_at]
-            depth = 0
-            for i in range(pos, -1, -1):
-                c = doc.characterAt(i)
-                if c == text_at:
-                    depth += 1
-                elif c == target:
-                    depth -= 1
-                    if depth == 0:
-                        match_pos = i
-                        break
-        # Also check char before cursor
-        elif pos > 0:
-            text_before = doc.characterAt(pos - 1)
-            if text_before in CLOSE:
-                target = RPAIRS[text_before]
-                depth = 0
-                for i in range(pos - 1, -1, -1):
-                    c = doc.characterAt(i)
-                    if c == text_before:
-                        depth += 1
-                    elif c == target:
-                        depth -= 1
-                        if depth == 0:
-                            match_pos = i
-                            pos = pos - 1  # highlight the close bracket
-                            break
-            elif text_before in OPEN:
-                target = PAIRS[text_before]
-                depth = 0
-                for i in range(pos - 1, doc.characterCount()):
-                    c = doc.characterAt(i)
-                    if c == text_before:
-                        depth += 1
-                    elif c == target:
-                        depth -= 1
-                        if depth == 0:
-                            match_pos = i
-                            pos = pos - 1
-                            break
+        if char_before in pairs:
+            bracket_pos = pos - 1
+            match_pos = find_matching_forward(pos - 1, char_before, pairs[char_before])
+            bracket_depth = count_depth_at(pos - 1, char_before)
+        elif char_before in close_to_open:
+            bracket_pos = pos - 1
+            match_pos = find_matching_backward(pos - 1, close_to_open[char_before], char_before)
+            bracket_depth = count_depth_at(pos - 1, char_before)
+        elif char_at in pairs:
+            bracket_pos = pos
+            match_pos = find_matching_forward(pos, char_at, pairs[char_at])
+            bracket_depth = count_depth_at(pos, char_at)
+        elif char_at in close_to_open:
+            bracket_pos = pos
+            match_pos = find_matching_backward(pos, close_to_open[char_at], char_at)
+            bracket_depth = count_depth_at(pos, char_at)
 
-        if match_pos >= 0:
-            p = get_palette()
-            fmt = QTextCharFormat()
-            fmt.setBackground(QColor(p.get("keyword", "#cba6f7")).replace(")", ""))
-            # Use a subtle underline + bold for matched brackets
-            fmt.setFontWeight(QFont.Bold)
-            fmt.setForeground(QColor("#ffffff"))
-            fmt.setBackground(QColor("#4a4a6a"))
+        # Start with current line highlight
+        extra_selections = self._current_line_selections()
 
-            for bpos in (pos, match_pos):
-                sel = QTextEdit.ExtraSelection()
-                sel.format = fmt
-                c = QTextCursor(doc)
-                c.setPosition(bpos)
-                c.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
-                sel.cursor = c
-                self._bracket_selections.append(sel)
+        if match_pos >= 0 and bracket_pos >= 0:
+            color = QColor(depth_color(bracket_depth))
 
-    # --- prompt stripping on paste (MATLAB-style) --------------------
+            # Highlight the bracket at cursor
+            sel1 = QTextEdit.ExtraSelection()
+            fmt1 = QTextCharFormat()
+            fmt1.setBackground(QColor("#45475a"))
+            fmt1.setForeground(color)
+            cursor1 = QTextCursor(self.document())
+            cursor1.setPosition(bracket_pos)
+            cursor1.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+            sel1.cursor = cursor1
+            sel1.format = fmt1
+            extra_selections.append(sel1)
+
+            # Highlight the matching bracket
+            sel2 = QTextEdit.ExtraSelection()
+            fmt2 = QTextCharFormat()
+            fmt2.setBackground(QColor("#45475a"))
+            fmt2.setForeground(color)
+            cursor2 = QTextCursor(self.document())
+            cursor2.setPosition(match_pos)
+            cursor2.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+            sel2.cursor = cursor2
+            sel2.format = fmt2
+            extra_selections.append(sel2)
+
+        self.setExtraSelections(extra_selections)
+
+    def _current_line_selections(self):
+        """Return extra selections for current line highlight."""
+        selections = []
+        sel = QTextEdit.ExtraSelection()
+        palette = get_palette()
+        sel.format.setBackground(QColor(palette.get('line_bg', '#313244')))
+        sel.format.setProperty(QTextFormat.FullWidthSelection, True)
+        sel.cursor = self.textCursor()
+        sel.cursor.clearSelection()
+        selections.append(sel)
+        return selections
 
     def insertFromMimeData(self, source):
         """Strip leading >> and .. prompts when pasting from command window."""
@@ -488,6 +691,159 @@ class CodeEditor(QPlainTextEdit):
         if name in OctaveSyntaxHighlighter.CONSTANTS:
             return f"<b>{name}</b> — constant"
         return None
+
+    # ---- Bookmarks -----------------------------------------------
+
+    def toggle_bookmark(self):
+        """Toggle bookmark on current line."""
+        line = self.textCursor().blockNumber()
+        if line in self._bookmarks:
+            self._bookmarks.discard(line)
+        else:
+            self._bookmarks.add(line)
+        self.viewport().update()
+        self._line_area.update()
+
+    def next_bookmark(self):
+        """Jump to the next bookmark."""
+        if not self._bookmarks:
+            return
+        current = self.textCursor().blockNumber()
+        sorted_bm = sorted(self._bookmarks)
+        for bm in sorted_bm:
+            if bm > current:
+                self._goto_line(bm + 1)
+                return
+        # Wrap around
+        self._goto_line(sorted_bm[0] + 1)
+
+    def prev_bookmark(self):
+        """Jump to the previous bookmark."""
+        if not self._bookmarks:
+            return
+        current = self.textCursor().blockNumber()
+        sorted_bm = sorted(self._bookmarks, reverse=True)
+        for bm in sorted_bm:
+            if bm < current:
+                self._goto_line(bm + 1)
+                return
+        # Wrap around
+        self._goto_line(sorted_bm[0] + 1)
+
+    def clear_bookmarks(self):
+        """Clear all bookmarks."""
+        self._bookmarks.clear()
+        self.viewport().update()
+        self._line_area.update()
+
+    def _goto_line(self, line_number):
+        """Go to a specific line number (1-based)."""
+        block = self.document().findBlockByNumber(line_number - 1)
+        if block.isValid():
+            cursor = QTextCursor(block)
+            self.setTextCursor(cursor)
+            self.centerCursor()
+
+    # ---- Code folding -----------------------------------------------
+
+    def _detect_fold_regions(self):
+        """Detect foldable regions (function, if, for, while, switch, try, classdef)."""
+        import re
+        text = self.toPlainText()
+        lines = text.split('\n')
+        fold_keywords = {'function', 'if', 'for', 'while', 'switch', 'try', 'classdef', 'properties', 'methods', 'events'}
+        end_keywords = {'end', 'endfunction', 'endif', 'endfor', 'endwhile', 'endswitch', 'end_try_catch'}
+
+        indicators = {}
+        stack = []  # (keyword, line_num)
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # Skip comments and empty lines
+            if not stripped or stripped.startswith('%') or stripped.startswith('#'):
+                continue
+            # Get first word
+            words = stripped.split()
+            if not words:
+                continue
+            first_word = words[0].rstrip('(')
+
+            if first_word in fold_keywords:
+                stack.append((first_word, i))
+            elif first_word in end_keywords:
+                if stack:
+                    kw, start_line = stack.pop()
+                    if i - start_line > 1:  # only fold if more than 1 line
+                        indicators[start_line] = i
+
+        # Also detect %% section markers and block comments
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('%%') or stripped.startswith('%{'):
+                # Find matching end
+                if stripped.startswith('%{'):
+                    for j in range(i + 1, len(lines)):
+                        if lines[j].strip().startswith('%}'):
+                            if j - i > 1:
+                                indicators[i] = j
+                            break
+
+        self._fold_indicators = indicators
+
+    def toggle_minimap(self):
+        """Toggle minimap visibility."""
+        self._minimap_visible = not self._minimap_visible
+        if self._minimap_visible:
+            self._minimap.show()
+        else:
+            self._minimap.hide()
+        self.resizeEvent(None)
+
+    def _toggle_fold(self, block_number):
+        """Toggle folding for a given line."""
+        if block_number not in self._fold_indicators:
+            return
+
+        if block_number in self._folded_regions:
+            # Unfold
+            self._folded_regions.discard(block_number)
+            end_line = self._fold_indicators[block_number]
+            block = self.document().findBlockByNumber(block_number + 1)
+            while block.isValid() and block.blockNumber() <= end_line:
+                block.setVisible(True)
+                block = block.next()
+        else:
+            # Fold
+            self._folded_regions.add(block_number)
+            end_line = self._fold_indicators[block_number]
+            block = self.document().findBlockByNumber(block_number + 1)
+            while block.isValid() and block.blockNumber() <= end_line:
+                block.setVisible(False)
+                block = block.next()
+
+        self.document().markContentsDirty(0, self.document().characterCount())
+        self.viewport().update()
+        self.update()
+
+    def _line_number_area_mouse_press(self, event):
+        """Handle click on fold markers in the gutter."""
+        block = self.firstVisibleBlock()
+        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        bottom = top + int(self.blockBoundingRect(block).height())
+
+        while block.isValid() and top <= event.pos().y():
+            if block.isVisible() and bottom >= event.pos().y():
+                line_num = block.blockNumber()
+                # Check if click is in the fold marker area (right side of gutter)
+                gutter_width = self._line_area.width()
+                if event.pos().x() > gutter_width - 18:
+                    if line_num in self._fold_indicators:
+                        self._toggle_fold(line_num)
+                        return
+                break
+            block = block.next()
+            top = bottom
+            bottom = top + int(self.blockBoundingRect(block).height())
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
