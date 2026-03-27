@@ -428,6 +428,62 @@ class CodeEditor(QPlainTextEdit):
             top = bottom
             bottom = top + int(self.blockBoundingRect(block).height())
             block_num += 1
+        # Draw bookmark indicators (blue dots in left margin)
+        if hasattr(self, '_bookmarks') and self._bookmarks:
+            bm_block = self.firstVisibleBlock()
+            bm_top = int(self.blockBoundingGeometry(bm_block).translated(self.contentOffset()).top())
+            while bm_block.isValid() and bm_top <= event.rect().bottom():
+                if bm_block.isVisible():
+                    bm_line = bm_block.blockNumber()
+                    if bm_line in self._bookmarks:
+                        bm_h = int(self.blockBoundingRect(bm_block).height())
+                        bm_y = bm_top + (bm_h - 6) // 2
+                        painter.setPen(Qt.NoPen)
+                        painter.setBrush(QColor("#89b4fa"))
+                        painter.drawEllipse(3, bm_y, 6, 6)
+                        painter.setBrush(Qt.NoBrush)
+                next_bm = bm_block.next()
+                if next_bm.isValid():
+                    bm_top += int(self.blockBoundingRect(bm_block).height())
+                    bm_block = next_bm
+                else:
+                    break
+
+        # Draw fold indicators (▶/▼ in right margin)
+        if hasattr(self, '_fold_regions') and self._fold_regions:
+            fold_block = self.firstVisibleBlock()
+            fold_top = int(self.blockBoundingGeometry(fold_block).translated(self.contentOffset()).top())
+            fold_starts = {r[0] for r in self._fold_regions}
+            while fold_block.isValid() and fold_top <= event.rect().bottom():
+                if fold_block.isVisible():
+                    line_num = fold_block.blockNumber()
+                    if line_num in fold_starts:
+                        fold_h = int(self.blockBoundingRect(fold_block).height())
+                        fold_y = fold_top + (fold_h - 8) // 2
+                        fold_x = self._line_area.width() - 14
+                        is_folded = hasattr(self, '_folded_lines') and line_num in self._folded_lines
+                        painter.setPen(QPen(QColor("#6c7086"), 1))
+                        if is_folded:
+                            # Right-pointing triangle ▶
+                            pts = [QPointF(fold_x, fold_y), QPointF(fold_x + 8, fold_y + 4), QPointF(fold_x, fold_y + 8)]
+                            painter.setBrush(QColor("#6c7086"))
+                            from PySide6.QtGui import QPolygonF
+                            painter.drawPolygon(QPolygonF(pts))
+                            painter.setBrush(Qt.NoBrush)
+                        else:
+                            # Down-pointing triangle ▼
+                            pts = [QPointF(fold_x, fold_y), QPointF(fold_x + 8, fold_y), QPointF(fold_x + 4, fold_y + 8)]
+                            painter.setBrush(QColor("#6c7086"))
+                            from PySide6.QtGui import QPolygonF
+                            painter.drawPolygon(QPolygonF(pts))
+                            painter.setBrush(Qt.NoBrush)
+                next_fold = fold_block.next()
+                if next_fold.isValid():
+                    fold_top += int(self.blockBoundingRect(fold_block).height())
+                    fold_block = next_fold
+                else:
+                    break
+
         painter.end()
 
     # --- current line highlight & bracket matching ---------------------

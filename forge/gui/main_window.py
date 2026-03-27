@@ -110,6 +110,17 @@ class ForgeMainWindow(QMainWindow):
         self.editor_widget.help_requested.connect(self._show_help_for)
         self.editor_widget.eval_requested.connect(self._eval_in_command)
 
+        # Wire editor cursor to status bar updates
+        def _connect_editor_cursor():
+            editor = self.editor_widget.get_current_editor() if hasattr(self.editor_widget, 'get_current_editor') else None
+            if editor:
+                try: editor.cursorPositionChanged.disconnect(self._update_cursor_status)
+                except: pass
+                editor.cursorPositionChanged.connect(self._update_cursor_status)
+                self._update_cursor_status()
+        self.editor_widget.tabs.currentChanged.connect(lambda _: _connect_editor_cursor())
+        _connect_editor_cursor()
+
     # ==================================================================
     # Workspace helpers
     # ==================================================================
@@ -499,6 +510,16 @@ class ForgeMainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)
 
+        # Terminal (bottom, tabbed with command window)
+        from forge.gui.terminal_widget import TerminalWidget
+        self._terminal_widget = TerminalWidget(self)
+        self._terminal_dock = self._make_dock(
+            "Terminal", "TerminalDock", self._terminal_widget
+        )
+        self.addDockWidget(Qt.BottomDockWidgetArea, self._terminal_dock)
+        self.tabifyDockWidget(self.command_dock, self._terminal_dock)
+        self.command_dock.raise_()  # Command window on top initially
+
         # File Browser (left)
         self.file_browser_widget = FileBrowserWidget(parent=self)
         self.file_browser_dock = self._make_dock(
@@ -572,6 +593,16 @@ class ForgeMainWindow(QMainWindow):
         self._sb_encoding = QLabel("UTF-8")
         self._sb_encoding.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
         sb.addPermanentWidget(self._sb_encoding)
+
+        # Selection info
+        self._sb_selection = QLabel("")
+        self._sb_selection.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_selection)
+
+        # EOL indicator
+        self._sb_eol = QLabel("LF")
+        self._sb_eol.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_eol)
 
         # Engine status indicator
         self._sb_status = QLabel("● Idle")
@@ -1268,6 +1299,46 @@ class ForgeMainWindow(QMainWindow):
         search_input.returnPressed.connect(on_return)
 
         dialog.exec()
+
+
+    def _update_cursor_status(self):
+        """Update status bar from editor cursor position."""
+        editor = self.editor_widget.get_current_editor() if hasattr(self.editor_widget, 'get_current_editor') else None
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        line = cursor.blockNumber() + 1
+        col = cursor.columnNumber() + 1
+
+        if hasattr(self, '_sb_position'):
+            self._sb_position.setText(f"Ln {line}, Col {col}")
+
+        if hasattr(self, '_sb_selection'):
+            if cursor.hasSelection():
+                sel_text = cursor.selectedText()
+                nlines = sel_text.count('\u2029') + 1
+                nchars = len(sel_text)
+                self._sb_selection.setText(f"({nchars} selected, {nlines} lines)")
+            else:
+                self._sb_selection.setText("")
+
+        # Update language indicator based on current tab
+        if hasattr(self, '_sb_lang'):
+            idx = self.editor_widget.tabs.currentIndex()
+            if idx >= 0:
+                name = self.editor_widget.tabs.tabText(idx).rstrip(' *')
+                ext_map = {
+                    '.py': 'Python', '.m': 'M-code', '.json': 'JSON',
+                    '.csv': 'CSV', '.txt': 'Text', '.log': 'Log',
+                    '.html': 'HTML', '.xml': 'XML', '.md': 'Markdown',
+                    '.sh': 'Shell', '.c': 'C', '.cpp': 'C++',
+                }
+                lang = 'M-code'
+                for ext, lname in ext_map.items():
+                    if name.endswith(ext):
+                        lang = lname
+                        break
+                self._sb_lang.setText(lang)
 
     def _show_about(self):
         from PySide6.QtWidgets import QMessageBox
