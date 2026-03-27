@@ -546,6 +546,11 @@ class ForgeMainWindow(QMainWindow):
         self._sb_encoding.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 0 8px;")
         sb.addPermanentWidget(self._sb_encoding)
 
+        # Engine status indicator
+        self._sb_status = QLabel("● Idle")
+        self._sb_status.setStyleSheet("color: #a6e3a1; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(self._sb_status)
+
         # Theme indicator
         self._sb_theme = QLabel("dark")
         self._sb_theme.setStyleSheet("color: #6c7086; font-size: 11px; padding: 0 8px;")
