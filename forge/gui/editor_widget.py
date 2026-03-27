@@ -1299,6 +1299,25 @@ class EditorWidget(QWidget):
                     self.tabs.setTabText(i, base)
                 break
 
+    def _auto_save_all(self):
+        """Auto-save all modified files to a recovery location."""
+        import os, json
+        recovery_dir = os.path.join(os.path.expanduser("~"), ".forge", "recovery")
+        os.makedirs(recovery_dir, exist_ok=True)
+
+        for i in range(self.tabs.count()):
+            editor = self.tabs.widget(i)
+            if hasattr(editor, 'document') and editor.document().isModified():
+                if hasattr(editor, 'file_path') and editor.file_path:
+                    # Save recovery copy
+                    safe_name = editor.file_path.replace(os.sep, '_').replace('/', '_')
+                    recovery_path = os.path.join(recovery_dir, safe_name + '.recovery')
+                    try:
+                        with open(recovery_path, 'w') as f:
+                            f.write(editor.toPlainText())
+                    except Exception:
+                        pass
+
     def _close_tab(self, index: int):
         if self.tabs.count() > 1:
             # Check for unsaved changes

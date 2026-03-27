@@ -186,6 +186,10 @@ class ForgeMainWindow(QMainWindow):
         self.act_cut = QAction("Cu&t", self, shortcut=QKeySequence.Cut)
         self.act_copy = QAction("&Copy", self, shortcut=QKeySequence.Copy)
         self.act_paste = QAction("&Paste", self, shortcut=QKeySequence.Paste)
+        self.act_close_tab = QAction("Close Tab", self, shortcut="Ctrl+W")
+        self.act_close_tab.triggered.connect(lambda: self.editor_widget._close_tab(self.editor_widget.tabs.currentIndex()))
+        self.addAction(self.act_close_tab)
+
         self.act_find = QAction("&Find...", self, shortcut=QKeySequence.Find)
         self.act_find.triggered.connect(self._on_find)
         self.act_preferences = QAction("Preferences...", self, shortcut="Ctrl+,")
@@ -879,18 +883,31 @@ class ForgeMainWindow(QMainWindow):
         self.set_status("Layout reset")
 
     def _update_status_bar(self, _=None):
-        """Update status bar with editor cursor position."""
+        """Update status bar with editor cursor position and document stats."""
         editor = self.editor_widget.get_current_editor()
         if editor and hasattr(self, '_sb_position'):
             cursor = editor.textCursor()
             line = cursor.blockNumber() + 1
             col = cursor.columnNumber() + 1
             self._sb_position.setText(f"Ln {line}, Col {col}")
+
             # Update language mode based on file extension
-            if editor.file_path:
+            if hasattr(editor, 'file_path') and editor.file_path:
                 ext = os.path.splitext(editor.file_path)[1].lower()
-                lang_map = {'.m': 'M-code', '.py': 'Python', '.txt': 'Text', '.json': 'JSON'}
+                lang_map = {'.m': 'M-code', '.py': 'Python', '.txt': 'Text', '.json': 'JSON', '.csv': 'CSV'}
                 self._sb_lang.setText(lang_map.get(ext, 'Text'))
+
+            # Selection info
+            if cursor.hasSelection():
+                selected = cursor.selectedText()
+                sel_lines = selected.count('\u2029') + 1
+                sel_chars = len(selected)
+                self._status_msg.setText(f"{sel_lines} lines, {sel_chars} chars selected")
+            else:
+                total_lines = editor.document().blockCount()
+                total_chars = editor.document().characterCount()
+                self._status_msg.setText(f"{total_lines} lines, {total_chars} chars")
+
 
     def _show_help_for(self, func_name):
         """Open help viewer and show docs for the given function."""
