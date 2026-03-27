@@ -927,17 +927,26 @@ class ForgeMainWindow(QMainWindow):
         QMessageBox.information(self, "Keyboard Shortcuts", shortcuts)
 
     def _goto_line_dialog(self):
-        """Show Go to Line dialog."""
+        """Show Go to Line dialog with current position info."""
         from PySide6.QtWidgets import QInputDialog
-        editor = self.editor_widget.get_current_editor()
-        if editor:
-            max_line = editor.document().blockCount()
-            line, ok = QInputDialog.getInt(
-                self, "Go to Line", f"Line number (1-{max_line}):",
-                editor.textCursor().blockNumber() + 1, 1, max_line
-            )
-            if ok:
-                editor._goto_line(line)
+        editor = self.editor_widget.get_current_editor() if hasattr(self.editor_widget, 'get_current_editor') else None
+        if editor is None:
+            return
+        current_line = editor.textCursor().blockNumber() + 1
+        total_lines = editor.document().blockCount()
+        line, ok = QInputDialog.getInt(
+            self, "Go to Line",
+            f"Current: {current_line} / {total_lines}\nLine number (1-{total_lines}):",
+            current_line, 1, total_lines
+        )
+        if ok:
+            from PySide6.QtGui import QTextCursor
+            block = editor.document().findBlockByLineNumber(line - 1)
+            cursor = QTextCursor(block)
+            editor.setTextCursor(cursor)
+            editor.centerCursor()
+            editor.setFocus()
+
 
     def _editor_action(self, action_name):
         """Dispatch an action to the current editor."""
@@ -1356,20 +1365,62 @@ class ForgeMainWindow(QMainWindow):
                 self._sb_lang.setText(lang)
 
     def _show_about(self):
-        from PySide6.QtWidgets import QMessageBox
-        func_count = 0
-        if self.session and hasattr(self.session, '_engine'):
-            func_count = len(self.session._engine.functions)
-        QMessageBox.about(
-            self,
-            "About Forge",
-            "<div style='text-align:center;'>"
-            "<h2 style='color:#89b4fa;'>Forge IDE</h2>"
-            "<p><b>Octave-Compatible Computing Environment</b></p>"
-            "<hr>"
-            f"<p>{func_count} built-in functions</p>"
-            "<p>Built with PySide6, NumPy, SciPy, and Matplotlib</p>"
-            "<p>Version 0.1.0</p>"
-            "<p style='color:#6c7086;'>Licensed under MIT</p>"
-            "</div>"
-        )
+        """Show the About Forge dialog."""
+        import platform
+        import sys
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QFont
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("About Forge")
+        dialog.setFixedSize(420, 380)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+
+        # Logo/title
+        title = QLabel("Forge")
+        title.setFont(QFont("Fira Code", 28, QFont.Bold))
+        title.setStyleSheet("color: #cba6f7;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        subtitle = QLabel("Octave-Compatible Computing Environment")
+        subtitle.setFont(QFont("Fira Code", 11))
+        subtitle.setStyleSheet("color: #a6adc8;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        version = QLabel("Version 0.1.0")
+        version.setStyleSheet("color: #89b4fa; font-size: 13px;")
+        version.setAlignment(Qt.AlignCenter)
+        layout.addWidget(version)
+
+        # System info
+        func_count = len(self.session._engine.functions) if self.session else 0
+        info_text = f"""
+        <table style='color: #a6adc8; font-size: 11px;' cellpadding='4'>
+        <tr><td><b>Functions:</b></td><td>{func_count} registered</td></tr>
+        <tr><td><b>Python:</b></td><td>{sys.version.split()[0]}</td></tr>
+        <tr><td><b>Qt:</b></td><td>{__import__('PySide6').__version__}</td></tr>
+        <tr><td><b>NumPy:</b></td><td>{__import__('numpy').__version__}</td></tr>
+        <tr><td><b>SciPy:</b></td><td>{__import__('scipy').__version__}</td></tr>
+        <tr><td><b>Platform:</b></td><td>{platform.platform()}</td></tr>
+        </table>
+        """
+        info = QLabel(info_text)
+        info.setAlignment(Qt.AlignCenter)
+        layout.addWidget(info)
+
+        # Credits
+        credits_text = QLabel("Built with \u2764 for engineers and scientists")
+        credits_text.setStyleSheet("color: #6c7086; font-size: 10px;")
+        credits_text.setAlignment(Qt.AlignCenter)
+        layout.addWidget(credits_text)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.exec()
+
