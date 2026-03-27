@@ -433,9 +433,45 @@ class CodeEditor(QPlainTextEdit):
     # --- current line highlight & bracket matching ---------------------
 
     def _on_cursor_moved(self):
-        self._highlight_current_line()
+        """Handle cursor position change - update bracket matching and highlight occurrences."""
         self._match_brackets()
-        self._line_area.update()  # repaint gutter for active line
+        self._highlight_word_occurrences()
+
+    def _highlight_word_occurrences(self):
+        """Highlight all occurrences of the word under cursor."""
+        cursor = self.textCursor()
+        extra = list(self.extraSelections())
+
+        # Remove old word highlights (keep bracket and current line highlights)
+        extra = [sel for sel in extra if not hasattr(sel, '_is_word_highlight')]
+
+        # Get word under cursor
+        cursor.select(QTextCursor.WordUnderCursor)
+        word = cursor.selectedText().strip()
+
+        if word and len(word) >= 2 and word.isidentifier():
+            import re
+            text = self.toPlainText()
+            pattern = r'\b' + re.escape(word) + r'\b'
+
+            highlight_color = QColor("#2a2a3c")
+            highlight_color.setAlpha(200)
+
+            for match in re.finditer(pattern, text):
+                sel = QTextEdit.ExtraSelection()
+                fmt = QTextCharFormat()
+                fmt.setBackground(highlight_color)
+                fmt.setProperty(QTextFormat.FullWidthSelection, False)
+                cursor = QTextCursor(self.document())
+                cursor.setPosition(match.start())
+                cursor.setPosition(match.end(), QTextCursor.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt
+                sel._is_word_highlight = True
+                extra.append(sel)
+
+        self.setExtraSelections(extra)
+
 
     def paintEvent(self, event):
         """Override to draw indentation guides."""
