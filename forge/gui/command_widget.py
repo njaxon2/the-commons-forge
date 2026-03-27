@@ -276,6 +276,8 @@ class CommandWidget(QWidget):
         self.console.mousePressEvent = self._mouse_press
         self.console.mouseDoubleClickEvent = self._mouse_double_click
         self.console.contextMenuEvent = self._context_menu_event
+        self.console.setMouseTracking(True)
+        self.console.event = self._tooltip_event
 
     def _show_initial_prompt(self):
         self.console.clear()
@@ -454,6 +456,28 @@ class CommandWidget(QWidget):
 
     def _mouse_double_click(self, event):
         QPlainTextEdit.mouseDoubleClickEvent(self.console, event)
+
+    def _tooltip_event(self, event):
+        """Show tooltip on hover over function names."""
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.ToolTip:
+            pos = event.pos()
+            cursor = self.console.cursorForPosition(pos)
+            cursor.select(QTextCursor.WordUnderCursor)
+            word = cursor.selectedText().strip()
+            if word and _re.match(r'^[a-zA-Z_]\w*$', word) and self._is_known_function(word):
+                func = self.engine._engine.functions[word]
+                doc = getattr(func, '__doc__', None) or 'Built-in function'
+                lines = doc.strip().split('\n')[:3]
+                tip = f"<b>{word}</b><br><pre>{'<br>'.join(lines)}</pre>"
+                from PySide6.QtWidgets import QToolTip
+                from PySide6.QtCore import QPoint
+                QToolTip.showText(self.console.mapToGlobal(pos), tip)
+                return True
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.hideText()
+            return True
+        return QPlainTextEdit.event(self.console, event)
 
     def _word_under_cursor(self):
         """Extract the word (potential function name) under the text cursor."""

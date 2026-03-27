@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat,
     QTextCursor, QKeyEvent, QPen, QTextFormat, QAction,
 )
+from PySide6.QtWidgets import QToolTip
 from PySide6.QtWidgets import (
     QTextEdit, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QPlainTextEdit, QLabel, QMenu, QCompleter,
@@ -235,8 +236,9 @@ class CodeEditor(QPlainTextEdit):
         self.document().modificationChanged.connect(self._on_modification_changed)
         self._is_modified = False
 
-        # Enable drag & drop
+        # Enable drag & drop and mouse tracking for hover tooltips
         self.setAcceptDrops(True)
+        self.setMouseTracking(True)
 
         # Autocomplete
         self._completer = None
@@ -436,6 +438,56 @@ class CodeEditor(QPlainTextEdit):
                 parent._update_tab_title(self)
                 break
             parent = parent.parent()
+
+    # --- hover tooltips for function names ----------------------------
+
+    def event(self, event):
+        """Handle tooltip events for function hover."""
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.ToolTip:
+            pos = event.pos()
+            cursor = self.cursorForPosition(pos)
+            cursor.select(QTextCursor.WordUnderCursor)
+            word = cursor.selectedText().strip()
+            if word and re.match(r'^[a-zA-Z_]\w*$', word):
+                doc = self._get_function_doc(word)
+                if doc:
+                    from PySide6.QtCore import QPoint
+                    global_pos = self.mapToGlobal(pos)
+                    QToolTip.showText(global_pos, doc, self)
+                    return True
+            QToolTip.hideText()
+            return True
+        return super().event(event)
+
+    def _get_function_doc(self, name):
+        """Get a short tooltip for a function name."""
+        # Check if we have a registered function with a docstring
+        # Walk up to find the session
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'session') and parent.session:
+                session = parent.session
+                if hasattr(session, '_engine') and name in session._engine.functions:
+                    func = session._engine.functions[name]
+                    doc = getattr(func, '__doc__', None)
+                    if doc:
+                        # Truncate for tooltip
+                        lines = doc.strip().split('\n')
+                        short = '\n'.join(lines[:5])
+                        if len(lines) > 5:
+                            short += '\n...'
+                        return f"<b>{name}</b><br><pre style='font-size:10px;'>{short}</pre>"
+                    return f"<b>{name}</b> — built-in function"
+                break
+            parent = parent.parent()
+
+        # Check if it's a keyword
+        if name in OctaveSyntaxHighlighter.KEYWORDS:
+            return f"<b>{name}</b> — keyword"
+        if name in OctaveSyntaxHighlighter.CONSTANTS:
+            return f"<b>{name}</b> — constant"
+        return None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
