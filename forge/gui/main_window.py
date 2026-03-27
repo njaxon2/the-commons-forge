@@ -195,6 +195,9 @@ class ForgeMainWindow(QMainWindow):
         self.act_close_tab.triggered.connect(lambda: self.editor_widget._close_tab(self.editor_widget.tabs.currentIndex()))
         self.addAction(self.act_close_tab)
 
+        self.act_cmd_palette = QAction("Command &Palette...", self, shortcut="Ctrl+Shift+P")
+        self.act_cmd_palette.triggered.connect(self._show_command_palette)
+
         self.act_quick_open = QAction("Quick &Open...", self, shortcut="Ctrl+P")
         self.act_quick_open.triggered.connect(self._show_quick_open)
 
@@ -278,6 +281,8 @@ class ForgeMainWindow(QMainWindow):
         edit_menu.addAction(self.act_cut)
         edit_menu.addAction(self.act_copy)
         edit_menu.addAction(self.act_paste)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.act_cmd_palette)
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_find)
         edit_menu.addAction(self.act_search_files)
@@ -1088,6 +1093,98 @@ class ForgeMainWindow(QMainWindow):
                 self.set_status("AMS telemetry enabled")
             else:
                 self.set_status("AMS telemetry remains disabled")
+
+    def _show_command_palette(self):
+        """Show a command palette with all available actions."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
+        from PySide6.QtCore import Qt
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Command Palette")
+        dialog.setMinimumSize(500, 400)
+        dialog.setStyleSheet("background: #1e1e2e; border-radius: 8px;")
+
+        layout = QVBoxLayout(dialog)
+
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("> Type a command...")
+        search_input.setStyleSheet(
+            "padding: 10px; font-size: 14px; background: #313244; "
+            "color: #cdd6f4; border: 1px solid #45475a; border-radius: 6px;"
+        )
+        layout.addWidget(search_input)
+
+        cmd_list = QListWidget()
+        cmd_list.setStyleSheet(
+            "QListWidget { background: #1e1e2e; color: #cdd6f4; border: none; font-size: 13px; }"
+            "QListWidget::item { padding: 6px 8px; }"
+            "QListWidget::item:selected { background: #313244; color: #cba6f7; }"
+        )
+        layout.addWidget(cmd_list)
+
+        # Build command list from all available actions
+        commands = [
+            ("New File", "Ctrl+N", lambda: self.editor_widget.new_file()),
+            ("Open File", "Ctrl+O", lambda: self._on_open()),
+            ("Save", "Ctrl+S", lambda: self._on_save()),
+            ("Quick Open", "Ctrl+P", self._show_quick_open),
+            ("Find & Replace", "Ctrl+F", self._on_find),
+            ("Go to Line", "Ctrl+G", self._goto_line_dialog),
+            ("Run File", "F5", self._on_run_file),
+            ("Run Selection", "F9", self._run_selection),
+            ("Toggle Comment", "Ctrl+/", lambda: self._editor_action('toggle_comment')),
+            ("Duplicate Line", "Ctrl+D", lambda: self._editor_action('_duplicate_line')),
+            ("Delete Line", "Ctrl+Shift+K", lambda: self._editor_action('_delete_line')),
+            ("Toggle Bookmark", "Ctrl+F2", lambda: self._editor_action('toggle_bookmark')),
+            ("Next Bookmark", "F2", lambda: self._editor_action('next_bookmark')),
+            ("Clear Bookmarks", "", lambda: self._editor_action('clear_bookmarks')),
+            ("Toggle Minimap", "", lambda: self._editor_action('toggle_minimap')),
+            ("Cycle Theme", "Ctrl+Shift+T", self._cycle_theme),
+            ("Preferences", "Ctrl+,", self._open_preferences),
+            ("Search in Files", "Ctrl+Shift+F", self._show_search_in_files),
+            ("Split Editor Right", "", lambda: self._split_editor('right')),
+            ("Split Editor Down", "", lambda: self._split_editor('down')),
+            ("Remove Split", "", self._unsplit_editor),
+            ("Clear Command Window", "", lambda: self.command_widget._clear_output()),
+            ("Profile Code", "", self._profile_current_file),
+            ("Code Snippets", "", self._show_snippets),
+            ("Keyboard Shortcuts", "", self._show_shortcuts),
+            ("About Forge", "", self._show_about),
+            ("Focus Command Window", "Ctrl+0", self._focus_command_input),
+            ("Reset Layout", "", self._reset_layout),
+        ]
+
+        def update_list(text):
+            cmd_list.clear()
+            text = text.lower()
+            for name, shortcut, action in commands:
+                if not text or text in name.lower():
+                    display = f"{name}"
+                    if shortcut:
+                        display += f"  ({shortcut})"
+                    item = QListWidgetItem(display)
+                    item.setData(Qt.UserRole, action)
+                    cmd_list.addItem(item)
+
+        search_input.textChanged.connect(update_list)
+        update_list("")
+
+        def on_select(item):
+            action = item.data(Qt.UserRole)
+            dialog.accept()
+            if callable(action):
+                action()
+
+        cmd_list.itemDoubleClicked.connect(on_select)
+        cmd_list.itemActivated.connect(on_select)
+
+        def on_return():
+            item = cmd_list.currentItem()
+            if item:
+                on_select(item)
+
+        search_input.returnPressed.connect(on_return)
+        dialog.exec()
 
     def _show_quick_open(self):
         """Show a quick-open dialog for files."""
