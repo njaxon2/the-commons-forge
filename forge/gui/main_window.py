@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence, QFont, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QToolBar, QMenuBar, QStatusBar, QWidget,
-    QApplication, QLabel,
+    QApplication, QLabel, QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
 )
 
 from forge.gui.commons_integration import (
@@ -1247,6 +1247,49 @@ class ForgeMainWindow(QMainWindow):
         if hasattr(self, 'command_widget') and self.command_widget:
             self.command_widget.console.setFocus()
 
+
+    # ------------------------------------------------------------------
+    # Format Code
+    # ------------------------------------------------------------------
+
+    def _format_current_editor(self):
+        """Invoke MCodeFormatter on the active editor tab."""
+        editor = self.editor_widget.get_current_editor()
+        if editor is None:
+            self._show_toast("No editor open")
+            return
+        editor.format_code()
+        self._show_toast("Code formatted")
+
+    # ------------------------------------------------------------------
+    # Toast notification
+    # ------------------------------------------------------------------
+
+    def _show_toast(self, message: str, duration_ms: int = 2000):
+        """Show a brief overlay message near the bottom of the window."""
+        toast = QLabel(message, self)
+        toast.setStyleSheet(
+            "background-color: #323232; color: white; padding: 8px 16px;"
+            "border-radius: 4px; font-size: 13px;"
+        )
+        toast.setAlignment(Qt.AlignCenter)
+        toast.adjustSize()
+        toast.move(
+            (self.width() - toast.width()) // 2,
+            self.height() - toast.height() - 40,
+        )
+        toast.show()
+        QTimer.singleShot(duration_ms, toast.deleteLater)
+
+    # ------------------------------------------------------------------
+    # Command palette
+    # ------------------------------------------------------------------
+
+    def _show_command_palette(self):
+        """Open a simple command palette dialog."""
+        dlg = _CommandPaletteDialog(self)
+        dlg.exec()
+
     def _reset_layout(self):
         """Clear saved state and reset docks."""
         s = self._settings()
@@ -1823,3 +1866,75 @@ class ForgeMainWindow(QMainWindow):
 
         dialog.exec()
 
+
+
+# ======================================================================
+# Command Palette Dialog
+# ======================================================================
+
+class _CommandPaletteDialog(QDialog):
+    """A minimal command palette for quick action access."""
+
+    def __init__(self, main_window: ForgeMainWindow):
+        super().__init__(main_window, Qt.Popup | Qt.FramelessWindowHint)
+        self._mw = main_window
+        self.setMinimumWidth(480)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        self._search = QLineEdit(self)
+        self._search.setPlaceholderText("Type a command...")
+        layout.addWidget(self._search)
+
+        self._list = QListWidget(self)
+        layout.addWidget(self._list)
+
+        self._actions: list[QAction] = self._collect_actions()
+        self._populate("")
+
+        self._search.textChanged.connect(self._populate)
+        self._list.itemActivated.connect(self._execute_item)
+        self._search.returnPressed.connect(self._execute_top)
+
+        # Position near top-centre of main window
+        mw_rect = main_window.geometry()
+        w = 480
+        self.resize(w, 320)
+        self.move(
+            mw_rect.x() + (mw_rect.width() - w) // 2,
+            mw_rect.y() + 80,
+        )
+
+    def _collect_actions(self) -> list[QAction]:
+        actions = []
+        for attr in dir(self._mw):
+            obj = getattr(self._mw, attr, None)
+            if isinstance(obj, QAction) and obj.text():
+                actions.append(obj)
+        return sorted(actions, key=lambda a: a.text())
+
+    def _populate(self, text: str):
+        self._list.clear()
+        filt = text.lower()
+        for act in self._actions:
+            label = act.text().replace("&", "")
+            shortcut = act.shortcut().toString() if act.shortcut() else ""
+            if filt and filt not in label.lower():
+                continue
+            display = f"{label}    {shortcut}" if shortcut else label
+            item = QListWidgetItem(display)
+            item.setData(Qt.UserRole, act)
+            self._list.addItem(item)
+        if self._list.count():
+            self._list.setCurrentRow(0)
+
+    def _execute_item(self, item: QListWidgetItem):
+        act = item.data(Qt.UserRole)
+        self.accept()
+        if act:
+            act.trigger()
+
+    def _execute_top(self):
+        if self._list.count():
+            self._execute_item(self._list.item(0))

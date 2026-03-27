@@ -414,6 +414,10 @@ class CodeEditor(QPlainTextEdit):
 
         self._highlight_current_line()
 
+        # Multi-cursor state
+        self._extra_cursors = []  # list of QTextCursor
+        self._column_sel_anchor = None
+
         # Snippet manager
         self._snippet_mgr = SnippetManager()
 
@@ -750,6 +754,26 @@ class CodeEditor(QPlainTextEdit):
                     body = _re.sub(r'\$\d+', '', body)
                     self.textCursor().insertText(body)
 
+    def format_code(self):
+        """Format the current code using MCodeFormatter."""
+        try:
+            from forge.gui.code_formatter import MCodeFormatter
+            formatter = MCodeFormatter()
+            cursor = self.textCursor()
+            if cursor.hasSelection():
+                text = cursor.selectedText().replace("\u2029", "\n")
+                formatted = formatter.format(text)
+                cursor.insertText(formatted)
+            else:
+                pos = cursor.position()
+                text = self.toPlainText()
+                formatted = formatter.format(text)
+                self.setPlainText(formatted)
+                cursor.setPosition(min(pos, len(formatted)))
+                self.setTextCursor(cursor)
+        except Exception as e:
+            pass  # Silently fail
+
     def contextMenuEvent(self, event):
         """Rich right-click context menu with IDE actions."""
         from PySide6.QtWidgets import QMenu
@@ -935,9 +959,79 @@ class CodeEditor(QPlainTextEdit):
         self.setExtraSelections(extra)
 
 
+
+    # ── Multi-cursor helpers ─────────────────────────────────
+    def _clear_extra_cursors(self):
+        """Remove all secondary cursors."""
+        self._extra_cursors.clear()
+        self._column_sel_anchor = None
+        self.viewport().update()
+
+    def _add_cursor_above_or_below(self, direction):
+        """Add an extra cursor one line above (-1) or below (+1)."""
+        cursor = self.textCursor()
+        block = cursor.block()
+        col = cursor.columnNumber()
+        target_block = block.previous() if direction < 0 else block.next()
+        if target_block.isValid():
+            new_cursor = QTextCursor(target_block)
+            new_cursor.movePosition(QTextCursor.StartOfBlock)
+            move_count = min(col, target_block.length() - 1)
+            if move_count > 0:
+                new_cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, move_count)
+            # Check for duplicate
+            pos = new_cursor.position()
+            for ec in self._extra_cursors:
+                if ec.position() == pos:
+                    return
+            self._extra_cursors.append(new_cursor)
+            self.viewport().update()
+
+    def _select_next_occurrence(self):
+        """Select the next occurrence of current selection (Ctrl+D)."""
+        cursor = self.textCursor()
+        text = cursor.selectedText()
+        if not text:
+            cursor.select(QTextCursor.WordUnderCursor)
+            self.setTextCursor(cursor)
+            return
+        # Search forward from end of current selection
+        doc = self.document()
+        search_cursor = doc.find(text, cursor.selectionEnd())
+        if search_cursor.isNull():
+            search_cursor = doc.find(text, 0)  # wrap around
+        if not search_cursor.isNull() and search_cursor.position() != cursor.position():
+            self._extra_cursors.append(search_cursor)
+            self.viewport().update()
+
+    def _paint_extra_cursors(self, painter):
+        """Draw extra cursor indicators."""
+        if not self._extra_cursors:
+            return
+        from PySide6.QtGui import QPen, QColor
+        accent = QColor("#f9e2af")
+        accent.setAlpha(180)
+        pen = QPen(accent, 2)
+        painter.setPen(pen)
+        for ec in self._extra_cursors:
+            block = ec.block()
+            if not block.isVisible():
+                continue
+            rect = self.blockBoundingGeometry(block).translated(self.contentOffset())
+            col = ec.columnNumber()
+            char_w = self.fontMetrics().horizontalAdvance("x")
+            x = rect.x() + col * char_w
+            painter.drawLine(int(x), int(rect.y()), int(x), int(rect.y() + rect.height()))
+
+
     def paintEvent(self, event):
         """Override to draw indentation guides."""
         super().paintEvent(event)
+        if self._extra_cursors:
+            from PySide6.QtGui import QPainter
+            p = QPainter(self.viewport())
+            self._paint_extra_cursors(p)
+            p.end()
 
         from PySide6.QtGui import QPainter, QColor, QPen
         painter = QPainter(self.viewport())
@@ -1753,6 +1847,18 @@ class CodeEditor(QPlainTextEdit):
 
     def keyPressEvent(self, event: QKeyEvent):
         # Line operation shortcuts
+        # Multi-cursor shortcuts
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
+            if hasattr(self, "_extra_cursors"):
+                self._select_next_occurrence()
+            return
+        if event.key() in (Qt.Key_Up, Qt.Key_Down) and event.modifiers() == (Qt.ControlModifier | Qt.AltModifier):
+            if hasattr(self, "_extra_cursors"):
+                self._add_cursor_above_or_below(-1 if event.key() == Qt.Key_Up else 1)
+            return
+        if event.key() == Qt.Key_Escape and hasattr(self, "_extra_cursors") and self._extra_cursors:
+            self._clear_extra_cursors()
+            return
         if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
             self._duplicate_line()
             return
