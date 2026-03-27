@@ -9,6 +9,8 @@ Provides the top-level QMainWindow with dockable panels for:
 Menu bar: File, Edit, View (theme/docks), Debug, Window, Help
 """
 
+import json
+from pathlib import Path
 import os
 
 from PySide6.QtCore import Qt, QSettings
@@ -52,6 +54,224 @@ class ForgeMainWindow(QMainWindow):
     # ==================================================================
     # Engine integration
     # ==================================================================
+
+
+    # ── Layout persistence paths ──────────────────────────────────────────
+    _FORGE_DIR = Path.home() / ".forge"
+    _LAYOUTS_DIR = _FORGE_DIR / "layouts"
+    _PREFS_FILE = _FORGE_DIR / "preferences.json"
+    _RECENT_FILE = _FORGE_DIR / "recent_files.json"
+    _STATE_FILE = _FORGE_DIR / "window_state.json"
+
+    # ── Layout helpers ────────────────────────────────────────────────────
+
+    def _ensure_forge_dirs(self):
+        """Create ~/.forge and ~/.forge/layouts if needed."""
+        self._LAYOUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _read_prefs(self) -> dict:
+        try:
+            return json.loads(self._PREFS_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    def _write_prefs(self, prefs: dict):
+        self._ensure_forge_dirs()
+        self._PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+    # ── Save / Restore layout ─────────────────────────────────────────────
+
+    def _save_layout(self):
+        """Prompt user for a name and save current QMainWindow state."""
+        name, ok = QInputDialog.getText(self, "Save Layout", "Layout name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        self._ensure_forge_dirs()
+        data = {
+            "state": self.saveState().toBase64().data().decode("ascii"),
+            "geometry": self.saveGeometry().toBase64().data().decode("ascii"),
+        }
+        layout_path = self._LAYOUTS_DIR / f"{name}.json"
+        layout_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Remember as last-used
+        prefs = self._read_prefs()
+        prefs["last_layout"] = name
+        self._write_prefs(prefs)
+
+    def _load_layout(self):
+        """Let user pick a saved layout file and restore it."""
+        self._ensure_forge_dirs()
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Layout",
+            str(self._LAYOUTS_DIR),
+            "Layout Files (*.json)",
+        )
+        if not path:
+            return
+        self._restore_layout_from_file(path)
+
+    def _restore_layout_from_file(self, path: str):
+        """Restore state and geometry from a layout JSON file."""
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            state_bytes = QByteArray.fromBase64(data["state"].encode("ascii"))
+            geom_bytes = QByteArray.fromBase64(data["geometry"].encode("ascii"))
+            self.restoreState(state_bytes)
+            self.restoreGeometry(geom_bytes)
+            # Update last_layout pref
+            prefs = self._read_prefs()
+            prefs["last_layout"] = Path(path).stem
+            self._write_prefs(prefs)
+        except Exception as exc:
+            QMessageBox.warning(self, "Layout Error", f"Failed to load layout:\n{exc}")
+
+    def _auto_restore_layout(self):
+        """On startup, restore the last-used layout if it exists."""
+        prefs = self._read_prefs()
+        name = prefs.get("last_layout")
+        if not name:
+            return
+        layout_path = self._LAYOUTS_DIR / f"{name}.json"
+        if layout_path.exists():
+            self._restore_layout_from_file(str(layout_path))
+
+    # ── Window state persistence ──────────────────────────────────────────
+
+    def _save_window_state(self):
+        """Persist window geometry, state, and dock visibility."""
+        self._ensure_forge_dirs()
+        data = {
+            "state": self.saveState().toBase64().data().decode("ascii"),
+            "geometry": self.saveGeometry().toBase64().data().decode("ascii"),
+        }
+        self._STATE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def _restore_window_state(self):
+        """Restore window geometry and state from previous session."""
+        try:
+            data = json.loads(self._STATE_FILE.read_text(encoding="utf-8"))
+            state_bytes = QByteArray.fromBase64(data["state"].encode("ascii"))
+            geom_bytes = QByteArray.fromBase64(data["geometry"].encode("ascii"))
+            self.restoreGeometry(geom_bytes)
+            self.restoreState(state_bytes)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            pass
+
+    # ── Recent files with pin/unpin ───────────────────────────────────────
+
+    def _read_recent_data(self) -> dict:
+        """Return {pinned: [...], recent: [...]} from disk."""
+        try:
+            return json.loads(self._RECENT_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {"pinned": [], "recent": []}
+
+    def _write_recent_data(self, data: dict):
+        self._ensure_forge_dirs()
+        self._RECENT_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def _icon_for_extension(self, filepath: str) -> QIcon:
+        """Return a themed icon based on file extension."""
+        ext = Path(filepath).suffix.lower()
+        icon_map = {
+            ".py": "text-x-python",
+            ".js": "text-x-javascript",
+            ".ts": "text-x-javascript",
+            ".json": "text-x-generic",
+            ".xml": "text-xml",
+            ".html": "text-html",
+            ".css": "text-css",
+            ".md": "text-x-markdown",
+            ".txt": "text-plain",
+            ".c": "text-x-csrc",
+            ".cpp": "text-x-c++src",
+            ".h": "text-x-chdr",
+            ".rs": "text-x-generic",
+            ".go": "text-x-generic",
+            ".java": "text-x-java",
+            ".sh": "text-x-script",
+        }
+        theme_name = icon_map.get(ext, "text-x-generic")
+        if QIcon.hasThemeIcon(theme_name):
+            return QIcon.fromTheme(theme_name)
+        return QIcon.fromTheme("text-x-generic")
+
+    def _pin_recent_file(self, filepath: str):
+        data = self._read_recent_data()
+        if filepath not in data["pinned"]:
+            data["pinned"].insert(0, filepath)
+        if filepath in data["recent"]:
+            data["recent"].remove(filepath)
+        self._write_recent_data(data)
+        self._update_recent_menu()
+
+    def _unpin_recent_file(self, filepath: str):
+        data = self._read_recent_data()
+        if filepath in data["pinned"]:
+            data["pinned"].remove(filepath)
+        if filepath not in data["recent"]:
+            data["recent"].insert(0, filepath)
+        self._write_recent_data(data)
+        self._update_recent_menu()
+
+    def _clear_recent_files(self):
+        data = self._read_recent_data()
+        data["recent"] = []
+        self._write_recent_data(data)
+        self._update_recent_menu()
+
+    def _build_recent_menu(self):
+        """Rebuild the Recent Files submenu with pinned items, recents, and clear."""
+        self.recent_menu.clear()
+        data = self._read_recent_data()
+
+        # Pinned section
+        if data.get("pinned"):
+            for fp in data["pinned"]:
+                display = f"\u2605 {Path(fp).name}"
+                act = self.recent_menu.addAction(self._icon_for_extension(fp), display)
+                act.setData(fp)
+                act.triggered.connect(lambda checked=False, f=fp: self._open_recent_file(f))
+                # Right-click context or secondary action: unpin
+                unpin_act = self.recent_menu.addAction(f"  Unpin: {Path(fp).name}")
+                unpin_act.triggered.connect(lambda checked=False, f=fp: self._unpin_recent_file(f))
+            self.recent_menu.addSeparator()
+
+        # Recent (unpinned) section
+        for fp in data.get("recent", []):
+            act = self.recent_menu.addAction(self._icon_for_extension(fp), Path(fp).name)
+            act.setData(fp)
+            act.triggered.connect(lambda checked=False, f=fp: self._open_recent_file(f))
+            pin_act = self.recent_menu.addAction(f"  Pin: {Path(fp).name}")
+            pin_act.triggered.connect(lambda checked=False, f=fp: self._pin_recent_file(f))
+
+        # Clear option
+        if data.get("pinned") or data.get("recent"):
+            self.recent_menu.addSeparator()
+            clear_act = self.recent_menu.addAction("Clear Recent Files")
+            clear_act.triggered.connect(self._clear_recent_files)
+
+    def _open_recent_file(self, filepath: str):
+        """Open a file from the recent menu. Override if needed."""
+        if hasattr(self, "open_file"):
+            self.open_file(filepath)
+        else:
+            print(f"[Forge] Would open: {filepath}")
+
+    def add_to_recent_files(self, filepath: str):
+        """Public helper: call when a file is opened to track it."""
+        data = self._read_recent_data()
+        if filepath in data.get("pinned", []):
+            return  # Already pinned, nothing to do
+        recent = data.get("recent", [])
+        if filepath in recent:
+            recent.remove(filepath)
+        recent.insert(0, filepath)
+        data["recent"] = recent[:20]  # Keep 20 max
+        self._write_recent_data(data)
+        self._update_recent_menu()
 
     def setup_engine(self, session):
         """Connect the evaluator engine so widgets can call engine.eval()."""
@@ -537,6 +757,24 @@ class ForgeMainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.BottomDockWidgetArea, self._terminal_dock)
         self.tabifyDockWidget(self.command_dock, self._terminal_dock)
+        self.command_dock.raise_()
+        # --- Profiler Panel (bottom, tabified) ---
+        from forge.gui.profiler_panel import ProfilerPanel
+        self.profiler_widget = ProfilerPanel(self)
+        self.profiler_dock = self._make_dock("Profiler", "ProfilerDock",
+                                      self.profiler_widget)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.profiler_dock)
+        self.tabifyDockWidget(self.command_dock, self.profiler_dock)
+
+        # --- Output Panel (bottom, tabified) ---
+        from forge.gui.output_panel import OutputPanel
+        self.output_widget = OutputPanel(self)
+        self.output_dock = self._make_dock("Output", "OutputDock",
+                                    self.output_widget)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)
+        self.tabifyDockWidget(self.command_dock, self.output_dock)
+
+        # Keep command dock on top initially
         self.command_dock.raise_()  # Command window on top initially
 
         # Bookmarks Panel (bottom, tabbed with command/terminal)
@@ -584,6 +822,8 @@ class ForgeMainWindow(QMainWindow):
             "Editor", "EditorDock", self.editor_widget
         )
         self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
+        if hasattr(self, "profiler_widget"):
+            self.profiler_widget.set_editor_widget(self.editor_widget)
 
     def _make_dock(self, title, object_name, widget):
         dock = QDockWidget(title, self)
@@ -677,6 +917,7 @@ class ForgeMainWindow(QMainWindow):
         overlay.exec()
 
     def closeEvent(self, event):
+        self._save_window_state()
         s = self._settings()
         s.setValue("geometry", self.saveGeometry())
         s.setValue("windowState", self.saveState())
