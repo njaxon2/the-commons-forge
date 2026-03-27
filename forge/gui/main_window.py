@@ -305,6 +305,9 @@ class ForgeMainWindow(QMainWindow):
         edit_menu.addAction(self.act_cmd_palette)
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_find)
+        act_snippet = edit_menu.addAction("Insert Snippet...")
+        act_snippet.setShortcut("Ctrl+Shift+S")
+        act_snippet.triggered.connect(self._insert_snippet)
         edit_menu.addAction(self.act_search_files)
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_preferences)
@@ -382,6 +385,7 @@ class ForgeMainWindow(QMainWindow):
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.act_about)
         help_menu.addAction(self.act_docs)
+        help_menu.addSeparator()
 
         act_shortcuts = QAction("Keyboard Shortcuts", self)
         act_shortcuts.triggered.connect(self._show_shortcuts)
@@ -641,6 +645,17 @@ class ForgeMainWindow(QMainWindow):
         state = s.value("windowState")
         if state is not None:
             self.restoreState(state)
+
+
+    # ------------------------------------------------------------------
+    # Keyboard shortcuts overlay
+    # ------------------------------------------------------------------
+
+    def _show_shortcuts_overlay(self):
+        """Show the keyboard shortcuts cheat-sheet overlay."""
+        from forge.gui.shortcuts_overlay import ShortcutsOverlay
+        overlay = ShortcutsOverlay(self)
+        overlay.exec()
 
     def closeEvent(self, event):
         s = self._settings()
@@ -1354,6 +1369,12 @@ class ForgeMainWindow(QMainWindow):
             viewer.exec()
         except Exception as e:
             self._show_toast(f"Compare failed: {e}", 3000, "error")
+
+    def _insert_snippet(self):
+        """Open snippet dialog for current editor."""
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(editor, "open_snippet_dialog"):
+            editor.open_snippet_dialog()
 
     def _show_toast(self, message, duration=3000, level="info"):
         """Show a brief toast notification at the bottom of the window."""

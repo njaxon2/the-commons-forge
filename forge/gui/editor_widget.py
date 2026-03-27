@@ -12,6 +12,7 @@ from PySide6.QtGui import (
     QTextCursor, QKeyEvent, QPen, QTextFormat, QAction,
 )
 from PySide6.QtWidgets import QToolTip
+from forge.gui.snippet_manager import SnippetManager, SnippetDialog
 from PySide6.QtWidgets import (
     QTextEdit, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QPlainTextEdit, QLabel, QMenu, QCompleter,
@@ -413,6 +414,9 @@ class CodeEditor(QPlainTextEdit):
 
         self._highlight_current_line()
 
+        # Snippet manager
+        self._snippet_mgr = SnippetManager()
+
     # --- line numbers ---------------------------------------------------
 
     def line_number_area_width(self) -> int:
@@ -732,6 +736,19 @@ class CodeEditor(QPlainTextEdit):
             extra.append(sel)
 
         self.setExtraSelections(extra)
+
+    def open_snippet_dialog(self):
+        """Open the snippet insertion dialog."""
+        if hasattr(self, '_snippet_mgr'):
+            dlg = SnippetDialog(self._snippet_mgr, self)
+            if dlg.exec():
+                snippet = dlg.selected_snippet()
+                if snippet:
+                    import re as _re
+                    body = snippet['body']
+                    body = _re.sub(r'\$\{\d+:([^}]*)\}', r'', body)
+                    body = _re.sub(r'\$\d+', '', body)
+                    self.textCursor().insertText(body)
 
     def contextMenuEvent(self, event):
         """Rich right-click context menu with IDE actions."""

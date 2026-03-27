@@ -62,6 +62,7 @@ def main():
 
     # Load user preferences
     from forge.gui.themes import get_preferences, apply_theme
+    from forge.gui.splash_screen import ForgeSplashScreen
     prefs = get_preferences()
     theme_name = prefs.get('default_theme', 'dark')
     font_family = prefs.get('font_family', 'Consolas')
@@ -81,6 +82,11 @@ def main():
 
     # Create main window
     from forge.gui.main_window import ForgeMainWindow
+    # --- Splash screen ---
+    splash = ForgeSplashScreen()
+    splash.start()
+    app.processEvents()
+
     window = ForgeMainWindow()
     window.setup_engine(session)
     window.setWindowTitle('Forge \u2014 Octave-Compatible Computing Environment')
@@ -93,6 +99,9 @@ def main():
     window.move(frame_geo.topLeft())
 
     window.show()
+
+    # Close splash now that main window is visible
+    splash.finish()
 
     # Close splash
     try:
