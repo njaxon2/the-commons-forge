@@ -536,8 +536,13 @@ class ForgeMainWindow(QMainWindow):
         self.act_step_out.setEnabled(False)
         self.act_continue = QAction("&Continue", self, shortcut="F8")
         self.act_continue.setEnabled(False)
-        self.act_toggle_bp = QAction("Toggle &Breakpoint", self, shortcut="F12")
+        self.act_toggle_bp = QAction("Toggle &Bookmark", self, shortcut="Ctrl+F2")
         self.act_toggle_bp.triggered.connect(lambda: self._editor_action('toggle_bookmark'))
+
+        self.act_next_bookmark = QAction("Next Bookmark", self, shortcut="Shift+F2")
+        self.act_next_bookmark.triggered.connect(lambda: self._editor_action('next_bookmark'))
+        self.act_prev_bookmark = QAction("Previous Bookmark", self, shortcut="Ctrl+Shift+F2")
+        self.act_prev_bookmark.triggered.connect(lambda: self._editor_action('prev_bookmark'))
         self.act_profile = QAction("&Profile Code", self)
         self.act_profile.triggered.connect(self._profile_current_file)
 
@@ -1371,6 +1376,8 @@ class ForgeMainWindow(QMainWindow):
         editor = self.editor_widget.get_current_editor()
         if editor and hasattr(editor, action_name):
             getattr(editor, action_name)()
+            if 'bookmark' in action_name and hasattr(self, '_bookmarks_panel'):
+                self._bookmarks_panel.refresh()
 
     def _on_find(self):
         """Open find/replace bar in the editor."""
