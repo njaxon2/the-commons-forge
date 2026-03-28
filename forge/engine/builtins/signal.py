@@ -88,6 +88,15 @@ def kaiser_win(N, beta):
     return _fa(sig.windows.kaiser(int(N), float(beta)))
 
 
+def flattop(N):
+    """Flat top window.
+
+    W = flattop(N)
+    Returns an N-point flat top window. Good for amplitude measurement.
+    """
+    return _fa(sig.windows.flattop(int(N)))
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 2. FILTER DESIGN (IIR)
 # ═══════════════════════════════════════════════════════════════════
@@ -1387,6 +1396,7 @@ def idwt(cA, cD, wavelet='db4', mode='symmetric'):
 # ═══════════════════════════════════════════════════════════════════
 
 SIGNAL_REGISTRY: dict[str, callable] = {
+    "flattop": flattop,
     # ── Windows ──────────────────────────────────────────────────
     'bartlett':         bartlett,
     'blackman':         blackman,
