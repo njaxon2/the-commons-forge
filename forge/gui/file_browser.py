@@ -226,11 +226,52 @@ class FileBrowserWidget(QWidget):
         # Path-aware file-system model
         self.fs_model = PathAwareFSModel(self)
         self.fs_model.setRootPath(self._root)
+        self.model = self.fs_model  # alias for context menu code
         self.fs_model.setFilter(QDir.AllDirs | QDir.Files | QDir.NoDotAndDotDot)
+
+        self._proxy = None  # proxy disabled for stability
 
         self.tree = QTreeView(self)
         self.tree.setDragEnabled(True)
 
+        self._rename_shortcut = QShortcut(QKeySequence("F2"), self.tree)
+        self._rename_shortcut.activated.connect(self._on_rename_shortcut)
+
+        self.tree.setDragDropMode(QTreeView.DragOnly)
+        self.tree.setModel(self.fs_model)
+        self.tree.setRootIndex(self.fs_model.index(self._root))
+        self.tree.setHeaderHidden(False)
+        self.tree.setColumnWidth(0, 220)
+        self.tree.doubleClicked.connect(self._on_double_click)
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._context_menu)
+
+        # --- filter / search bar ---
+        self._filter_row = QHBoxLayout()
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Filter (glob): e.g. *.m, *.py")
+        self._search_edit.setClearButtonEnabled(True)
+        self._search_edit.textChanged.connect(self._on_filter_glob_changed)
+
+        self._filter_combo = QComboBox()
+        self._filter_combo.addItems(["All Files", "M-Files", "Python", "Text"])
+        self._filter_combo.currentTextChanged.connect(self._on_filter_type_changed)
+        self._filter_combo.setFixedWidth(100)
+
+        self._filter_row.addWidget(self._search_edit)
+        self._filter_row.addWidget(self._filter_combo)
+
+        layout.addLayout(self._filter_row)
+        layout.addWidget(self.tree)
+
+    def _on_filter_glob_changed(self, text):
+        if hasattr(self, '_proxy'):
+            self._proxy.invalidateFilter()
+
+    def _on_filter_type_changed(self, label):
+        if hasattr(self, '_proxy'):
+            self._proxy.set_filter_type(label)
+            self._proxy.invalidateFilter()
 
     def _resolve_index(self, proxy_index):
         """Map a proxy QModelIndex back to the source QFileSystemModel index."""
@@ -243,20 +284,6 @@ class FileBrowserWidget(QWidget):
         if hasattr(self, "_proxy") and self._proxy is not None:
             return self._proxy.mapFromSource(source_index)
         return source_index
-
-        self._rename_shortcut = QShortcut(QKeySequence("F2"), self.tree)
-        self._rename_shortcut.activated.connect(self._shortcut_rename)
-
-        self.tree.setDragDropMode(QTreeView.DragOnly)
-        self.tree.setModel(self.fs_model)
-        self.tree.setRootIndex(self.fs_model.index(self._root))
-        self.tree.setHeaderHidden(False)
-        self.tree.setColumnWidth(0, 220)
-        self.tree.doubleClicked.connect(self._on_double_click)
-        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._context_menu)
-
-        # --- filter / search bar -------------------------------------------
 
     # --- enhanced context menu -----------------------------------------
     def _show_context_menu(self, pos):
@@ -336,6 +363,15 @@ class FileBrowserWidget(QWidget):
             except OSError as e:
                 QMessageBox.warning(self, "Error", str(e))
 
+    def _on_rename_shortcut(self):
+        """F2 shortcut: rename the currently selected item."""
+        index = self.tree.currentIndex()
+        if index.isValid():
+            source_index = self._resolve_index(index)
+            path = self.fs_model.filePath(source_index)
+            if path:
+                self._action_rename(path)
+
     def _action_rename(self, path):
         old_name = os.path.basename(path)
         new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=old_name)
@@ -398,25 +434,6 @@ class FileBrowserWidget(QWidget):
         mime.setText(path)
         drag.setMimeData(mime)
         drag.exec(Qt.CopyAction)
-
-        self._filter_row = QHBoxLayout()
-        self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("Filter (glob): e.g. *.m, *.py")
-        self._search_edit.setClearButtonEnabled(True)
-        self._search_edit.textChanged.connect(self._on_filter_glob_changed)
-
-        self._filter_combo = QComboBox()
-        self._filter_combo.addItems(["All Files", "M-Files", "Python", "Text"])
-        self._filter_combo.currentTextChanged.connect(self._on_filter_type_changed)
-        self._filter_combo.setFixedWidth(100)
-
-        self._filter_row.addWidget(self._search_edit)
-        self._filter_row.addWidget(self._filter_combo)
-
-        # add filter row to the parent layout
-        # (detect the layout variable name)
-        layout.addLayout(self._filter_row)
-        layout.addWidget(self.tree)
 
     # -- Navigation --
 
