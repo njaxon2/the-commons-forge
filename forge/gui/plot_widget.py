@@ -176,6 +176,114 @@ class FigurePropertiesPanel(QFrame):
             ax.autoscale(axis='y')
         self._pw.canvas.draw()
 
+    def _toggle_probe(self, on):
+        """Enable/disable probe pin placement mode."""
+        self._probe_mode = on
+        if on:
+            self.canvas.setCursor(Qt.CrossCursor)
+        else:
+            self.canvas.setCursor(Qt.ArrowCursor)
+
+    def _place_pin(self, event):
+        """Find nearest data point on any line/surface and place an annotation pin."""
+        import numpy as np
+        ax = self.ax
+        click_x, click_y = event.xdata, event.ydata
+
+        best_dist = float('inf')
+        best_x, best_y = click_x, click_y
+        best_label = ""
+
+        # Search 2D lines
+        for line in ax.get_lines():
+            xd = np.array(line.get_xdata(), dtype=float)
+            yd = np.array(line.get_ydata(), dtype=float)
+            if len(xd) == 0:
+                continue
+
+            # Normalize distances by axis range for fair comparison
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+            xrange = xlim[1] - xlim[0] if xlim[1] != xlim[0] else 1.0
+            yrange = ylim[1] - ylim[0] if ylim[1] != ylim[0] else 1.0
+
+            dx = (xd - click_x) / xrange
+            dy = (yd - click_y) / yrange
+            dists = dx**2 + dy**2
+            idx = int(np.argmin(dists))
+            if dists[idx] < best_dist:
+                best_dist = dists[idx]
+                best_x = xd[idx]
+                best_y = yd[idx]
+                lbl = line.get_label()
+                best_label = lbl if lbl and not lbl.startswith('_') else ""
+
+        # Search collections (scatter, pcolormesh surfaces, etc.)
+        for coll in ax.collections:
+            if hasattr(coll, 'get_offsets'):
+                offsets = np.array(coll.get_offsets())
+                if offsets.size == 0:
+                    continue
+                xlim = ax.get_xlim()
+                ylim = ax.get_ylim()
+                xrange = xlim[1] - xlim[0] if xlim[1] != xlim[0] else 1.0
+                yrange = ylim[1] - ylim[0] if ylim[1] != ylim[0] else 1.0
+                dx = (offsets[:, 0] - click_x) / xrange
+                dy = (offsets[:, 1] - click_y) / yrange
+                dists = dx**2 + dy**2
+                idx = int(np.argmin(dists))
+                if dists[idx] < best_dist:
+                    best_dist = dists[idx]
+                    best_x = offsets[idx, 0]
+                    best_y = offsets[idx, 1]
+                    best_label = ""
+
+        # Format the pin text
+        if best_label:
+            text = f"{best_label}\n({best_x:.4g}, {best_y:.4g})"
+        else:
+            text = f"({best_x:.4g}, {best_y:.4g})"
+
+        # Place annotation with arrow
+        ann = ax.annotate(
+            text,
+            xy=(best_x, best_y),
+            xytext=(15, 20),
+            textcoords='offset points',
+            fontsize=9,
+            color='#cdd6f4',
+            bbox=dict(
+                boxstyle='round,pad=0.4',
+                facecolor='#1e1e2e',
+                edgecolor='#00BCD4',
+                alpha=0.92,
+                linewidth=1.5,
+            ),
+            arrowprops=dict(
+                arrowstyle='-|>',
+                color='#00BCD4',
+                linewidth=1.5,
+                connectionstyle='arc3,rad=0.15',
+            ),
+        )
+
+        # Place a dot marker at the data point
+        dot, = ax.plot(best_x, best_y, 'o',
+                       color='#00BCD4', markersize=7,
+                       markeredgecolor='white', markeredgewidth=1.2,
+                       zorder=10)
+
+        self._pins.append((ann, dot))
+        self.canvas.draw()
+
+    def _clear_pins(self):
+        """Remove all probe pin annotations."""
+        for ann, dot in self._pins:
+            ann.remove()
+            dot.remove()
+        self._pins.clear()
+        self.canvas.draw()
+
     def _toggle_grid(self, on):
         self._pw.ax.grid(on)
         self._pw.canvas.draw()
@@ -260,6 +368,19 @@ class PlotWidget(QWidget):
         self.btn_legend.toggled.connect(self._toggle_legend)
         tool_layout.addWidget(self.btn_legend)
 
+        self.btn_probe = QPushButton("Probe")
+        self.btn_probe.setCheckable(True)
+        self.btn_probe.setStyleSheet(_btn_ss)
+        self.btn_probe.setToolTip("Click on data to place coordinate pins")
+        self.btn_probe.toggled.connect(self._toggle_probe)
+        tool_layout.addWidget(self.btn_probe)
+
+        self.btn_clear_pins = QPushButton("Clear Pins")
+        self.btn_clear_pins.setStyleSheet(_btn_ss)
+        self.btn_clear_pins.setToolTip("Remove all probe pins")
+        self.btn_clear_pins.clicked.connect(self._clear_pins)
+        tool_layout.addWidget(self.btn_clear_pins)
+
         self.btn_export = QPushButton("Export")
         self.btn_export.setStyleSheet(_btn_ss)
         export_menu = QMenu(self)
@@ -294,6 +415,10 @@ class PlotWidget(QWidget):
         # Connect mouse events for data cursor
         self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
         self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
+
+        # Probe mode state
+        self._probe_mode = False
+        self._pins = []  # list of matplotlib annotation objects
 
     # ------------------------------------------------------------------
     # Public API
@@ -340,15 +465,126 @@ class PlotWidget(QWidget):
             self.data_cursor.clear_coords()
 
     def _on_mouse_click(self, event):
-        if event.inaxes and event.button == 1:
-            self.data_cursor.update_coords(event.xdata, event.ydata, "Click")
         if event.dblclick:
             self._reset_view()
+            return
+        if event.inaxes and event.button == 1:
+            self.data_cursor.update_coords(event.xdata, event.ydata, "Click")
+            if self._probe_mode:
+                self._place_pin(event)
 
     def _reset_view(self):
         """Reset zoom/pan to the original data limits."""
         self.ax.autoscale()
         self.ax.set_aspect('auto')
+        self.canvas.draw()
+
+    def _toggle_probe(self, on):
+        """Enable/disable probe pin placement mode."""
+        self._probe_mode = on
+        if on:
+            self.canvas.setCursor(Qt.CrossCursor)
+        else:
+            self.canvas.setCursor(Qt.ArrowCursor)
+
+    def _place_pin(self, event):
+        """Find nearest data point on any line/surface and place an annotation pin."""
+        import numpy as np
+        ax = self.ax
+        click_x, click_y = event.xdata, event.ydata
+
+        best_dist = float('inf')
+        best_x, best_y = click_x, click_y
+        best_label = ""
+
+        # Search 2D lines
+        for line in ax.get_lines():
+            xd = np.array(line.get_xdata(), dtype=float)
+            yd = np.array(line.get_ydata(), dtype=float)
+            if len(xd) == 0:
+                continue
+
+            # Normalize distances by axis range for fair comparison
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+            xrange = xlim[1] - xlim[0] if xlim[1] != xlim[0] else 1.0
+            yrange = ylim[1] - ylim[0] if ylim[1] != ylim[0] else 1.0
+
+            dx = (xd - click_x) / xrange
+            dy = (yd - click_y) / yrange
+            dists = dx**2 + dy**2
+            idx = int(np.argmin(dists))
+            if dists[idx] < best_dist:
+                best_dist = dists[idx]
+                best_x = xd[idx]
+                best_y = yd[idx]
+                lbl = line.get_label()
+                best_label = lbl if lbl and not lbl.startswith('_') else ""
+
+        # Search collections (scatter, pcolormesh surfaces, etc.)
+        for coll in ax.collections:
+            if hasattr(coll, 'get_offsets'):
+                offsets = np.array(coll.get_offsets())
+                if offsets.size == 0:
+                    continue
+                xlim = ax.get_xlim()
+                ylim = ax.get_ylim()
+                xrange = xlim[1] - xlim[0] if xlim[1] != xlim[0] else 1.0
+                yrange = ylim[1] - ylim[0] if ylim[1] != ylim[0] else 1.0
+                dx = (offsets[:, 0] - click_x) / xrange
+                dy = (offsets[:, 1] - click_y) / yrange
+                dists = dx**2 + dy**2
+                idx = int(np.argmin(dists))
+                if dists[idx] < best_dist:
+                    best_dist = dists[idx]
+                    best_x = offsets[idx, 0]
+                    best_y = offsets[idx, 1]
+                    best_label = ""
+
+        # Format the pin text
+        if best_label:
+            text = f"{best_label}\n({best_x:.4g}, {best_y:.4g})"
+        else:
+            text = f"({best_x:.4g}, {best_y:.4g})"
+
+        # Place annotation with arrow
+        ann = ax.annotate(
+            text,
+            xy=(best_x, best_y),
+            xytext=(15, 20),
+            textcoords='offset points',
+            fontsize=9,
+            color='#cdd6f4',
+            bbox=dict(
+                boxstyle='round,pad=0.4',
+                facecolor='#1e1e2e',
+                edgecolor='#00BCD4',
+                alpha=0.92,
+                linewidth=1.5,
+            ),
+            arrowprops=dict(
+                arrowstyle='-|>',
+                color='#00BCD4',
+                linewidth=1.5,
+                connectionstyle='arc3,rad=0.15',
+            ),
+        )
+
+        # Place a dot marker at the data point
+        dot, = ax.plot(best_x, best_y, 'o',
+                       color='#00BCD4', markersize=7,
+                       markeredgecolor='white', markeredgewidth=1.2,
+                       zorder=10)
+
+        self._pins.append((ann, dot))
+        self.canvas.draw()
+
+    def _clear_pins(self):
+        """Remove all probe pin annotations."""
+        for ann, dot in self._pins:
+            ann.remove()
+            dot.remove()
+        self._pins.clear()
         self.canvas.draw()
 
     def _toggle_grid(self, on):
