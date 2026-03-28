@@ -5660,8 +5660,31 @@ class ForgeSession:
 
         # --- Plotting functions (stubs that record calls) ---
         def forge_plot(*args):
-            """plot(x, y, ...) — 2D line plot (stub)."""
-            pass
+            """plot(x, y, ...) — 2D line plot."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if not hasattr(session, '_plot_requests'):
+                session._plot_requests = []
+            # Parse args: plot(y), plot(x,y), plot(x,y,fmt), ...
+            arrays = []
+            fmt_str = None
+            for a in args:
+                if isinstance(a, ForgeArray):
+                    arrays.append(a.data.flatten())
+                elif isinstance(a, ForgeChar):
+                    fmt_str = a.to_str()
+                elif isinstance(a, (int, float)):
+                    arrays.append(np.array([float(a)]))
+                elif isinstance(a, str):
+                    fmt_str = a
+            if len(arrays) == 0:
+                return
+            elif len(arrays) == 1:
+                y = arrays[0]
+                x = np.arange(1, len(y) + 1, dtype=np.float64)
+            else:
+                x, y = arrays[0], arrays[1]
+            session._plot_requests.append(('plot', x.tolist(), y.tolist()))
 
         def forge_plot3(*args):
             """plot3(x, y, z, ...) — 3D line plot (stub)."""
@@ -9625,12 +9648,14 @@ class ForgeSession:
                 elif request_type == 'grid':
                     mode = str(args[0]).lower() if args else 'on'
                     self._plot_requests.append(('grid', mode))
+                elif request_type == 'plot':
+                    pass  # plot data already recorded by forge_plot itself
                 return result
             wrapper.__doc__ = original_func.__doc__ if original_func else f"{request_type} (GUI)"
             return wrapper
 
         # Wrap the existing stub functions to add GUI tracking
-        for fname in ('figure', 'xlabel', 'ylabel', 'title', 'grid'):
+        for fname in ('figure', 'plot', 'xlabel', 'ylabel', 'title', 'grid'):
             original = session._engine.functions.get(fname)
             if original:
                 session._engine.functions[fname] = _make_gui_plot_wrapper(original, fname)
