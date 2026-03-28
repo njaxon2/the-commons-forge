@@ -61,9 +61,12 @@ def setup_demo(main_window):
                 editor.viewport().update()
                 break
 
-    # Refresh bookmarks panel
-    if hasattr(main_window, 'bookmarks_widget'):
-        main_window.bookmarks_widget.refresh()
+    # Refresh bookmarks panel and show it
+    if hasattr(main_window, '_bookmarks_panel'):
+        main_window._bookmarks_panel.refresh()
+    if hasattr(main_window, '_bookmarks_dock'):
+        main_window._bookmarks_dock.setVisible(True)
+        main_window._bookmarks_dock.raise_()
 
     # Switch to the first solver file
     for idx in range(ew.tabs.count()):

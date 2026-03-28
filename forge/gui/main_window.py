@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence, QFont, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QToolBar, QMenuBar, QStatusBar, QWidget,
-    QApplication, QLabel, QDialog, QVBoxLayout, QLineEdit, QListWidget,
+    QApplication, QLabel, QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget,
     QListWidgetItem, QPushButton,
 )
 
@@ -32,6 +32,63 @@ from forge.gui.icons import (
     icon_debug, icon_step_in, icon_step_over, icon_step_out,
     icon_undo, icon_redo, icon_search,
 )
+
+
+class _DockTitleBar(QWidget):
+    """Custom dock title bar: double-click floating = maximize/restore, not re-dock."""
+
+    def __init__(self, title, dock, parent=None):
+        super().__init__(parent)
+        self._dock = dock
+        self._maximized_geo = None
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(4)
+
+        self._label = QLabel(title)
+        self._label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 11px;")
+        layout.addWidget(self._label)
+        layout.addStretch()
+
+        btn_close = QPushButton("x")
+        btn_close.setFixedSize(18, 18)
+        btn_close.setStyleSheet(
+            "QPushButton { background: transparent; color: #6c7086; border: none; font-size: 12px; }"
+            "QPushButton:hover { color: #f38ba8; }"
+        )
+        btn_close.clicked.connect(dock.close)
+        layout.addWidget(btn_close)
+
+        self.setFixedHeight(24)
+        self.setStyleSheet("background: #181825; border-bottom: 1px solid #313244;")
+
+    def mouseDoubleClickEvent(self, event):
+        if self._dock.isFloating():
+            if self._maximized_geo is not None:
+                self._dock.setGeometry(self._maximized_geo)
+                self._maximized_geo = None
+            else:
+                self._maximized_geo = self._dock.geometry()
+                screen = self._dock.screen()
+                if screen:
+                    self._dock.setGeometry(screen.availableGeometry())
+        else:
+            self._dock.setFloating(True)
+        event.accept()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton and hasattr(self, "_drag_pos"):
+            if self._dock.isFloating():
+                delta = event.globalPosition().toPoint() - self._drag_pos
+                self._dock.move(self._dock.pos() + delta)
+                self._drag_pos = event.globalPosition().toPoint()
+        super().mouseMoveEvent(event)
+
 
 class ForgeMainWindow(QMainWindow):
     """Top-level application window for the Forge IDE."""
@@ -765,7 +822,7 @@ class ForgeMainWindow(QMainWindow):
 
         # Command Window (bottom)
         self.command_widget = CommandWidget(self)
-        self.command_widget.setMinimumHeight(180)
+        self.command_widget.setMinimumHeight(80)
         self.command_dock = self._make_dock(
             "Command Window", "CommandDock", self.command_widget
         )
@@ -802,6 +859,7 @@ class ForgeMainWindow(QMainWindow):
 
         # Bookmarks Panel (bottom, tabbed with command/terminal)
         self._bookmarks_panel = BookmarksPanel(self)
+        self.bookmarks_widget = self._bookmarks_panel  # alias for demos
         self._bookmarks_dock = self._make_dock("Bookmarks", "BookmarksDock", self._bookmarks_panel)
         self.addDockWidget(Qt.BottomDockWidgetArea, self._bookmarks_dock)
         self.tabifyDockWidget(self._terminal_dock, self._bookmarks_dock)
@@ -847,6 +905,8 @@ class ForgeMainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
         if hasattr(self, "profiler_widget"):
             self.profiler_widget.set_editor_widget(self.editor_widget)
+        if hasattr(self, '_bookmarks_panel'):
+            self._bookmarks_panel.set_editor_widget(self.editor_widget)
 
     def _make_dock(self, title, object_name, widget):
         dock = QDockWidget(title, self)
@@ -857,11 +917,13 @@ class ForgeMainWindow(QMainWindow):
             | QDockWidget.DockWidgetMovable
             | QDockWidget.DockWidgetFloatable
         )
+        # Double-click floating title bar → maximize/restore (not re-dock)
+        dock.setTitleBarWidget(_DockTitleBar(title, dock))
         return dock
 
     def _set_default_layout(self):
-        self.resizeDocks([self.command_dock], [250], Qt.Vertical)
-        self.resizeDocks([self.file_browser_dock], [300], Qt.Horizontal)
+        self.resizeDocks([self.command_dock], [150], Qt.Vertical)
+        self.resizeDocks([self.file_browser_dock], [280], Qt.Horizontal)
 
     # ==================================================================
     # Status bar
