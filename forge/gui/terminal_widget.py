@@ -36,10 +36,7 @@ class TerminalWidget(QWidget):
         self._console = QPlainTextEdit()
         self._console.setReadOnly(False)
         self._console.setFont(QFont("Consolas", 11))
-        self._console.setStyleSheet(
-            "QPlainTextEdit { background: #11111b; color: #a6e3a1; "
-            "border: none; selection-background-color: #313244; }"
-        )
+        self._apply_theme()
         self._console.setLineWrapMode(QPlainTextEdit.NoWrap)
         layout.addWidget(self._console)
 
@@ -48,6 +45,17 @@ class TerminalWidget(QWidget):
 
         # Handle key presses
         self._console.installEventFilter(self)
+
+    def _apply_theme(self):
+        from forge.gui.theme_utils import detect_palette, is_light_theme
+        p = detect_palette()
+        bg = p.get("bg0", "#1e1e2e")
+        fg = p.get("success", "#a6e3a1") if not is_light_theme() else p.get("success", "#2e7d32")
+        sel = p.get("selection", "#264f78")
+        self._console.setStyleSheet(
+            f"QPlainTextEdit {{ background: {bg}; color: {fg}; "
+            f"border: none; selection-background-color: {sel}; }}"
+        )
 
     def eventFilter(self, obj, event):
         from PySide6.QtCore import QEvent
@@ -62,11 +70,19 @@ class TerminalWidget(QWidget):
                     return True
         return super().eventFilter(obj, event)
 
+    def _get_fg(self):
+        from forge.gui.theme_utils import detect_palette
+        return detect_palette().get("fg0", "#cdd6f4")
+
+    def _get_prompt_color(self):
+        from forge.gui.theme_utils import detect_palette
+        return detect_palette().get("info", "#89b4fa")
+
     def _write_prompt(self):
         cursor = self._console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor("#89b4fa"))
+        fmt.setForeground(QColor(self._get_prompt_color()))
         prompt = f"{os.path.basename(self._cwd)}$ "
         cursor.insertText(prompt, fmt)
         self._prompt_pos = cursor.position()
@@ -134,7 +150,7 @@ class TerminalWidget(QWidget):
         cursor = self._console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor("#cdd6f4"))
+        fmt.setForeground(QColor(self._get_fg()))
         cursor.insertText(text, fmt)
         self._console.setTextCursor(cursor)
         self._console.ensureCursorVisible()

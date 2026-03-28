@@ -1333,7 +1333,7 @@ class CodeEditor(QPlainTextEdit):
             # Highlight the bracket at cursor
             sel1 = QTextEdit.ExtraSelection()
             fmt1 = QTextCharFormat()
-            fmt1.setBackground(QColor("#45475a"))
+            fmt1.setBackground(QColor(self._palette.get("bg5", "#45475a") if hasattr(self, "_palette") else "#45475a"))
             fmt1.setForeground(color)
             cursor1 = QTextCursor(self.document())
             cursor1.setPosition(bracket_pos)
@@ -1345,7 +1345,7 @@ class CodeEditor(QPlainTextEdit):
             # Highlight the matching bracket
             sel2 = QTextEdit.ExtraSelection()
             fmt2 = QTextCharFormat()
-            fmt2.setBackground(QColor("#45475a"))
+            fmt2.setBackground(QColor(self._palette.get("bg5", "#45475a") if hasattr(self, "_palette") else "#45475a"))
             fmt2.setForeground(color)
             cursor2 = QTextCursor(self.document())
             cursor2.setPosition(match_pos)

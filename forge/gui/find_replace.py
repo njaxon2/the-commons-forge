@@ -20,32 +20,43 @@ class FindReplaceBar(QFrame):
         super().__init__(parent)
         self.editor = editor
         self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet("""
-            FindReplaceBar {
-                background: #313244;
-                border: 1px solid #45475a;
+        self._apply_theme()
+
+    def _apply_theme(self):
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        bg0 = p.get("bg0", "#1e1e2e")
+        bg3 = p.get("bg3", "#313145")
+        bg5 = p.get("bg5", "#44445a")
+        fg0 = p.get("fg0", "#cdd6f4")
+        fg2 = p.get("fg2", "#a6adc8")
+        border1 = p.get("border1", "#44445a")
+        self.setStyleSheet(f"""
+            FindReplaceBar {{
+                background: {bg3};
+                border: 1px solid {border1};
                 border-radius: 6px;
                 padding: 4px;
-            }
-            QLineEdit {
-                background: #1e1e2e;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+            }}
+            QLineEdit {{
+                background: {bg0};
+                color: {fg0};
+                border: 1px solid {border1};
                 border-radius: 4px;
                 padding: 3px 6px;
                 min-width: 200px;
-            }
-            QPushButton {
-                background: #45475a;
-                color: #cdd6f4;
+            }}
+            QPushButton {{
+                background: {bg5};
+                color: {fg0};
                 border: none;
                 border-radius: 4px;
                 padding: 4px 10px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background: #585b70; }
-            QCheckBox { color: #a6adc8; font-size: 11px; }
-            QLabel { color: #a6adc8; font-size: 11px; }
+            }}
+            QPushButton:hover {{ background: {border1}; }}
+            QCheckBox {{ color: {fg2}; font-size: 11px; }}
+            QLabel {{ color: {fg2}; font-size: 11px; }}
         """)
         self._build_ui()
         self._match_count = 0
@@ -143,7 +154,7 @@ class FindReplaceBar(QFrame):
 
         fmt = QTextCharFormat()
         fmt.setBackground(QColor("#f9e2af"))
-        fmt.setForeground(QColor("#1e1e2e"))
+        fmt.setForeground(QColor(p.get("bg0", "#1e1e2e")) if hasattr(self, "_apply_theme") else QColor("#1e1e2e"))
 
         while True:
             cursor = doc.find(text, cursor, flags)

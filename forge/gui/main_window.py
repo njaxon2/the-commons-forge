@@ -131,7 +131,7 @@ class _DockTitleBar(QWidget):
             #DockTitleBar {{
                 background: qlineargradient(
                     x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {bg4}, stop:0.5 {bg3}, stop:1 {bg1});
+                    stop:0 {bg5}, stop:0.4 {bg4}, stop:1 {bg3});
                 border: 1px solid {border1};
                 border-bottom: 2px solid {accent};
                 border-top-left-radius: 4px;
@@ -148,29 +148,29 @@ class _DockTitleBar(QWidget):
             }}
             #DockFloatBtn {{
                 background: transparent;
-                border: 1px solid {border0};
+                border: 1px solid {fg3};
                 border-radius: 3px;
-                color: {fg3};
+                color: {fg2};
                 font-size: 11px;
                 font-family: monospace;
             }}
             #DockFloatBtn:hover {{
-                background: {bg5};
+                background: {accent};
                 color: {fg0};
-                border-color: {fg3};
+                border-color: {accent};
             }}
             #DockCloseBtn {{
                 background: transparent;
-                border: 1px solid {border0};
+                border: 1px solid {fg3};
                 border-radius: 3px;
-                color: {fg3};
+                color: {fg2};
                 font-size: 13px;
                 font-weight: bold;
                 font-family: monospace;
             }}
             #DockCloseBtn:hover {{
                 background: {error};
-                color: {fg0};
+                color: #ffffff;
                 border-color: {error};
             }}
         """)
@@ -1230,6 +1230,13 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.editor_widget import set_editor_palette
         set_editor_palette(theme_name)
         self._refresh_dock_title_bars()
+        # Refresh all theme-aware panels
+        for attr in ('_output_panel', '_profiler_panel', '_terminal_widget'):
+            panel = getattr(self, attr, None)
+            if panel and hasattr(panel, 'apply_theme'):
+                panel.apply_theme()
+            elif panel and hasattr(panel, '_apply_theme'):
+                panel._apply_theme()
         if hasattr(self, '_bookmarks_panel') and hasattr(self._bookmarks_panel, 'apply_theme'):
             self._bookmarks_panel.apply_theme()
 
@@ -1749,23 +1756,25 @@ class ForgeMainWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("Command Palette")
         dialog.setMinimumSize(500, 400)
-        dialog.setStyleSheet("background: #1e1e2e; border-radius: 8px;")
+        from forge.gui.theme_utils import detect_palette as _dp
+        _p = _dp()
+        dialog.setStyleSheet(f"background: {_p.get('bg0', '#1e1e2e')}; border-radius: 8px;")
 
         layout = QVBoxLayout(dialog)
 
         search_input = QLineEdit()
         search_input.setPlaceholderText("> Type a command...")
         search_input.setStyleSheet(
-            "padding: 10px; font-size: 14px; background: #313244; "
-            "color: #cdd6f4; border: 1px solid #45475a; border-radius: 6px;"
+            f"padding: 10px; font-size: 14px; background: {_p.get('bg3', '#313244')}; "
+            f"color: {_p.get('fg0', '#cdd6f4')}; border: 1px solid {_p.get('border1', '#45475a')}; border-radius: 6px;"
         )
         layout.addWidget(search_input)
 
         cmd_list = QListWidget()
         cmd_list.setStyleSheet(
-            "QListWidget { background: #1e1e2e; color: #cdd6f4; border: none; font-size: 13px; }"
+            f"QListWidget {{ background: {_p.get('bg0', '#1e1e2e')}; color: {_p.get('fg0', '#cdd6f4')}; border: none; font-size: 13px; }}"
             "QListWidget::item { padding: 6px 8px; }"
-            "QListWidget::item:selected { background: #313244; color: #cba6f7; }"
+            f"QListWidget::item:selected {{ background: {_p.get('bg3', '#313244')}; color: {_p.get('accent', '#00BCD4')}; }}"
         )
         layout.addWidget(cmd_list)
 
@@ -1851,23 +1860,25 @@ class ForgeMainWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("Quick Open")
         dialog.setMinimumSize(500, 400)
-        dialog.setStyleSheet("background: #1e1e2e; border-radius: 8px;")
+        from forge.gui.theme_utils import detect_palette as _dp
+        _p = _dp()
+        dialog.setStyleSheet(f"background: {_p.get('bg0', '#1e1e2e')}; border-radius: 8px;")
 
         layout = QVBoxLayout(dialog)
 
         search_input = QLineEdit()
         search_input.setPlaceholderText("Type to search files...")
         search_input.setStyleSheet(
-            "padding: 10px; font-size: 14px; background: #313244; "
-            "color: #cdd6f4; border: 1px solid #45475a; border-radius: 6px;"
+            f"padding: 10px; font-size: 14px; background: {_p.get('bg3', '#313244')}; "
+            f"color: {_p.get('fg0', '#cdd6f4')}; border: 1px solid {_p.get('border1', '#45475a')}; border-radius: 6px;"
         )
         layout.addWidget(search_input)
 
         file_list = QListWidget()
         file_list.setStyleSheet(
-            "QListWidget { background: #1e1e2e; color: #cdd6f4; border: none; font-size: 13px; }"
+            f"QListWidget {{ background: {_p.get('bg0', '#1e1e2e')}; color: {_p.get('fg0', '#cdd6f4')}; border: none; font-size: 13px; }}"
             "QListWidget::item { padding: 6px 8px; }"
-            "QListWidget::item:selected { background: #313244; color: #cba6f7; }"
+            f"QListWidget::item:selected {{ background: {_p.get('bg3', '#313244')}; color: {_p.get('accent', '#00BCD4')}; }}"
         )
         layout.addWidget(file_list)
 
@@ -2037,11 +2048,13 @@ class ForgeMainWindow(QMainWindow):
         from PySide6.QtCore import QTimer, Qt, QPropertyAnimation
         from PySide6.QtGui import QColor
 
+        from forge.gui.theme_utils import detect_palette as _dpt2
+        _tp = _dpt2()
         colors = {
-            "info": ("#89b4fa", "#1e1e2e"),
-            "success": ("#a6e3a1", "#1e1e2e"),
-            "warning": ("#f9e2af", "#1e1e2e"),
-            "error": ("#f38ba8", "#1e1e2e"),
+            "info": (_tp.get("info", "#89b4fa"), _tp.get("bg0", "#1e1e2e")),
+            "success": (_tp.get("success", "#a6e3a1"), _tp.get("bg0", "#1e1e2e")),
+            "warning": (_tp.get("warning", "#fab387"), _tp.get("bg0", "#1e1e2e")),
+            "error": (_tp.get("error", "#f38ba8"), _tp.get("bg0", "#1e1e2e")),
         }
         fg, bg = colors.get(level, colors["info"])
 

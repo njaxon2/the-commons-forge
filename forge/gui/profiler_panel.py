@@ -37,63 +37,79 @@ class ProfilerPanel(QWidget):
         self._entries = []  # list of dicts {function, time_ms, calls, avg_ms}
 
         self.setObjectName("ProfilerPanel")
-        self.setStyleSheet("""
-            #ProfilerPanel {
-                background-color: #1e1e2e;
-            }
-            #ProfilerPanel QLabel {
-                color: #cdd6f4;
+        self.apply_theme()
+
+    def apply_theme(self):
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        bg0 = p.get("bg0", "#1e1e2e")
+        bg1 = p.get("bg1", "#252536")
+        bg3 = p.get("bg3", "#313145")
+        bg5 = p.get("bg5", "#44445a")
+        fg0 = p.get("fg0", "#cdd6f4")
+        fg3 = p.get("fg3", "#6c7086")
+        border1 = p.get("border1", "#44445a")
+        accent = p.get("accent", "#00BCD4")
+        accent_p = p.get("accent_p", "#0097A7")
+        selection = p.get("selection", "#264f78")
+        alt_row = p.get("alt_row", "#282840")
+        self.setStyleSheet(f"""
+            #ProfilerPanel {{
+                background-color: {bg0};
+            }}
+            #ProfilerPanel QLabel {{
+                color: {fg0};
                 font-size: 12px;
-            }
-            #ProfilerPanel QLabel#TotalTimeLabel {
-                color: #94e2d5;
+            }}
+            #ProfilerPanel QLabel#TotalTimeLabel {{
+                color: {accent};
                 font-size: 16px;
                 font-weight: bold;
                 padding: 4px 0;
-            }
-            #ProfilerPanel QTableWidget {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+            }}
+            #ProfilerPanel QTableWidget {{
+                background-color: {bg0};
+                color: {fg0};
+                border: 1px solid {border1};
                 font-family: "Courier New", monospace;
                 font-size: 12px;
-                selection-background-color: #1e6e5e;
-                selection-color: #cdd6f4;
-                alternate-background-color: #232336;
-                gridline-color: #45475a;
-            }
-            #ProfilerPanel QTableWidget::item:hover {
-                background-color: #2a2a3d;
-            }
-            #ProfilerPanel QTableWidget::item:selected {
-                background-color: #1e6e5e;
-            }
-            #ProfilerPanel QHeaderView::section {
-                background-color: #181825;
-                color: #94e2d5;
-                border: 1px solid #45475a;
+                selection-background-color: {selection};
+                selection-color: {fg0};
+                alternate-background-color: {alt_row};
+                gridline-color: {border1};
+            }}
+            #ProfilerPanel QTableWidget::item:hover {{
+                background-color: {bg1};
+            }}
+            #ProfilerPanel QTableWidget::item:selected {{
+                background-color: {selection};
+            }}
+            #ProfilerPanel QHeaderView::section {{
+                background-color: {bg3};
+                color: {accent};
+                border: 1px solid {border1};
                 padding: 4px 8px;
                 font-weight: bold;
-            }
-            #ProfilerPanel QPushButton {
-                background-color: #1e6e5e;
-                color: #cdd6f4;
+            }}
+            #ProfilerPanel QPushButton {{
+                background-color: {accent_p};
+                color: #ffffff;
                 border: none;
                 border-radius: 4px;
                 padding: 5px 12px;
                 font-weight: bold;
                 font-size: 12px;
-            }
-            #ProfilerPanel QPushButton:hover {
-                background-color: #2a9d8f;
-            }
-            #ProfilerPanel QPushButton:pressed {
-                background-color: #14524a;
-            }
-            #ProfilerPanel QPushButton:disabled {
-                background-color: #45475a;
-                color: #6c7086;
-            }
+            }}
+            #ProfilerPanel QPushButton:hover {{
+                background-color: {accent};
+            }}
+            #ProfilerPanel QPushButton:pressed {{
+                background-color: {accent_p};
+            }}
+            #ProfilerPanel QPushButton:disabled {{
+                background-color: {bg5};
+                color: {fg3};
+            }}
         """)
 
         self._build_ui()

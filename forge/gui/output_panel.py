@@ -19,12 +19,24 @@ class OutputPanel(QWidget):
     """
 
     # Colour map
-    _COLOURS = {
-        "normal":  "#cdd6f4",
-        "info":    "#94e2d5",
-        "warning": "#fab387",
-        "error":   "#f38ba8",
-    }
+    _COLOURS = None  # set dynamically
+
+    @staticmethod
+    def _get_colours():
+        from forge.gui.theme_utils import is_light_theme
+        if is_light_theme():
+            return {
+                "normal":  "#1e1e2e",
+                "info":    "#00897B",
+                "warning": "#e65100",
+                "error":   "#d32f2f",
+            }
+        return {
+            "normal":  "#cdd6f4",
+            "info":    "#94e2d5",
+            "warning": "#fab387",
+            "error":   "#f38ba8",
+        }
 
     # ------------------------------------------------------------------
     # Construction
@@ -36,46 +48,61 @@ class OutputPanel(QWidget):
         self._filter = "all"
 
         self.setObjectName("OutputPanel")
-        self.setStyleSheet("""
-            #OutputPanel {
-                background-color: #1e1e2e;
-            }
-            #OutputPanel QTextEdit {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+        self.apply_theme()
+
+    def apply_theme(self):
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        bg0 = p.get("bg0", "#1e1e2e")
+        bg3 = p.get("bg3", "#313145")
+        bg5 = p.get("bg5", "#44445a")
+        fg0 = p.get("fg0", "#cdd6f4")
+        fg3 = p.get("fg3", "#6c7086")
+        border1 = p.get("border1", "#44445a")
+        accent = p.get("accent", "#00BCD4")
+        accent_p = p.get("accent_p", "#0097A7")
+        selection = p.get("selection", "#264f78")
+        self.setStyleSheet(f"""
+            #OutputPanel {{
+                background-color: {bg0};
+            }}
+            #OutputPanel QTextEdit {{
+                background-color: {bg0};
+                color: {fg0};
+                border: 1px solid {border1};
                 font-family: "Courier New", monospace;
                 font-size: 12px;
-                selection-background-color: #1e6e5e;
-                selection-color: #cdd6f4;
-            }
-            #OutputPanel QPushButton {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+                selection-background-color: {selection};
+                selection-color: {fg0};
+            }}
+            #OutputPanel QPushButton {{
+                background-color: {bg3};
+                color: {fg0};
+                border: 1px solid {border1};
                 border-radius: 4px;
                 padding: 4px 10px;
                 font-size: 12px;
-            }
-            #OutputPanel QPushButton:hover {
-                background-color: #45475a;
-            }
-            #OutputPanel QPushButton:checked {
-                background-color: #1e6e5e;
-                border-color: #94e2d5;
+            }}
+            #OutputPanel QPushButton:hover {{
+                background-color: {bg5};
+            }}
+            #OutputPanel QPushButton:checked {{
+                background-color: {accent_p};
+                border-color: {accent};
                 font-weight: bold;
-            }
-            #OutputPanel QPushButton#ClearBtn {
-                background-color: #1e6e5e;
+            }}
+            #OutputPanel QPushButton#ClearBtn {{
+                background-color: {accent_p};
                 border: none;
                 font-weight: bold;
-            }
-            #OutputPanel QPushButton#ClearBtn:hover {
-                background-color: #2a9d8f;
-            }
-            #OutputPanel QPushButton#ClearBtn:pressed {
-                background-color: #14524a;
-            }
+                color: #ffffff;
+            }}
+            #OutputPanel QPushButton#ClearBtn:hover {{
+                background-color: {accent};
+            }}
+            #OutputPanel QPushButton#ClearBtn:pressed {{
+                background-color: {accent_p};
+            }}
         """)
 
         self._build_ui()
@@ -188,7 +215,8 @@ class OutputPanel(QWidget):
 
     def _render_line(self, level, ts, text):
         """Append a single coloured line to the text area."""
-        colour = self._COLOURS.get(level, self._COLOURS["normal"])
+        colours = self._get_colours()
+        colour = colours.get(level, colours["normal"])
         fmt = QTextCharFormat()
         fmt.setForeground(QColor(colour))
         cursor = self.text_edit.textCursor()

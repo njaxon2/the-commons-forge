@@ -62,6 +62,34 @@ class HelpViewerWidget(QWidget):
         self.session = session
         self._update_completer()
 
+
+    def _get_html_colors(self):
+        """Get colors for HTML content based on current theme."""
+        try:
+            from forge.gui.theme_utils import detect_palette, is_light_theme
+            p = detect_palette()
+            light = is_light_theme()
+            return {
+                "bg0": p.get("bg0", "#1e1e2e"),
+                "bg3": p.get("bg3", "#313145"),
+                "fg0": p.get("fg0", "#cdd6f4"),
+                "fg2": p.get("fg2", "#a6adc8"),
+                "fg3": p.get("fg3", "#6c7086"),
+                "border1": p.get("border1", "#44445a"),
+                "accent": p.get("accent", "#00BCD4"),
+                "info": p.get("info", "#89b4fa"),
+                "success": p.get("success", "#a6e3a1"),
+                "error": p.get("error", "#f38ba8"),
+                "warning": "#cba6f7" if not light else "#7c3aed",
+            }
+        except Exception:
+            return {
+                "bg0": "#1e1e2e", "bg3": "#313145", "fg0": "#cdd6f4",
+                "fg2": "#a6adc8", "fg3": "#6c7086", "border1": "#44445a",
+                "accent": "#00BCD4", "info": "#89b4fa", "success": "#a6e3a1",
+                "error": "#f38ba8", "warning": "#cba6f7",
+            }
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -116,48 +144,36 @@ class HelpViewerWidget(QWidget):
         self._show_welcome()
 
     def _show_welcome(self):
-        html = """
-        <h2 style='color:#89b4fa;'>Forge Documentation</h2>
-        <p>Type a function name above and press Enter, or browse by category:</p>
-
-        <h3 style='color:#cba6f7;'>Categories</h3>
-        <table cellpadding='4' cellspacing='0' width='100%'>
-        <tr>
-            <td><b>Math:</b></td>
-            <td><a href='help:sin'>Trigonometry</a> · <a href='help:abs'>Elementary</a> · <a href='help:beta'>Special</a></td>
-        </tr>
-        <tr>
-            <td><b>Matrix:</b></td>
-            <td><a href='help:zeros'>Construction</a> · <a href='help:size'>Information</a> · <a href='help:eig'>Linear Algebra</a></td>
-        </tr>
-        <tr>
-            <td><b>Strings:</b></td>
-            <td><a href='help:strcmp'>Comparison</a> · <a href='help:sprintf'>Formatting</a></td>
-        </tr>
-        <tr>
-            <td><b>Plotting:</b></td>
-            <td><a href='help:plot'>2D Plots</a> · <a href='help:surf'>3D Plots</a> · <a href='help:figure'>Figures</a></td>
-        </tr>
-        <tr>
-            <td><b>Signal:</b></td>
-            <td><a href='help:fft'>Transforms</a> · <a href='help:filter'>Filtering</a></td>
-        </tr>
-        <tr>
-            <td><b>Stats:</b></td>
-            <td><a href='help:mean'>Descriptive</a> · <a href='help:sort'>Sorting</a></td>
-        </tr>
-        <tr>
-            <td><b>I/O:</b></td>
-            <td><a href='help:fprintf'>File I/O</a> · <a href='help:disp'>Display</a></td>
-        </tr>
-        </table>
-
-        <hr>
-        <p style='color:#6c7086; font-size:11px;'>
-            Tip: Use <code>help funcname</code> in the command window,
-            or right-click a function name in the editor and select "Help".
-        </p>
-        """
+        c = self._get_html_colors()
+        title_c = c["info"]
+        cat_c = c["warning"]
+        fg_c = c["fg0"]
+        dim_c = c["fg3"]
+        html = (
+            f"<h2 style='color:{title_c};'>Forge Documentation</h2>"
+            f"<p style='color:{fg_c};'>Type a function name above and press Enter, or browse by category:</p>"
+            f"<h3 style='color:{cat_c};'>Categories</h3>"
+            "<table cellpadding='4' cellspacing='0' width='100%'>"
+            "<tr><td><b>Math:</b></td>"
+            "<td><a href='help:sin'>Trigonometry</a> &middot; <a href='help:abs'>Elementary</a> &middot; <a href='help:beta'>Special</a></td></tr>"
+            "<tr><td><b>Matrix:</b></td>"
+            "<td><a href='help:zeros'>Construction</a> &middot; <a href='help:size'>Information</a> &middot; <a href='help:eig'>Linear Algebra</a></td></tr>"
+            "<tr><td><b>Strings:</b></td>"
+            "<td><a href='help:strcmp'>Comparison</a> &middot; <a href='help:sprintf'>Formatting</a></td></tr>"
+            "<tr><td><b>Plotting:</b></td>"
+            "<td><a href='help:plot'>2D Plots</a> &middot; <a href='help:surf'>3D Plots</a> &middot; <a href='help:figure'>Figures</a></td></tr>"
+            "<tr><td><b>Signal:</b></td>"
+            "<td><a href='help:fft'>Transforms</a> &middot; <a href='help:filter'>Filtering</a></td></tr>"
+            "<tr><td><b>Stats:</b></td>"
+            "<td><a href='help:mean'>Descriptive</a> &middot; <a href='help:sort'>Sorting</a></td></tr>"
+            "<tr><td><b>I/O:</b></td>"
+            "<td><a href='help:fprintf'>File I/O</a> &middot; <a href='help:disp'>Display</a></td></tr>"
+            "</table>"
+            "<hr>"
+            f"<p style='color:{dim_c}; font-size:11px;'>"
+            "Tip: Use <code>help funcname</code> in the command window, "
+            "or right-click a function name in the editor and select 'Help'.</p>"
+        )
         self.browser.setHtml(html)
 
     def _update_completer(self):
@@ -211,8 +227,19 @@ class HelpViewerWidget(QWidget):
 
     def _show_help_no_history(self, func_name: str):
         """Display help without modifying history."""
+        c = self._get_html_colors()
+        err_c = c["error"]
+        info_c = c["info"]
+        success_c = c["success"]
+        bg3_c = c["bg3"]
+        bg0_c = c["bg0"]
+        fg0_c = c["fg0"]
+        fg3_c = c["fg3"]
+        border_c = c["border1"]
+        warn_c = c["warning"]
+
         if not self.session or not hasattr(self.session, '_engine'):
-            self.browser.setHtml("<p style='color:#f38ba8;'>No session available.</p>")
+            self.browser.setHtml(f"<p style='color:{err_c};'>No session available.</p>")
             return
 
         funcs = self.session._engine.functions
@@ -223,7 +250,7 @@ class HelpViewerWidget(QWidget):
             else:
                 similar = [k for k in sorted(funcs.keys())
                            if func_name.lower() in k.lower()][:20]
-                html = f"<h3 style='color:#f38ba8;'>Function \'{func_name}\' not found</h3>"
+                html = f"<h3 style='color:{err_c};'>Function '{func_name}' not found</h3>"
                 if similar:
                     html += "<p>Did you mean:</p><ul>"
                     for s in similar:
@@ -245,43 +272,41 @@ class HelpViewerWidget(QWidget):
         see_also_html = ""
         if see_also:
             links = ", ".join(f"<a href='help:{s}'>{s}</a>" for s in see_also)
-            see_also_html = f"""
-            <div style='margin-top:12px; padding:8px; background:#1e1e2e; border-radius:4px;'>
-                <b style='color:#cba6f7;'>See also:</b> {links}
-            </div>
-            """
+            see_also_html = (
+                f"<div style='margin-top:12px; padding:8px; background:{bg0_c}; border-radius:4px;'>"
+                f"<b style='color:{warn_c};'>See also:</b> {links}"
+                "</div>"
+            )
 
-        html = f"""
-        <h2 style='color:#89b4fa;'>{func_name}</h2>
-        <div style='margin:4px 0;'>
-            <span style='background:#313244; color:#a6e3a1; padding:2px 8px;
-                         border-radius:4px; font-size:11px;'>
-                {type(func).__name__}
-            </span>
-        </div>
-        <pre style='background:#313244; padding:12px; border-radius:6px;
-                    color:#cdd6f4; font-family:Consolas; margin-top:8px;
-                    white-space:pre-wrap; line-height:1.4;'>{doc_html}</pre>
-        {see_also_html}
-        <hr style='border-color:#45475a;'>
-        <p style='color:#6c7086; font-size:10px;'>
-            Module: forge.engine.builtins
-        </p>
-        """
+        html = (
+            f"<h2 style='color:{info_c};'>{func_name}</h2>"
+            "<div style='margin:4px 0;'>"
+            f"<span style='background:{bg3_c}; color:{success_c}; padding:2px 8px; "
+            "border-radius:4px; font-size:11px;'>"
+            f"{type(func).__name__}</span></div>"
+            f"<pre style='background:{bg3_c}; padding:12px; border-radius:6px; "
+            f"color:{fg0_c}; font-family:Consolas; margin-top:8px; "
+            f"white-space:pre-wrap; line-height:1.4;'>{doc_html}</pre>"
+            f"{see_also_html}"
+            f"<hr style='border-color:{border_c};'>"
+            f"<p style='color:{fg3_c}; font-size:10px;'>Module: forge.engine.builtins</p>"
+        )
         self.browser.setHtml(html)
 
     def _linkify_doc(self, doc_text, funcs):
         """Convert function names in docstring to clickable links."""
-        import html
-        safe = html.escape(doc_text)
-        # Find function-like words and link them
+        import html as html_mod
+        c = self._get_html_colors()
+        info_c = c["info"]
+        safe = html_mod.escape(doc_text)
         words = set(re.findall(r'\b([a-zA-Z_]\w*)\b', safe))
         for word in words:
             if word in funcs and len(word) > 2:
+                link = f"<a href='help:{word}' style='color:{info_c};'>{word}</a>"
                 safe = re.sub(
                     rf'\b({re.escape(word)})\b',
-                    f"<a href='help:{word}' style='color:#89b4fa;'>{word}</a>",
+                    link,
                     safe,
-                    count=3  # Limit replacements to avoid noise
+                    count=3,
                 )
         return safe

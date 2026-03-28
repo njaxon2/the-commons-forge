@@ -64,54 +64,94 @@ SHORTCUT_DATA = {
 
 # -- Stylesheet fragments ---------------------------------------------
 
-_OVERLAY_BG = "rgba(20, 20, 36, 225)"        # semi-transparent dark
-_CARD_BG    = "#1e1e2e"
-_ACCENT     = "#00BCD4"
-_TEXT        = "#cdd6f4"
-_DIM_TEXT   = "#a6adc8"
-_KEY_BG     = "#2a2a3e"
-_KEY_BORDER = "#45475a"
-_TITLE_CLR  = "#00BCD4"
+def _get_overlay_colors():
+    """Get overlay colors based on current theme."""
+    try:
+        from forge.gui.theme_utils import is_light_theme
+        if is_light_theme():
+            return {
+                "overlay_bg": "rgba(240, 242, 248, 230)",
+                "card_bg": "#ffffff",
+                "accent": "#00897B",
+                "text": "#1e1e2e",
+                "dim_text": "#6c6f85",
+                "key_bg": "#eef0f5",
+                "key_border": "#bcc0cc",
+                "title_clr": "#00897B",
+                "card_border": "#dce0e8",
+                "scrollbar_bg": "#eef0f5",
+                "scrollbar_handle": "#bcc0cc",
+            }
+    except Exception:
+        pass
+    return {
+        "overlay_bg": "rgba(20, 20, 36, 225)",
+        "card_bg": "#1e1e2e",
+        "accent": "#00BCD4",
+        "text": "#cdd6f4",
+        "dim_text": "#a6adc8",
+        "key_bg": "#2a2a3e",
+        "key_border": "#45475a",
+        "title_clr": "#00BCD4",
+        "card_border": "#313244",
+        "scrollbar_bg": "#1e1e2e",
+        "scrollbar_handle": "#45475a",
+    }
+
+# Legacy aliases (used by _overlay_qss / _key_badge_qss at import time — refreshed in __init__)
+_c = _get_overlay_colors()
+_OVERLAY_BG = _c["overlay_bg"]
+_CARD_BG    = _c["card_bg"]
+_ACCENT     = _c["accent"]
+_TEXT        = _c["text"]
+_DIM_TEXT   = _c["dim_text"]
+_KEY_BG     = _c["key_bg"]
+_KEY_BORDER = _c["key_border"]
+_TITLE_CLR  = _c["title_clr"]
 
 
-def _overlay_qss():
+def _overlay_qss(c=None):
+    if c is None:
+        c = _get_overlay_colors()
     return f"""
     ShortcutsOverlay {{
-        background-color: {_OVERLAY_BG};
+        background-color: {c['overlay_bg']};
     }}
     #shortcuts-card {{
-        background-color: {_CARD_BG};
+        background-color: {c['card_bg']};
         border-radius: 12px;
-        border: 1px solid #313244;
+        border: 1px solid {c['card_border']};
     }}
     #category-title {{
-        color: {_TITLE_CLR};
+        color: {c['title_clr']};
         font-weight: bold;
         font-size: 13px;
         padding: 2px 0;
     }}
     #shortcut-desc {{
-        color: {_TEXT};
+        color: {c['text']};
         font-size: 12px;
     }}
     #overlay-title {{
-        color: {_TEXT};
+        color: {c['text']};
         font-size: 18px;
         font-weight: bold;
     }}
     #overlay-hint {{
-        color: {_DIM_TEXT};
+        color: {c['dim_text']};
         font-size: 11px;
     }}
     """
 
 
-def _key_badge_qss():
+def _key_badge_qss(c=None):
     """QSS for a single key badge label."""
+    if c is None:
+        c = _get_overlay_colors()
     return (
-        f"background-color: {_KEY_BG};"
-        f"color: {_ACCENT};"
-        f"border: 1px solid {_KEY_BORDER};"
+        f"background-color: {c['key_bg']};"
+        f"color: {c['accent']};"
+        f"border: 1px solid {c['key_border']};"
         "border-radius: 4px;"
         "padding: 2px 6px;"
         "font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;"
@@ -131,7 +171,9 @@ class ShortcutsOverlay(QDialog):
             Qt.FramelessWindowHint | Qt.Dialog
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet(_overlay_qss())
+        self._colors = _get_overlay_colors()
+        c = self._colors
+        self.setStyleSheet(_overlay_qss(c))
 
         # Fill the parent window
         if parent is not None:
@@ -142,13 +184,14 @@ class ShortcutsOverlay(QDialog):
     # -- UI construction -----------------------------------------------
 
     def _build_ui(self):
+        c = self._colors
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
         # Translucent click-catcher fills the whole overlay
         bg = QWidget(self)
         bg.setObjectName("shortcuts-bg")
-        bg.setStyleSheet(f"background-color: {_OVERLAY_BG};")
+        bg.setStyleSheet(f"background-color: {c['overlay_bg']};")
         outer.addWidget(bg)
 
         bg_layout = QVBoxLayout(bg)
@@ -171,8 +214,8 @@ class ShortcutsOverlay(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }"
-                             "QScrollBar:vertical { background: #1e1e2e; width: 8px; }"
-                             "QScrollBar::handle:vertical { background: #45475a; border-radius: 4px; }"
+                             f"QScrollBar:vertical {{ background: {c['card_bg']}; width: 8px; }}"
+                             f"QScrollBar::handle:vertical {{ background: {c['key_border']}; border-radius: 4px; }}"
                              "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
 
         card = QWidget()
@@ -207,6 +250,7 @@ class ShortcutsOverlay(QDialog):
         bg_layout.addWidget(scroll)
 
     def _make_category(self, name, shortcuts):
+        c = self._colors
         """Build a single category block with title + shortcut grid."""
         frame = QWidget()
         layout = QVBoxLayout(frame)
@@ -220,7 +264,7 @@ class ShortcutsOverlay(QDialog):
         # Horizontal separator
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color: #313244;")
+        sep.setStyleSheet(f"color: {c['card_border']};")
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
@@ -237,12 +281,12 @@ class ShortcutsOverlay(QDialog):
             parts = key.split("+")
             for i, part in enumerate(parts):
                 badge = QLabel(part.strip())
-                badge.setStyleSheet(_key_badge_qss())
+                badge.setStyleSheet(_key_badge_qss(c))
                 badge.setFixedHeight(22)
                 key_container.addWidget(badge)
                 if i < len(parts) - 1:
                     plus = QLabel("+")
-                    plus.setStyleSheet(f"color: {_DIM_TEXT}; font-size: 11px;")
+                    plus.setStyleSheet(f"color: {c['dim_text']}; font-size: 11px;")
                     key_container.addWidget(plus)
             key_container.addStretch()
 
