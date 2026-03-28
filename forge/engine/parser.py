@@ -322,6 +322,8 @@ class Parser:
                 return self._parse_if()
             elif kw == 'for':
                 return self._parse_for()
+            elif kw == 'parfor':
+                return self._parse_for()  # parfor = serial for without parallel toolbox
             elif kw == 'while':
                 return self._parse_while()
             elif kw == 'do':
@@ -899,7 +901,7 @@ class Parser:
         return IfStatement(cond, body, elseifs, else_body)
 
     def _parse_for(self) -> ForStatement:
-        self._expect(TokenType.KEYWORD, 'for')
+        tok = self._advance()  # consume 'for' or 'parfor'
         var = self._expect(TokenType.IDENT).value
         self._expect(TokenType.ASSIGN)
         iter_expr = self._parse_expression(0)
