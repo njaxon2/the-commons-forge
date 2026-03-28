@@ -116,28 +116,28 @@ def gui_exec(fw, command):
     qapp = QApplication.instance()
 
     cw = window.command_widget
-    output_before = cw.output_display.toPlainText()
+    output_before = cw.console.toPlainText()
 
     # Type the command visibly
-    cw.input_line.setText(command)
+    # (input via _execute below)
     qapp.processEvents()
     if _DELAY:
         time.sleep(_DELAY * 0.5)  # Brief pause so observer sees the typed text
 
     # Press Enter
-    cw.input_line.returnPressed.emit()
+    cw._execute(command)
     qapp.processEvents()
     if _DELAY:
         time.sleep(_DELAY)  # Pause so observer sees the result
 
     # Extract new output
-    output_after = cw.output_display.toPlainText()
+    output_after = cw.console.toPlainText()
     new_output = output_after[len(output_before):].strip()
 
     # Strip the echo line (>> command) to get just the result
     lines = new_output.split("\n")
     result_lines = [l for l in lines
-                    if not l.startswith(">> ")
+                    if not l.startswith(">> ") and l.strip() != ">>"
                     and not l.startswith(".. ")
                     and not l.startswith("─")]
     return "\n".join(result_lines).strip()
