@@ -1798,6 +1798,68 @@ class Session:
             else:
                 vals, vecs = np.linalg.eig(x)
             return (ForgeArray(vecs), ForgeArray(np.diag(vals)))
+        if name == 'svd':
+            x = _unwrap(args[0])
+            U, s, Vt = np.linalg.svd(x, full_matrices=True)
+            m, n = x.shape
+            S = np.zeros((m, n))
+            for i in range(min(m, n)):
+                S[i, i] = s[i]
+            if nargout >= 3:
+                return (ForgeArray(U), ForgeArray(S), ForgeArray(Vt.T))
+            if nargout == 2:
+                return (ForgeArray(U), ForgeArray(S))
+            return ForgeArray(s)
+        if name == 'lu':
+            x = _unwrap(args[0])
+            from scipy.linalg import lu as scipy_lu
+            P, L, U = scipy_lu(x)
+            if nargout >= 3:
+                return (ForgeArray(L), ForgeArray(U), ForgeArray(P))
+            return (ForgeArray(L), ForgeArray(U))
+        if name == 'qr':
+            x = _unwrap(args[0])
+            Q, R = np.linalg.qr(x)
+            return (ForgeArray(Q), ForgeArray(R))
+        if name == 'chol':
+            x = _unwrap(args[0])
+            R = np.linalg.cholesky(x).T  # Octave returns upper triangular
+            if nargout >= 2:
+                # [R, p] = chol(A) returns 0 if successful
+                return (ForgeArray(R), ForgeArray(np.array(0.0)))
+            return ForgeArray(R)
+        if name == 'unique':
+            x = _unwrap(args[0]).ravel()
+            vals, i_first, i_inverse = np.unique(x, return_index=True, return_inverse=True)
+            if nargout >= 3:
+                return (ForgeArray(vals), ForgeArray((i_first + 1).astype(float)), ForgeArray((i_inverse + 1).astype(float)))
+            if nargout == 2:
+                return (ForgeArray(vals), ForgeArray((i_first + 1).astype(float)))
+            return ForgeArray(vals)
+        if name == 'meshgrid':
+            if len(args) >= 2:
+                X, Y = np.meshgrid(_unwrap(args[0]).ravel(), _unwrap(args[1]).ravel())
+                if nargout >= 3 and len(args) >= 3:
+                    X, Y, Z = np.meshgrid(_unwrap(args[0]).ravel(), _unwrap(args[1]).ravel(), _unwrap(args[2]).ravel())
+                    return (ForgeArray(X), ForgeArray(Y), ForgeArray(Z))
+                return (ForgeArray(X), ForgeArray(Y))
+            return None
+        if name == 'fileparts':
+            import os
+            fname = args[0].to_str() if isinstance(args[0], ForgeChar) else str(args[0])
+            d = os.path.dirname(fname)
+            base = os.path.basename(fname)
+            name_only, ext = os.path.splitext(base)
+            return (ForgeChar(d), ForgeChar(name_only), ForgeChar(ext))
+        # Generic: if function returns a tuple, use it directly
+        if name in self.functions:
+            func = self.functions[name]
+            if isinstance(func, FunctionDef):
+                return self._call_function(func, args, ws, nargout=nargout)
+            if callable(func):
+                result = func(*args)
+                if isinstance(result, tuple):
+                    return result
         return None
 
 
