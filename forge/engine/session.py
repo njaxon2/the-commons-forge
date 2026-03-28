@@ -446,21 +446,43 @@ class ForgeSession:
             return ForgeArray(np.float64(-1))
 
         def forge_fprintf_file(fid, fmt, *args):
-            """fprintf to file handle."""
+            """fprintf to file handle with Octave vectorization."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
             import numpy as np
             fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
             if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
             fmt = str(fmt)
-            # Convert args
-            py_args = []
+            # Convert args with vectorization support
+            max_len = 1
+            expanded = []
             for a in args:
-                if isinstance(a, ForgeChar): py_args.append(a.to_str())
-                elif isinstance(a, ForgeArray): py_args.append(a.data.flat[0])
-                else: py_args.append(a)
+                if isinstance(a, ForgeChar):
+                    expanded.append([a.to_str()])
+                elif isinstance(a, ForgeArray) and a.data.size > 1:
+                    elems = []
+                    for v in a.data.flat:
+                        if isinstance(v, (np.floating, float)):
+                            elems.append(float(v))
+                        else:
+                            elems.append(int(v))
+                    expanded.append(elems)
+                    max_len = max(max_len, len(elems))
+                elif isinstance(a, ForgeArray):
+                    v = a.data.flat[0]
+                    expanded.append([float(v) if isinstance(v, (np.floating, float)) else int(v)])
+                else:
+                    expanded.append([a])
             try:
-                text = fmt % tuple(py_args) if py_args else fmt
+                if max_len > 1:
+                    parts = []
+                    for i in range(max_len):
+                        vals = [e[i % len(e)] for e in expanded]
+                        parts.append(fmt % tuple(vals))
+                    text = "".join(parts)
+                else:
+                    py_args = [e[0] for e in expanded]
+                    text = fmt % tuple(py_args) if py_args else fmt
             except:
                 text = fmt
             if fid_val == 1:
