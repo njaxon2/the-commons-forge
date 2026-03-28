@@ -424,6 +424,23 @@ class Session:
             fn = getattr(np, name)
             b[name] = lambda *a, f=fn: ForgeArray(f(_unwrap(a[0])))
 
+        # Add docstrings to math functions
+        _docs = {'abs': 'Absolute value. Usage: abs(X)', 'sqrt': 'Square root. Usage: sqrt(X)',
+            'exp': 'Exponential (e^X). Usage: exp(X)', 'log': 'Natural logarithm. Usage: log(X)',
+            'log2': 'Base-2 logarithm. Usage: log2(X)', 'log10': 'Base-10 logarithm. Usage: log10(X)',
+            'sin': 'Sine (radians). See also: cos, tan, asin', 'cos': 'Cosine (radians). See also: sin, tan, acos',
+            'tan': 'Tangent (radians). See also: sin, cos, atan', 'asin': 'Inverse sine (radians).',
+            'acos': 'Inverse cosine (radians).', 'atan': 'Inverse tangent (radians).',
+            'sinh': 'Hyperbolic sine.', 'cosh': 'Hyperbolic cosine.', 'tanh': 'Hyperbolic tangent.',
+            'ceil': 'Round toward +infinity.', 'floor': 'Round toward -infinity.',
+            'round': 'Round to nearest integer.', 'fix': 'Round toward zero.',
+            'sign': 'Signum function (-1, 0, or 1).', 'real': 'Real part of complex number.',
+            'imag': 'Imaginary part of complex number.', 'conj': 'Complex conjugate.',
+            'angle': 'Phase angle (radians).'}
+        for _n, _d in _docs.items():
+            if _n in b:
+                b[_n].__doc__ = _d
+
         b["mod"] = lambda a, m: ForgeArray(np.mod(_unwrap(a), _unwrap(m)))
         b["rem"] = lambda a, m: ForgeArray(np.remainder(_unwrap(a), _unwrap(m)))
         b["atan2"] = lambda y, x: ForgeArray(np.arctan2(_unwrap(y), _unwrap(x)))
@@ -474,6 +491,78 @@ class Session:
         b["warning"] = self._builtin_warning
         b["assert"] = self._builtin_assert
         b["clc"] = lambda: None  # Clear command window (no-op in engine)
+
+        # Propagate docstrings for common lambda-wrapped functions
+        _fn_docs = {
+            'linspace': 'Linearly-spaced vector. Usage: linspace(a, b) or linspace(a, b, n)',
+            'logspace': 'Logarithmically-spaced vector. Usage: logspace(a, b, n)',
+            'zeros': 'Create array of zeros. Usage: zeros(n) or zeros(m, n)',
+            'ones': 'Create array of ones. Usage: ones(n) or ones(m, n)',
+            'eye': 'Identity matrix. Usage: eye(n) or eye(m, n)',
+            'rand': 'Uniform random numbers in [0,1). Usage: rand(n) or rand(m, n)',
+            'randn': 'Standard normal random numbers. Usage: randn(n) or randn(m, n)',
+            'diag': 'Create diagonal matrix or extract diagonal. Usage: diag(v) or diag(A, k)',
+            'det': 'Matrix determinant. Usage: det(A)',
+            'inv': 'Matrix inverse. Usage: inv(A)',
+            'eig': 'Eigenvalues and eigenvectors. Usage: [V, D] = eig(A)',
+            'svd': 'Singular value decomposition. Usage: [U, S, V] = svd(A)',
+            'lu': 'LU decomposition. Usage: [L, U, P] = lu(A)',
+            'qr': 'QR decomposition. Usage: [Q, R] = qr(A)',
+            'chol': 'Cholesky factorization. Usage: R = chol(A)',
+            'norm': 'Vector or matrix norm. Usage: norm(X) or norm(X, p)',
+            'pinv': 'Pseudoinverse. Usage: pinv(A)',
+            'kron': 'Kronecker tensor product. Usage: kron(A, B)',
+            'cross': 'Cross product. Usage: cross(a, b)',
+            'dot': 'Dot product. Usage: dot(a, b)',
+            'sort': 'Sort elements. Usage: sort(X) or [Y, I] = sort(X)',
+            'find': 'Find nonzero elements. Usage: I = find(X)',
+            'max': 'Maximum value. Usage: max(X) or max(a, b)',
+            'min': 'Minimum value. Usage: min(X) or min(a, b)',
+            'sum': 'Sum of elements. Usage: sum(X) or sum(X, dim)',
+            'prod': 'Product of elements. Usage: prod(X)',
+            'cumsum': 'Cumulative sum. Usage: cumsum(X)',
+            'cumprod': 'Cumulative product. Usage: cumprod(X)',
+            'diff': 'Differences between adjacent elements. Usage: diff(X) or diff(X, n)',
+            'reshape': 'Reshape array. Usage: reshape(A, m, n)',
+            'repmat': 'Replicate and tile. Usage: repmat(A, m, n)',
+            'cat': 'Concatenate arrays. Usage: cat(dim, A1, A2)',
+            'horzcat': 'Horizontal concatenation. Usage: horzcat(A, B)',
+            'vertcat': 'Vertical concatenation. Usage: vertcat(A, B)',
+            'fft': 'Fast Fourier transform. Usage: fft(X) or fft(X, n)',
+            'ifft': 'Inverse FFT. Usage: ifft(X)',
+            'plot': '2-D line plot. Usage: plot(Y) or plot(X, Y) or plot(X, Y, fmt)',
+            'figure': 'Create or select figure window. Usage: figure or figure(n)',
+            'disp': 'Display value of expression. Usage: disp(X)',
+            'fprintf': 'Write formatted data. Usage: fprintf(fmt, ...) or fprintf(fid, fmt, ...)',
+            'sprintf': 'Format data into string. Usage: sprintf(fmt, ...)',
+            'strcmp': 'Compare strings. Usage: strcmp(s1, s2). Returns 1 if equal.',
+            'strcmpi': 'Case-insensitive string compare. Usage: strcmpi(s1, s2)',
+            'size': 'Array dimensions. Usage: size(A) or [m, n] = size(A)',
+            'length': 'Length of largest dimension. Usage: length(X)',
+            'numel': 'Number of elements. Usage: numel(X)',
+            'transpose': 'Matrix transpose. Usage: transpose(A) or A.\' ',
+            'mod': 'Modulus after division. Usage: mod(a, m)',
+            'rem': 'Remainder after division. Usage: rem(a, b)',
+            'atan2': 'Four-quadrant inverse tangent. Usage: atan2(y, x)',
+            'hypot': 'Hypotenuse. Usage: hypot(x, y) = sqrt(x^2+y^2)',
+            'any': 'True if any element is nonzero. Usage: any(X)',
+            'all': 'True if all elements are nonzero. Usage: all(X)',
+            'isnan': 'Test for NaN. Usage: isnan(X)',
+            'isinf': 'Test for Inf. Usage: isinf(X)',
+            'isfinite': 'Test for finite values. Usage: isfinite(X)',
+            'isempty': 'Test if array is empty. Usage: isempty(X)',
+            'isnumeric': 'Test if numeric. Usage: isnumeric(X)',
+            'islogical': 'Test if logical. Usage: islogical(X)',
+            'ischar': 'Test if character array. Usage: ischar(X)',
+            'class': 'Class of object. Usage: class(X)',
+            'typecast': 'Convert without changing bits. Usage: typecast(X, type)',
+        }
+        for _fn_name, _fn_doc in _fn_docs.items():
+            if _fn_name in b and not getattr(b[_fn_name], '__doc__', None):
+                try:
+                    b[_fn_name].__doc__ = _fn_doc
+                except AttributeError:
+                    pass
 
         def _help_func(*args):
             if not args:

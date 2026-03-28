@@ -10,6 +10,8 @@ Menu bar: File, Edit, View (theme/docks), Debug, Window, Help
 """
 
 import json
+import warnings
+warnings.filterwarnings("ignore", message="Failed to disconnect", category=RuntimeWarning)
 from pathlib import Path
 import os
 
@@ -534,7 +536,7 @@ class ForgeMainWindow(QMainWindow):
             if editor:
                 try:
                     editor.cursorPositionChanged.disconnect(self._update_cursor_status)
-                except (TypeError, RuntimeError):
+                except (TypeError, RuntimeError, RuntimeWarning):
                     pass
                 editor.cursorPositionChanged.connect(self._update_cursor_status)
                 self._update_cursor_status()
@@ -624,6 +626,12 @@ class ForgeMainWindow(QMainWindow):
         self.act_cut = QAction("Cu&t", self, shortcut=QKeySequence.Cut)
         self.act_copy = QAction("&Copy", self, shortcut=QKeySequence.Copy)
         self.act_paste = QAction("&Paste", self, shortcut=QKeySequence.Paste)
+        # Connect edit actions to active editor
+        self.act_undo.triggered.connect(lambda: self._editor_action('undo'))
+        self.act_redo.triggered.connect(lambda: self._editor_action('redo'))
+        self.act_cut.triggered.connect(lambda: self._editor_action('cut'))
+        self.act_copy.triggered.connect(lambda: self._editor_action('copy'))
+        self.act_paste.triggered.connect(lambda: self._editor_action('paste'))
         self.act_close_tab = QAction("Close Tab", self, shortcut="Ctrl+W")
         self.act_close_tab.triggered.connect(lambda: self.editor_widget._close_tab(self.editor_widget.tabs.currentIndex()))
         self.addAction(self.act_close_tab)
@@ -649,6 +657,7 @@ class ForgeMainWindow(QMainWindow):
         self.act_run_selection = QAction("Run &Selection", self, shortcut="F9")
         self.act_run_selection.triggered.connect(self._run_selection)
         self.act_stop = QAction("&Stop", self, shortcut="Shift+F5")
+        self.act_stop.triggered.connect(self._on_stop)
         
         self.act_step = QAction("Step &Over", self, shortcut="F10")
         self.act_step.setEnabled(False)
@@ -1539,41 +1548,6 @@ class ForgeMainWindow(QMainWindow):
     # Toast notification
     # ------------------------------------------------------------------
 
-    def _show_toast(self, message: str, duration_ms: int = 2000):
-        # Log to notification center
-        if hasattr(self, "_notification_center"):
-            _nc_msg = str(message) if message is not None else ""
-            _nc_level = "info"
-            if "error" in _nc_msg.lower():
-                _nc_level = "error"
-            elif "warn" in _nc_msg.lower():
-                _nc_level = "warning"
-            self._log_notification(_nc_msg, level=_nc_level)
-
-        """Show a brief overlay message near the bottom of the window."""
-        toast = QLabel(message, self)
-        toast.setStyleSheet(
-            "background-color: #323232; color: white; padding: 8px 16px;"
-            "border-radius: 4px; font-size: 13px;"
-        )
-        toast.setAlignment(Qt.AlignCenter)
-        toast.adjustSize()
-        toast.move(
-            (self.width() - toast.width()) // 2,
-            self.height() - toast.height() - 40,
-        )
-        toast.show()
-        QTimer.singleShot(duration_ms, toast.deleteLater)
-
-    # ------------------------------------------------------------------
-    # Command palette
-    # ------------------------------------------------------------------
-
-    def _show_command_palette(self):
-        """Open a simple command palette dialog."""
-        dlg = _CommandPaletteDialog(self)
-        dlg.exec()
-
     def _reset_layout(self):
         """Clear saved state and reset docks."""
         s = self._settings()
@@ -1626,11 +1600,22 @@ class ForgeMainWindow(QMainWindow):
         self.help_widget.show_help(func_name)
 
     def _show_search_in_files(self):
-        """Show and focus the Search in Files panel."""
-        if hasattr(self, '_bottom_tabs') and hasattr(self, '_search_panel'):
-            self._bottom_tabs.setCurrentWidget(self._search_panel)
-            self._search_panel._search_input.setFocus()
-            self._search_panel._search_input.selectAll()
+        """Show Search in Files dialog."""
+        # Use the editor's find/replace as fallback
+        editor = self.editor_widget.get_current_editor()
+        if editor and hasattr(editor, 'find_replace') and editor.find_replace:
+            editor.find_replace.show()
+            editor.find_replace.activateWindow()
+            editor.find_replace.raise_()
+        else:
+            self._on_find()
+
+    def _on_stop(self):
+        """Stop any running execution."""
+        if hasattr(self, 'command_widget') and self.command_widget:
+            if hasattr(self.command_widget, '_hide_running_indicator'):
+                self.command_widget._hide_running_indicator()
+        self._show_toast("Execution stopped", level="warning")
 
     def _update_outline(self, _=None):
         """Update the outline panel for the current editor."""

@@ -63,10 +63,17 @@ class TerminalWidget(QWidget):
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 self._execute_current_line()
                 return True
+            # History navigation
+            if event.key() == Qt.Key_Up:
+                self._history_navigate(-1)
+                return True
+            if event.key() == Qt.Key_Down:
+                self._history_navigate(1)
+                return True
             # Prevent editing before prompt
             cursor = self._console.textCursor()
             if cursor.position() < getattr(self, '_prompt_pos', 0):
-                if event.key() not in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+                if event.key() not in (Qt.Key_Left, Qt.Key_Right):
                     return True
         return super().eventFilter(obj, event)
 
@@ -77,6 +84,40 @@ class TerminalWidget(QWidget):
     def _get_prompt_color(self):
         from forge.gui.theme_utils import detect_palette
         return detect_palette().get("info", "#89b4fa")
+
+    def _history_navigate(self, direction):
+        """Navigate command history. direction: -1=older, 1=newer."""
+        if not self._history:
+            return
+        if direction == -1:  # Up - older
+            if self._history_idx == -1:
+                self._history_idx = len(self._history) - 1
+            elif self._history_idx > 0:
+                self._history_idx -= 1
+            else:
+                return
+        else:  # Down - newer
+            if self._history_idx == -1:
+                return
+            if self._history_idx < len(self._history) - 1:
+                self._history_idx += 1
+            else:
+                self._history_idx = -1
+                self._replace_current_input("")
+                return
+        self._replace_current_input(self._history[self._history_idx])
+
+    def _replace_current_input(self, text):
+        """Replace current input line with text."""
+        if not hasattr(self, '_prompt_pos'):
+            return
+        cursor = self._console.textCursor()
+        cursor.setPosition(self._prompt_pos)
+        cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(self._get_fg()))
+        cursor.insertText(text, fmt)
+        self._console.setTextCursor(cursor)
 
     def _write_prompt(self):
         cursor = self._console.textCursor()
@@ -94,6 +135,7 @@ class TerminalWidget(QWidget):
 
     def _execute_current_line(self):
         # Get text after prompt
+        self._history_idx = -1
         text = self._console.toPlainText()
         if not hasattr(self, '_prompt_pos'):
             return

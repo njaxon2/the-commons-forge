@@ -7,8 +7,13 @@ Right-click context menu allows adding/removing folders from the path.
 
 import os
 
-from PySide6.QtCore import QFileInfo, Qt, Signal, QDir, QModelIndex, QSortFilterProxyModel, QMimeData, QUrl
-from PySide6.QtGui import QAction, QColor, QBrush, QKeySequence, QIcon, QDrag, QShortcut
+from PySide6.QtCore import QFileInfo, Qt, Signal, QDir, QModelIndex, QSortFilterProxyModel, QMimeData, QUrl, QByteArray
+from PySide6.QtGui import QAction, QColor, QBrush, QKeySequence, QIcon, QDrag, QShortcut, QPixmap, QPainter
+try:
+    from PySide6.QtSvg import QSvgRenderer
+    _HAS_SVG = True
+except ImportError:
+    _HAS_SVG = False
 from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTreeView,
@@ -232,7 +237,9 @@ class FileBrowserWidget(QWidget):
         self.model = self.fs_model  # alias for context menu code
         self.fs_model.setFilter(QDir.AllDirs | QDir.Files | QDir.NoDotAndDotDot)
 
-        self._proxy = None  # proxy disabled for stability
+        self._proxy = GlobFilterProxyModel(self)
+        self._proxy.setSourceModel(self.fs_model)
+        self._proxy.setDynamicSortFilter(True)
 
         self.tree = QTreeView(self)
         self.tree.setDragEnabled(True)
@@ -276,8 +283,11 @@ class FileBrowserWidget(QWidget):
         self._shortcut_fwd.activated.connect(self._go_forward)
 
     def _on_filter_glob_changed(self, text):
-        if hasattr(self, '_proxy'):
-            self._proxy.invalidateFilter()
+        if text:
+            self.fs_model.setNameFilters([f"*{text}*"])
+            self.fs_model.setNameFilterDisables(False)
+        else:
+            self.fs_model.setNameFilters([])
 
     def _on_filter_type_changed(self, label):
         if hasattr(self, '_proxy'):

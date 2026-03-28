@@ -663,10 +663,10 @@ class CodeEditor(QPlainTextEdit):
                     break
 
         # Draw fold indicators (▶/▼ in right margin)
-        if hasattr(self, '_fold_regions') and self._fold_regions:
+        if self._fold_indicators:
             fold_block = self.firstVisibleBlock()
             fold_top = int(self.blockBoundingGeometry(fold_block).translated(self.contentOffset()).top())
-            fold_starts = {r[0] for r in self._fold_regions}
+            fold_starts = set(self._fold_indicators.keys())
             while fold_block.isValid() and fold_top <= event.rect().bottom():
                 if fold_block.isVisible():
                     line_num = fold_block.blockNumber()
@@ -674,7 +674,7 @@ class CodeEditor(QPlainTextEdit):
                         fold_h = int(self.blockBoundingRect(fold_block).height())
                         fold_y = fold_top + (fold_h - 8) // 2
                         fold_x = self._line_area.width() - 14
-                        is_folded = hasattr(self, '_folded_lines') and line_num in self._folded_lines
+                        is_folded = line_num in self._folded_regions
                         painter.setPen(QPen(QColor("#6c7086"), 1))
                         if is_folded:
                             # Right-pointing triangle ▶
@@ -783,50 +783,6 @@ class CodeEditor(QPlainTextEdit):
 
         # Not found - show tooltip
         self.setToolTip(f"Cannot find definition of '{symbol}'")
-
-    def event(self, event):
-        """Handle tooltip events for function hover info."""
-        from PySide6.QtCore import QEvent
-        if event.type() == QEvent.ToolTip:
-            from PySide6.QtGui import QCursor
-            cursor = self.cursorForPosition(self.viewport().mapFromGlobal(QCursor.pos()))
-            cursor.select(QTextCursor.WordUnderCursor)
-            word = cursor.selectedText().strip()
-            if word and word.isidentifier() and len(word) >= 2:
-                tip = self._get_hover_info(word)
-                if tip:
-                    from PySide6.QtWidgets import QToolTip, QDialog
-                    QToolTip.showText(QCursor.pos(), tip, self)
-                    return True
-        return super().event(event)
-
-    def _get_hover_info(self, word):
-        """Get hover tooltip information for a function/variable."""
-        # Check if it's a known builtin
-        try:
-            main_win = self.parent()
-            while main_win and not hasattr(main_win, 'session'):
-                main_win = main_win.parent()
-            if main_win and hasattr(main_win, 'session') and main_win.session:
-                engine = main_win.session._engine
-                if hasattr(engine, 'functions') and word in engine.functions:
-                    func = engine.functions[word]
-                    doc = getattr(func, '__doc__', '') or ''
-                    first_line = doc.split('\n')[0].strip() if doc else 'Built-in function'
-                    return f"<b>{word}</b><br/>{first_line}"
-        except Exception:
-            pass
-
-        # Check in current file for function/variable definitions
-        import re
-        text = self.toPlainText()
-        for i, line in enumerate(text.split('\n')):
-            if re.match(rf'^\s*function\b.*\b{re.escape(word)}\s*\(', line):
-                return f"<b>{word}</b><br/>Defined at line {i+1}"
-            if re.match(rf'^\s*{re.escape(word)}\s*=', line):
-                return f"<b>{word}</b><br/>Assigned at line {i+1}"
-        return None
-
 
     def _lint_code(self):
         """Run basic lint checks on the current code."""
@@ -1011,9 +967,9 @@ class CodeEditor(QPlainTextEdit):
             menu.addSeparator()
 
         # Folding
-        if hasattr(self, '_fold_regions') and self._fold_regions:
+        if self._fold_indicators:
             line = self.textCursor().blockNumber()
-            for start, end in self._fold_regions:
+            for start, end in self._fold_indicators.items():
                 if line == start:
                     act_fold = menu.addAction("Fold Region")
                     act_fold.triggered.connect(lambda: self._toggle_fold(start))
@@ -1066,15 +1022,15 @@ class CodeEditor(QPlainTextEdit):
 
     def _fold_all(self):
         """Fold all foldable regions."""
-        if hasattr(self, '_fold_regions'):
-            for start, end in self._fold_regions:
-                self._fold_region(start, end)
+        if hasattr(self, '_fold_indicators'):
+            for start, end in self._fold_indicators.items():
+                self._toggle_fold(start)
 
     def _unfold_all(self):
         """Unfold all folded regions."""
-        if hasattr(self, '_folded_lines'):
-            for line in list(self._folded_lines):
-                self._unfold_region(line)
+        if hasattr(self, '_folded_regions'):
+            for line in list(self._folded_regions):
+                self._toggle_fold(line)
 
 
     def _on_cursor_moved(self):
@@ -1368,25 +1324,7 @@ class CodeEditor(QPlainTextEdit):
         selections.append(sel)
         return selections
 
-    def insertFromMimeData(self, source):
-        """Strip leading >> and .. prompts when pasting from command window."""
-        if source.hasText():
-            text = source.text()
-            lines = text.split('\n')
-            stripped = []
-            for line in lines:
-                line = re.sub(r'^\s*>>\s?', '', line)
-                line = re.sub(r'^\s*\.\.\s?', '', line)
-                stripped.append(line)
-            from PySide6.QtCore import QMimeData
-            new_source = QMimeData()
-            new_source.setText('\n'.join(stripped))
-            super().insertFromMimeData(new_source)
-        else:
-            super().insertFromMimeData(source)
-
-    # --- modification tracking & drag-drop -----------------------------
-
+    
     def _on_modification_changed(self, changed):
         self._is_modified = changed
         parent = self.parent()

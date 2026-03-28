@@ -245,12 +245,15 @@ def forge_tensorprod(A, B):
 
 # Core LA functions that should always be available
 def _forge_inv(A):
+    """Matrix inverse. Usage: inv(A)"""
     return ForgeArray(np.linalg.inv(_unwrap(A)))
 
 def _forge_det(A):
+    """Matrix determinant. Usage: det(A)"""
     return ForgeArray(np.array(np.linalg.det(_unwrap(A))))
 
 def _forge_norm(A, *args):
+    """Vector or matrix norm. Usage: norm(X) or norm(X, p)"""
     ord_val = None
     if args:
         a0 = args[0]
