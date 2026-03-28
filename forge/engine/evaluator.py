@@ -456,6 +456,8 @@ class Session:
         b["squeeze"] = lambda x: ForgeArray(np.squeeze(_unwrap(x)))
         b["permute"] = lambda x, order: ForgeArray(np.transpose(_unwrap(x), [int(_to_py(o))-1 for o in _unwrap(order).flatten()]))
         b["ndims"] = lambda x: ForgeArray(np.float64(max(2, _unwrap(x).ndim)))
+        b["rows"] = lambda x: ForgeArray(np.float64(_unwrap(x).shape[0] if _unwrap(x).ndim >= 1 else 1))
+        b["columns"] = lambda x: ForgeArray(np.float64(_unwrap(x).shape[1] if _unwrap(x).ndim >= 2 else 1))
         b["transpose"] = lambda x: x.T if isinstance(x, ForgeArray) else ForgeArray(np.asarray(x).T)
         b["ctranspose"] = lambda x: ForgeArray(np.conj(np.asarray(x.data if isinstance(x, ForgeArray) else x).T))
         b["sum"] = lambda x, *a: ForgeArray(np.sum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
