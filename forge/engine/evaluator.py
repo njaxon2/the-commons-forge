@@ -1524,7 +1524,13 @@ class Session:
                 new_struct._fields[target.field] = value
                 ws.set(target.target.name, new_struct)
                 return value
+            # Auto-create nested structs: s.a.b.c = val
+            if isinstance(target.target, FieldAccess):
+                self._ensure_nested_struct(target.target, ws)
             obj = self._eval_expr(target.target, ws)
+            if isinstance(obj, ForgeStruct):
+                obj._fields[target.field] = value
+                return value
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
             else:
@@ -1541,6 +1547,21 @@ class Session:
             return value
 
         raise RuntimeError(f"Cannot assign to {type(target).__name__}")
+
+    def _ensure_nested_struct(self, node, ws):
+        """Ensure intermediate structs exist for nested field assignment."""
+        if isinstance(node, FieldAccess):
+            if isinstance(node.target, Identifier):
+                if not ws.has(node.target.name):
+                    ws.set(node.target.name, ForgeStruct())
+                obj = ws.get(node.target.name)
+                if isinstance(obj, ForgeStruct) and node.field not in obj._fields:
+                    obj._fields[node.field] = ForgeStruct()
+            elif isinstance(node.target, FieldAccess):
+                self._ensure_nested_struct(node.target, ws)
+                parent = self._eval_expr(node.target, ws)
+                if isinstance(parent, ForgeStruct) and node.field not in parent._fields:
+                    parent._fields[node.field] = ForgeStruct()
 
     def _exec_if(self, node: IfStatement, ws: Workspace) -> Any:
         if _is_truthy(self._eval_expr(node.condition, ws)):
