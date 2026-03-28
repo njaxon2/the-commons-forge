@@ -32,7 +32,7 @@ def _tb(name: str | None = None):
 # Activation Functions
 # =====================================================================
 
-@_tb('forge_tansig')
+@_tb('tansig')
 def forge_tansig(n: Any) -> np.ndarray:
     """Hyperbolic tangent sigmoid transfer function.
 
@@ -58,7 +58,7 @@ def _tansig_deriv(a: np.ndarray) -> np.ndarray:
     return 1.0 - a ** 2
 
 
-@_tb('forge_logsig')
+@_tb('logsig')
 def forge_logsig(n: Any) -> np.ndarray:
     """Log-sigmoid transfer function.
 
@@ -86,7 +86,7 @@ def _logsig_deriv(a: np.ndarray) -> np.ndarray:
     return a * (1.0 - a)
 
 
-@_tb('forge_purelin')
+@_tb('purelin')
 def forge_purelin(n: Any) -> np.ndarray:
     """Linear transfer function.
 
@@ -110,7 +110,7 @@ def _purelin_deriv(a: np.ndarray) -> np.ndarray:
     return np.ones_like(a)
 
 
-@_tb('forge_softmax')
+@_tb('softmax')
 def forge_softmax(n: Any) -> np.ndarray:
     """Softmax transfer function.
 
@@ -132,7 +132,7 @@ def forge_softmax(n: Any) -> np.ndarray:
     return e / np.sum(e, axis=0, keepdims=True)
 
 
-@_tb('forge_relu')
+@_tb('relu')
 def forge_relu(n: Any) -> np.ndarray:
     """Rectified Linear Unit transfer function.
 
@@ -167,7 +167,7 @@ _ACTIVATIONS = {
 # Loss / Performance Functions
 # =====================================================================
 
-@_tb('forge_mse_metric')
+@_tb('mse_metric')
 def forge_mse_metric(targets: Any, outputs: Any) -> float:
     """Mean squared error performance metric.
 
@@ -188,7 +188,7 @@ def forge_mse_metric(targets: Any, outputs: Any) -> float:
     return float(np.mean((T - Y) ** 2))
 
 
-@_tb('forge_crossentropy')
+@_tb('crossentropy')
 def forge_crossentropy(targets: Any, outputs: Any) -> float:
     """Cross-entropy performance metric.
 
@@ -279,7 +279,7 @@ class ForgeNetwork:
 # Network Construction
 # =====================================================================
 
-@_tb('forge_feedforwardnet')
+@_tb('feedforwardnet')
 def forge_feedforwardnet(layers: Any) -> ForgeNetwork:
     """Create a feedforward neural network.
 
@@ -301,7 +301,7 @@ def forge_feedforwardnet(layers: Any) -> ForgeNetwork:
     return ForgeNetwork(layers + [1], activations, net_type='feedforward')
 
 
-@_tb('forge_patternnet')
+@_tb('patternnet')
 def forge_patternnet(layers: Any) -> ForgeNetwork:
     """Create a pattern recognition (classification) network.
 
@@ -322,7 +322,7 @@ def forge_patternnet(layers: Any) -> ForgeNetwork:
     return net
 
 
-@_tb('forge_fitnet')
+@_tb('fitnet')
 def forge_fitnet(layers: Any) -> ForgeNetwork:
     """Create a function fitting (regression) network.
 
@@ -347,7 +347,7 @@ def forge_fitnet(layers: Any) -> ForgeNetwork:
 # Network Configuration & Initialization
 # =====================================================================
 
-@_tb('forge_configure')
+@_tb('configure')
 def forge_configure(net: ForgeNetwork, X: Any,
                     T: Any) -> ForgeNetwork:
     """Auto-configure network from data dimensions.
@@ -406,7 +406,7 @@ def forge_configure(net: ForgeNetwork, X: Any,
     return net
 
 
-@_tb('forge_init_net')
+@_tb('init_net')
 def forge_init_net(net: ForgeNetwork) -> ForgeNetwork:
     """Initialize (or reinitialize) network weights using Xavier/Glorot.
 
@@ -472,7 +472,7 @@ def _forward(net: ForgeNetwork, X: np.ndarray) -> tuple[list, list]:
     return pre_acts, post_acts
 
 
-@_tb('forge_sim')
+@_tb('sim')
 def forge_sim(net: ForgeNetwork, X: Any) -> np.ndarray:
     """Simulate (forward pass) the network.
 
@@ -513,7 +513,7 @@ def forge_sim(net: ForgeNetwork, X: Any) -> np.ndarray:
 # Training (Backpropagation with SGD + Momentum)
 # =====================================================================
 
-@_tb('forge_train')
+@_tb('train')
 def forge_train(net: ForgeNetwork, X: Any,
                 T: Any, **kwargs) -> tuple[ForgeNetwork, dict]:
     """Train the network using backpropagation with SGD + momentum.
@@ -658,7 +658,7 @@ def forge_train(net: ForgeNetwork, X: Any,
 # Performance Evaluation
 # =====================================================================
 
-@_tb('forge_perform')
+@_tb('perform')
 def forge_perform(net: ForgeNetwork, T: Any, Y: Any) -> float:
     """Compute network performance (loss) between targets and outputs.
 
@@ -687,7 +687,7 @@ def forge_perform(net: ForgeNetwork, T: Any, Y: Any) -> float:
 # Utility Functions
 # =====================================================================
 
-@_tb('forge_net_info')
+@_tb('net_info')
 def forge_net_info(net: ForgeNetwork) -> str:
     """Return a human-readable summary of the network architecture.
 
@@ -725,7 +725,7 @@ def forge_net_info(net: ForgeNetwork) -> str:
     return '\n'.join(lines)
 
 
-@_tb('forge_getwb')
+@_tb('getwb')
 def forge_getwb(net: ForgeNetwork) -> np.ndarray:
     """Get all weights and biases as a single vector.
 
@@ -745,7 +745,7 @@ def forge_getwb(net: ForgeNetwork) -> np.ndarray:
     return np.concatenate(parts)
 
 
-@_tb('forge_setwb')
+@_tb('setwb')
 def forge_setwb(net: ForgeNetwork, wb: Any) -> ForgeNetwork:
     """Set all weights and biases from a single vector.
 

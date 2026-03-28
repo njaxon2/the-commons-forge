@@ -355,7 +355,7 @@ def _resolve_instrument(resource: str) -> SimulatedInstrument:
 # Connection Functions (Forge builtins)
 # =====================================================================
 
-@_tb('forge_serial')
+@_tb('serial')
 def forge_serial(port: str = 'COM1', baud: int = 9600) -> InstrumentConnection:
     """Create a simulated serial instrument connection.
 
@@ -376,7 +376,7 @@ def forge_serial(port: str = 'COM1', baud: int = 9600) -> InstrumentConnection:
     return conn
 
 
-@_tb('forge_tcpip')
+@_tb('tcpip')
 def forge_tcpip(host: str = '192.168.1.1',
                 port: int = 5025) -> InstrumentConnection:
     """Create a simulated TCP/IP instrument connection.
@@ -398,7 +398,7 @@ def forge_tcpip(host: str = '192.168.1.1',
     return conn
 
 
-@_tb('forge_visa')
+@_tb('visa')
 def forge_visa(resource: str) -> InstrumentConnection:
     """Create a simulated VISA instrument connection.
 
@@ -418,7 +418,7 @@ def forge_visa(resource: str) -> InstrumentConnection:
     return conn
 
 
-@_tb('forge_fopen_inst')
+@_tb('fopen_inst')
 def forge_fopen_inst(inst: InstrumentConnection) -> InstrumentConnection:
     """Open a simulated instrument connection.
 
@@ -440,7 +440,7 @@ def forge_fopen_inst(inst: InstrumentConnection) -> InstrumentConnection:
     return inst
 
 
-@_tb('forge_fclose_inst')
+@_tb('fclose_inst')
 def forge_fclose_inst(inst: InstrumentConnection) -> None:
     """Close a simulated instrument connection.
 
@@ -466,7 +466,7 @@ def _check_open(inst: InstrumentConnection) -> None:
             f"Call forge_fopen_inst first.")
 
 
-@_tb('forge_fprintf_inst')
+@_tb('fprintf_inst')
 def forge_fprintf_inst(inst: InstrumentConnection, cmd: str) -> None:
     """Send a command string to a simulated instrument.
 
@@ -486,7 +486,7 @@ def forge_fprintf_inst(inst: InstrumentConnection, cmd: str) -> None:
         inst._rx_buffer = ''
 
 
-@_tb('forge_fscanf_inst')
+@_tb('fscanf_inst')
 def forge_fscanf_inst(inst: InstrumentConnection,
                       fmt: str = '%s') -> str:
     """Read a response string from a simulated instrument.
@@ -509,7 +509,7 @@ def forge_fscanf_inst(inst: InstrumentConnection,
     return response
 
 
-@_tb('forge_fread_inst')
+@_tb('fread_inst')
 def forge_fread_inst(inst: InstrumentConnection,
                      size: int = 1024) -> np.ndarray:
     """Binary read from a simulated instrument.
@@ -533,7 +533,7 @@ def forge_fread_inst(inst: InstrumentConnection,
                          dtype=np.uint8)
 
 
-@_tb('forge_fwrite_inst')
+@_tb('fwrite_inst')
 def forge_fwrite_inst(inst: InstrumentConnection,
                       data: np.ndarray) -> int:
     """Binary write to a simulated instrument.
@@ -559,7 +559,7 @@ def forge_fwrite_inst(inst: InstrumentConnection,
     return len(byte_data)
 
 
-@_tb('forge_query')
+@_tb('query')
 def forge_query(inst: InstrumentConnection, cmd: str) -> str:
     """Send a query command and read the response (combined write+read).
 
@@ -586,7 +586,7 @@ def forge_query(inst: InstrumentConnection, cmd: str) -> str:
 # Utility Functions
 # =====================================================================
 
-@_tb('forge_instrhwinfo')
+@_tb('instrhwinfo')
 def forge_instrhwinfo(conn_type: str = 'all') -> dict:
     """Return information about available simulated instruments.
 
@@ -626,7 +626,7 @@ def forge_instrhwinfo(conn_type: str = 'all') -> dict:
     return info.get(conn_type.lower(), {})
 
 
-@_tb('forge_instrfind')
+@_tb('instrfind')
 def forge_instrfind(conn_type: str | None = None) -> list[str]:
     """Find available simulated instrument resources.
 
@@ -654,7 +654,7 @@ def forge_instrfind(conn_type: str | None = None) -> list[str]:
     return resources
 
 
-@_tb('forge_set_instrument_value')
+@_tb('set_instrument_value')
 def forge_set_instrument_value(inst: InstrumentConnection,
                                setting: str, value: Any) -> None:
     """Directly set an internal setting on a simulated instrument.
@@ -679,7 +679,7 @@ def forge_set_instrument_value(inst: InstrumentConnection,
             f"Available: {list(inst._instrument._settings.keys())}")
 
 
-@_tb('forge_get_instrument_value')
+@_tb('get_instrument_value')
 def forge_get_instrument_value(inst: InstrumentConnection,
                                setting: str) -> Any:
     """Read an internal setting from a simulated instrument.

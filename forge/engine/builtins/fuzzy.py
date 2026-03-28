@@ -324,7 +324,7 @@ def pimf(x, params):
 # FIS Construction
 # =====================================================================
 
-@_tb('forge_mamfis')
+@_tb('mamfis')
 def forge_mamfis(name: str = 'mamdani_fis') -> FuzzyInferenceSystem:
     """Create a Mamdani fuzzy inference system.
 
@@ -341,7 +341,7 @@ def forge_mamfis(name: str = 'mamdani_fis') -> FuzzyInferenceSystem:
     return FuzzyInferenceSystem(fis_type='mamdani', name=name)
 
 
-@_tb('forge_sugfis')
+@_tb('sugfis')
 def forge_sugfis(name: str = 'sugeno_fis') -> FuzzyInferenceSystem:
     """Create a Sugeno fuzzy inference system.
 
@@ -358,7 +358,7 @@ def forge_sugfis(name: str = 'sugeno_fis') -> FuzzyInferenceSystem:
     return FuzzyInferenceSystem(fis_type='sugeno', name=name)
 
 
-@_tb('forge_addvar')
+@_tb('addvar')
 def forge_addvar(fis: FuzzyInferenceSystem, var_type: str,
                  name: str, var_range: Any) -> FuzzyInferenceSystem:
     """Add an input or output variable to a FIS.
@@ -390,7 +390,7 @@ def forge_addvar(fis: FuzzyInferenceSystem, var_type: str,
     return fis
 
 
-@_tb('forge_addmf')
+@_tb('addmf')
 def forge_addmf(fis: FuzzyInferenceSystem, var_name: str,
                 mf_name: str, mf_type: str,
                 params: Any) -> FuzzyInferenceSystem:
@@ -430,7 +430,7 @@ def forge_addmf(fis: FuzzyInferenceSystem, var_name: str,
     return fis
 
 
-@_tb('forge_addrule')
+@_tb('addrule')
 def forge_addrule(fis: FuzzyInferenceSystem,
                   rules: Any) -> FuzzyInferenceSystem:
     """Add rules to a FIS.
@@ -569,7 +569,7 @@ def defuzz(x, mf_values, method='centroid'):
 # FIS Evaluation
 # =====================================================================
 
-@_tb('forge_evalfis')
+@_tb('evalfis')
 def forge_evalfis(fis: FuzzyInferenceSystem,
                   inputs: Any,
                   n_points: int = 201) -> np.ndarray:
@@ -715,7 +715,7 @@ def forge_evalfis(fis: FuzzyInferenceSystem,
 # FIS Utility Functions
 # =====================================================================
 
-@_tb('forge_plotmf')
+@_tb('plotmf')
 def forge_plotmf(fis: FuzzyInferenceSystem, var_type: str,
                  var_index: int, n_points: int = 201) -> dict:
     """Compute membership function curves for plotting.
@@ -748,7 +748,7 @@ def forge_plotmf(fis: FuzzyInferenceSystem, var_type: str,
     return {'x': x, 'curves': curves, 'var_name': var.name}
 
 
-@_tb('forge_showfis')
+@_tb('showfis')
 def forge_showfis(fis: FuzzyInferenceSystem) -> str:
     """Return a text summary of a FIS.
 
@@ -797,7 +797,7 @@ def forge_showfis(fis: FuzzyInferenceSystem) -> str:
     return '\n'.join(lines)
 
 
-@_tb('forge_genfis')
+@_tb('genfis')
 def forge_genfis(input_data: Any, output_data: Any,
                  n_mfs: int = 3,
                  mf_type: str = 'gaussmf') -> FuzzyInferenceSystem:
@@ -888,7 +888,7 @@ def forge_genfis(input_data: Any, output_data: Any,
     return fis
 
 
-@_tb('forge_writefis')
+@_tb('writefis')
 def forge_writefis(fis: FuzzyInferenceSystem) -> str:
     """Serialize a FIS to a string (Octave .fis format compatible).
 
@@ -953,7 +953,7 @@ def forge_writefis(fis: FuzzyInferenceSystem) -> str:
     return '\n'.join(lines)
 
 
-@_tb('forge_readfis')
+@_tb('readfis')
 def forge_readfis(fis_string: str) -> FuzzyInferenceSystem:
     """Parse a FIS from string (.fis format).
 

@@ -102,12 +102,12 @@ class TestToolboxIntegration:
 
     def test_optimization_accessible(self):
         fns = self.s._engine.functions
-        has_opt = "fzero" in fns or "forge_fzero" in fns
+        has_opt = "fzero" in fns or "fzero" in fns
         assert has_opt
 
     def test_control_accessible(self):
         fns = self.s._engine.functions
-        has_ctrl = "forge_tf" in fns or "tf" in fns
+        has_ctrl = "tf" in fns or "tf" in fns
         assert has_ctrl
 
     def test_financial_accessible(self):
