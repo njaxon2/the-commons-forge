@@ -37,7 +37,7 @@ class DataCursorWidget(QLabel):
         super().__init__("Ready", parent)
         self.setStyleSheet(
             "font-size: 11px; padding: 2px 8px; "
-            "color: #cdd6f4; background: transparent;"
+            "color: palette(text); background: transparent;"
         )
         self.setFixedWidth(260)
         self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -245,23 +245,27 @@ class FigurePropertiesPanel(QFrame):
             text = f"({best_x:.4g}, {best_y:.4g})"
 
         # Place annotation with arrow
+        _pc = self._get_pin_colors() if hasattr(self, '_get_pin_colors') else {
+            "text": "#cdd6f4", "bg": "#1e1e2e", "edge": "#00BCD4",
+            "arrow": "#00BCD4", "dot": "#00BCD4", "dot_edge": "white",
+        }
         ann = ax.annotate(
             text,
             xy=(best_x, best_y),
             xytext=(15, 20),
             textcoords='offset points',
             fontsize=9,
-            color='#cdd6f4',
+            color=_pc["text"],
             bbox=dict(
                 boxstyle='round,pad=0.4',
-                facecolor='#1e1e2e',
-                edgecolor='#00BCD4',
+                facecolor=_pc["bg"],
+                edgecolor=_pc["edge"],
                 alpha=0.92,
                 linewidth=1.5,
             ),
             arrowprops=dict(
                 arrowstyle='-|>',
-                color='#00BCD4',
+                color=_pc["arrow"],
                 linewidth=1.5,
                 connectionstyle='arc3,rad=0.15',
             ),
@@ -269,8 +273,8 @@ class FigurePropertiesPanel(QFrame):
 
         # Place a dot marker at the data point
         dot, = ax.plot(best_x, best_y, 'o',
-                       color='#00BCD4', markersize=7,
-                       markeredgecolor='white', markeredgewidth=1.2,
+                       color=_pc["dot"], markersize=7,
+                       markeredgecolor=_pc["dot_edge"], markeredgewidth=1.2,
                        zorder=10)
 
         self._pins.append((ann, dot))
@@ -347,14 +351,7 @@ class PlotWidget(QWidget):
         tool_layout.addWidget(self.toolbar)
 
         # Extra toolbar buttons
-        _btn_ss = """
-            QPushButton {
-                background: transparent; border: 1px solid #555;
-                border-radius: 3px; padding: 2px 6px; font-size: 11px;
-                color: #cdd6f4;
-            }
-            QPushButton:hover { background: #313244; }
-        """
+        _btn_ss = self._get_button_stylesheet()
 
         self.btn_grid = QPushButton("Grid")
         self.btn_grid.setCheckable(True)
@@ -548,23 +545,27 @@ class PlotWidget(QWidget):
             text = f"({best_x:.4g}, {best_y:.4g})"
 
         # Place annotation with arrow
+        _pc = self._get_pin_colors() if hasattr(self, '_get_pin_colors') else {
+            "text": "#cdd6f4", "bg": "#1e1e2e", "edge": "#00BCD4",
+            "arrow": "#00BCD4", "dot": "#00BCD4", "dot_edge": "white",
+        }
         ann = ax.annotate(
             text,
             xy=(best_x, best_y),
             xytext=(15, 20),
             textcoords='offset points',
             fontsize=9,
-            color='#cdd6f4',
+            color=_pc["text"],
             bbox=dict(
                 boxstyle='round,pad=0.4',
-                facecolor='#1e1e2e',
-                edgecolor='#00BCD4',
+                facecolor=_pc["bg"],
+                edgecolor=_pc["edge"],
                 alpha=0.92,
                 linewidth=1.5,
             ),
             arrowprops=dict(
                 arrowstyle='-|>',
-                color='#00BCD4',
+                color=_pc["arrow"],
                 linewidth=1.5,
                 connectionstyle='arc3,rad=0.15',
             ),
@@ -572,8 +573,8 @@ class PlotWidget(QWidget):
 
         # Place a dot marker at the data point
         dot, = ax.plot(best_x, best_y, 'o',
-                       color='#00BCD4', markersize=7,
-                       markeredgecolor='white', markeredgewidth=1.2,
+                       color=_pc["dot"], markersize=7,
+                       markeredgecolor=_pc["dot_edge"], markeredgewidth=1.2,
                        zorder=10)
 
         self._pins.append((ann, dot))
@@ -586,6 +587,60 @@ class PlotWidget(QWidget):
             dot.remove()
         self._pins.clear()
         self.canvas.draw()
+
+    @staticmethod
+    def _get_button_stylesheet():
+        """Return theme-aware button stylesheet."""
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+                # Light theme
+                return """
+                    QPushButton {
+                        background: transparent; border: 1px solid #bcc0cc;
+                        border-radius: 3px; padding: 2px 6px; font-size: 11px;
+                        color: #4c4f69;
+                    }
+                    QPushButton:hover { background: #dce0e8; }
+                """
+        except Exception:
+            pass
+        # Dark theme (default)
+        return """
+            QPushButton {
+                background: transparent; border: 1px solid #555;
+                border-radius: 3px; padding: 2px 6px; font-size: 11px;
+                color: #cdd6f4;
+            }
+            QPushButton:hover { background: #313244; }
+        """
+
+    @staticmethod
+    def _get_pin_colors():
+        """Return theme-aware probe pin colors."""
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+                return {
+                    "text": "#1e1e2e",
+                    "bg": "#ffffff",
+                    "edge": "#00897B",
+                    "arrow": "#00897B",
+                    "dot": "#00897B",
+                    "dot_edge": "#333333",
+                }
+        except Exception:
+            pass
+        return {
+            "text": "#cdd6f4",
+            "bg": "#1e1e2e",
+            "edge": "#00BCD4",
+            "arrow": "#00BCD4",
+            "dot": "#00BCD4",
+            "dot_edge": "white",
+        }
 
     def _toggle_grid(self, on):
         self.ax.grid(on)

@@ -164,15 +164,17 @@ class BreadcrumbBar(QWidget):
         for i, part in enumerate(show_parts):
             if i > 0:
                 sep = QLabel(" > ")
-                sep.setStyleSheet("color: #6c7086; font-size: 10px;")
+                _p = get_palette()
+                sep.setStyleSheet(f"color: {_p.get('gutter_fg', '#6c7086')}; font-size: 10px;")
                 self._layout.insertWidget(self._layout.count() - 1, sep)
 
             lbl = QLabel(part)
             is_last = (i == len(show_parts) - 1)
+            _p = get_palette()
             if is_last:
-                lbl.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 11px;")
+                lbl.setStyleSheet(f"color: {_p.get('bracket', '#cdd6f4')}; font-weight: bold; font-size: 11px;")
             else:
-                lbl.setStyleSheet("color: #6c7086; font-size: 11px;")
+                lbl.setStyleSheet(f"color: {_p.get('gutter_fg', '#6c7086')}; font-size: 11px;")
                 # Make directory parts clickable
                 dir_path = "/".join(parts[:len(parts) - len(show_parts) + i + 1])
                 lbl.setCursor(Qt.PointingHandCursor)
@@ -180,11 +182,12 @@ class BreadcrumbBar(QWidget):
             self._layout.insertWidget(self._layout.count() - 1, lbl)
 
         if symbol_name:
+            _p = get_palette()
             sep = QLabel(" > ")
-            sep.setStyleSheet("color: #6c7086; font-size: 10px;")
+            sep.setStyleSheet(f"color: {_p.get('gutter_fg', '#6c7086')}; font-size: 10px;")
             self._layout.insertWidget(self._layout.count() - 1, sep)
             sym = QLabel(symbol_name)
-            sym.setStyleSheet("color: #cba6f7; font-style: italic; font-size: 11px;")
+            sym.setStyleSheet(f"color: {_p.get('keyword', '#cba6f7')}; font-style: italic; font-size: 11px;")
             self._layout.insertWidget(self._layout.count() - 1, sym)
 
 
@@ -195,13 +198,14 @@ class GoToSymbolDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Go to Symbol")
         self.setFixedSize(400, 350)
-        self.setStyleSheet("""
-            QDialog { background: #1e1e2e; border: 1px solid #313244; border-radius: 8px; }
-            QLineEdit { background: #2a2a3c; color: #cdd6f4; border: 1px solid #313244;
-                        border-radius: 4px; padding: 6px; font-size: 13px; }
-            QListWidget { background: #252536; color: #cdd6f4; border: none; font-size: 12px; }
-            QListWidget::item { padding: 4px 8px; border-radius: 4px; }
-            QListWidget::item:selected { background: #264f78; }
+        _p = get_palette()
+        self.setStyleSheet(f"""
+            QDialog {{ background: {_p.get('gutter_bg', '#1e1e2e')}; border: 1px solid {_p.get('line_bg', '#313244')}; border-radius: 8px; }}
+            QLineEdit {{ background: {_p.get('line_bg', '#2a2a3c')}; color: {_p.get('bracket', '#cdd6f4')}; border: 1px solid {_p.get('line_bg', '#313244')};
+                        border-radius: 4px; padding: 6px; font-size: 13px; }}
+            QListWidget {{ background: {_p.get('gutter_bg', '#252536')}; color: {_p.get('bracket', '#cdd6f4')}; border: none; font-size: 12px; }}
+            QListWidget::item {{ padding: 4px 8px; border-radius: 4px; }}
+            QListWidget::item:selected {{ background: {_p.get('line_bg', '#264f78')}; }}
         """)
 
         layout = QVBoxLayout(self)
@@ -409,7 +413,7 @@ class MinimapWidget(QWidget):
 
         vis_y = int(first_visible * scale)
         vis_h = max(10, int(visible_lines * scale))
-        vis_color = QColor("#cba6f7")
+        vis_color = QColor(palette.get('gutter_active', '#cba6f7'))
         vis_color.setAlpha(40)
         painter.fillRect(0, vis_y, self.width(), vis_h, vis_color)
 
@@ -422,7 +426,7 @@ class MinimapWidget(QWidget):
         comment_color.setAlpha(150)
         string_color = QColor(palette.get('string', '#a6e3a1'))
         string_color.setAlpha(150)
-        normal_color = QColor("#cdd6f4")
+        normal_color = QColor(palette.get('bracket', '#cdd6f4'))
         normal_color.setAlpha(80)
 
         kw_set = {'function', 'if', 'for', 'while', 'switch', 'try', 'end', 'else', 'return', 'elseif', 'case'}
@@ -452,7 +456,7 @@ class MinimapWidget(QWidget):
             y += scale
 
         # Border line
-        painter.setPen(QColor("#313244"))
+        painter.setPen(QColor(palette.get('line_bg', '#313244')))
         painter.drawLine(0, 0, 0, h)
         painter.end()
 
@@ -1095,7 +1099,8 @@ class CodeEditor(QPlainTextEdit):
             text = self.toPlainText()
             pattern = r'\b' + re.escape(word) + r'\b'
 
-            highlight_color = QColor("#2a2a3c")
+            _phw = get_palette()
+            highlight_color = QColor(_phw.get('line_bg', '#2a2a3c'))
             highlight_color.setAlpha(200)
 
             for match in re.finditer(pattern, text):
@@ -1164,7 +1169,8 @@ class CodeEditor(QPlainTextEdit):
         if not self._extra_cursors:
             return
         from PySide6.QtGui import QPen, QColor
-        accent = QColor("#f9e2af")
+        _pec = get_palette()
+        accent = QColor(_pec.get('constant', '#f9e2af'))
         accent.setAlpha(180)
         pen = QPen(accent, 2)
         painter.setPen(pen)
@@ -1190,7 +1196,8 @@ class CodeEditor(QPlainTextEdit):
 
         from PySide6.QtGui import QPainter, QColor, QPen
         painter = QPainter(self.viewport())
-        guide_color = QColor("#313244")
+        _pg = get_palette()
+        guide_color = QColor(_pg.get('line_bg', '#313244'))
         guide_color.setAlpha(80)
         pen = QPen(guide_color, 1, Qt.DotLine)
         painter.setPen(pen)
@@ -2688,7 +2695,9 @@ class EditorWidget(QWidget):
     def _draw_indent_guides(self, event):
         """Draw subtle vertical lines at each indentation level."""
         painter = QPainter(self.viewport())
-        color = QColor(255, 255, 255, 30)  # semi-transparent white/gray
+        _pdg = get_palette()
+        color = QColor(_pdg.get('line_bg', '#313244'))
+        color.setAlpha(40)
         painter.setPen(color)
 
         block = self.firstVisibleBlock()

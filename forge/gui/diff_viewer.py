@@ -9,6 +9,42 @@ from PySide6.QtWidgets import (
 )
 
 
+def _diff_get_padding_color():
+    """Return padding color appropriate for current theme."""
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+            return '#e8eaf0'  # light theme bg3
+    except Exception:
+        pass
+    return '#45475a'  # dark theme
+
+
+def _diff_get_label_colors():
+    """Return (delete_color, add_color, stats_color) for current theme."""
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+            return '#c62828', '#2e7d32', '#6c6f85'
+    except Exception:
+        pass
+    return '#f38ba8', '#a6e3a1', '#a6adc8'
+
+
+def _diff_get_change_colors():
+    """Return (delete_bg, add_bg) highlight colors for current theme."""
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+            return '#ffcdd2', '#c8e6c9'  # light red/green backgrounds
+    except Exception:
+        pass
+    return '#f38ba8', '#a6e3a1'
+
+
 class DiffViewer(QDialog):
     """Side-by-side diff viewer for comparing two texts."""
 
@@ -25,12 +61,14 @@ class DiffViewer(QDialog):
         title_row = QHBoxLayout()
         lbl_a = QLabel(title_a)
         lbl_a.setFont(QFont("Consolas", 11, QFont.Bold))
-        lbl_a.setStyleSheet("color: #f38ba8;")
+        _del_c, _add_c, _ = _diff_get_label_colors()
+        lbl_a.setStyleSheet(f"color: {_del_c};")
         title_row.addWidget(lbl_a)
 
         lbl_b = QLabel(title_b)
         lbl_b.setFont(QFont("Consolas", 11, QFont.Bold))
-        lbl_b.setStyleSheet("color: #a6e3a1;")
+        _, _add_c2, _ = _diff_get_label_colors()
+        lbl_b.setStyleSheet(f"color: {_add_c2};")
         title_row.addWidget(lbl_b)
         layout.addLayout(title_row)
 
@@ -67,7 +105,8 @@ class DiffViewer(QDialog):
         deletions = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
 
         stats = QLabel(f"  +{additions} additions, -{deletions} deletions")
-        stats.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 4px;")
+        _, _, _stats_c = _diff_get_label_colors()
+        stats.setStyleSheet(f"color: {_stats_c}; font-size: 11px; padding: 4px;")
         layout.addWidget(stats)
 
         # Buttons
@@ -100,32 +139,35 @@ class DiffViewer(QDialog):
                     result_b.append(line)
                     colors_b.append(None)
             elif op == 'replace':
+                _del_bg, _add_bg = _diff_get_change_colors()
                 max_lines = max(i2 - i1, j2 - j1)
                 for k in range(max_lines):
                     if i1 + k < i2:
                         result_a.append(lines_a[i1 + k])
-                        colors_a.append('#f38ba8')  # red for changed
+                        colors_a.append(_del_bg)  # red for changed
                     else:
                         result_a.append('')
-                        colors_a.append('#45475a')  # grey padding
+                        colors_a.append(_diff_get_padding_color())  # grey padding
                     if j1 + k < j2:
                         result_b.append(lines_b[j1 + k])
-                        colors_b.append('#a6e3a1')  # green for changed
+                        colors_b.append(_add_bg)  # green for changed
                     else:
                         result_b.append('')
-                        colors_b.append('#45475a')
+                        colors_b.append(_diff_get_padding_color())
             elif op == 'delete':
+                _del_bg2, _add_bg2 = _diff_get_change_colors()
                 for line in lines_a[i1:i2]:
                     result_a.append(line)
-                    colors_a.append('#f38ba8')
+                    colors_a.append(_del_bg2)
                     result_b.append('')
-                    colors_b.append('#45475a')
+                    colors_b.append(_diff_get_padding_color())
             elif op == 'insert':
+                _del_bg3, _add_bg3 = _diff_get_change_colors()
                 for line in lines_b[j1:j2]:
                     result_a.append('')
-                    colors_a.append('#45475a')
+                    colors_a.append(_diff_get_padding_color())
                     result_b.append(line)
-                    colors_b.append('#a6e3a1')
+                    colors_b.append(_add_bg3)
 
         # Set text
         self._editor_a.setPlainText('\n'.join(result_a))

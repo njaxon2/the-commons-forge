@@ -41,10 +41,14 @@ class BookmarksPanel(QWidget):
             app = QApplication.instance()
             qss = app.styleSheet() if app else ""
             palette = None
-            for name in ("dark", "light", "midnight"):
+            # Check light/midnight first since dark's bg0 also appears as fg0 in light QSS
+            for name in ("light", "midnight", "dark"):
                 try:
                     p = get_theme_palette(name)
-                    if p.get("bg0", "NONE") in qss:
+                    bg0 = p.get("bg0", "")
+                    bg1 = p.get("bg1", "")
+                    # Both bg0 and bg1 must appear to confirm this is the active theme
+                    if bg0 and bg1 and bg0 in qss and bg1 in qss:
                         palette = p
                         break
                 except Exception:

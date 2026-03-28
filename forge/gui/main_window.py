@@ -93,10 +93,12 @@ class _DockTitleBar(QWidget):
                         pass
                     break
             if palette is None:
-                for name in get_available_themes():
+                for name in ("light", "midnight", "dark"):
                     try:
                         p = get_theme_palette(name)
-                        if p.get("bg0", "") in current_qss:
+                        bg0 = p.get("bg0", "")
+                        bg1 = p.get("bg1", "")
+                        if bg0 and bg1 and bg0 in current_qss and bg1 in current_qss:
                             palette = p
                             break
                     except Exception:
@@ -220,6 +222,12 @@ class ForgeMainWindow(QMainWindow):
 
         self._recent_files = self._load_recent_files()
         self._create_actions()
+        # Store current theme name for detection
+        try:
+            from forge.gui.themes import get_preferences
+            self._current_theme = get_preferences().get('default_theme', 'dark')
+        except Exception:
+            self._current_theme = 'dark'
         self._create_docks()
         self._create_menus()
         self._create_toolbar()
@@ -1209,6 +1217,7 @@ class ForgeMainWindow(QMainWindow):
         self._switch_theme(next_theme)
 
     def _switch_theme(self, theme_name):
+        self._current_theme = theme_name
         from forge.gui.themes import apply_theme, get_preferences, save_preferences
         app = QApplication.instance()
         apply_theme(app, theme_name)

@@ -322,8 +322,19 @@ class CommandWidget(QWidget):
         if hasattr(self, '_exec_start_time'):
             elapsed = time.perf_counter() - self._exec_start_time
             if elapsed > 0.5:  # Only show for slow commands
-                self._append_text_colored(f"  [{elapsed:.3f}s]\n", '#6c7086')
+                self._append_text_colored(f"  [{elapsed:.3f}s]\n", self._get_muted_color())
             del self._exec_start_time
+
+    def _get_muted_color(self):
+        """Return a muted text color appropriate for the current theme."""
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
+                return '#9ca0b0'
+        except Exception:
+            pass
+        return '#6c7086'
 
     def _write_prompt(self):
         """Append a prompt and record where editable text begins."""
@@ -525,7 +536,7 @@ class CommandWidget(QWidget):
             from PySide6.QtWidgets import QLabel
             self._running_label = QLabel("Running...", self)
             self._running_label.setStyleSheet(
-                "background: #f9e2af; color: #1e1e2e; "
+                "background: palette(highlight); color: palette(highlighted-text); "
                 "padding: 2px 12px; border-radius: 4px; "
                 "font-size: 11px; font-weight: bold;"
             )

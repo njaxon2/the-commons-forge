@@ -21,6 +21,68 @@ def _make_pixmap(size: int = _SIZE) -> QPixmap:
 
 
 # -- colours --------------------------------------------------------------
+# Dark theme defaults
+_DARK_ICON_COLORS = {
+    "teal":   "#94e2d5",
+    "green":  "#a6e3a1",
+    "red":    "#f38ba8",
+    "orange": "#fab387",
+    "mauve":  "#cba6f7",
+    "text":   "#cdd6f4",
+}
+
+# Light theme: darker/more saturated for visibility on light backgrounds
+_LIGHT_ICON_COLORS = {
+    "teal":   "#00796B",
+    "green":  "#2e7d32",
+    "red":    "#c62828",
+    "orange": "#e65100",
+    "mauve":  "#6A1B9A",
+    "text":   "#37474F",
+}
+
+
+def _is_light_theme() -> bool:
+    """Detect if the current Qt application theme is light."""
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            ss = app.styleSheet()
+            # The light theme uses bg0: #f8f9fc
+            if "#f8f9fc" in ss or "#eef0f5" in ss:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _icon_colors():
+    """Return the appropriate icon color dict for the current theme."""
+    return _LIGHT_ICON_COLORS if _is_light_theme() else _DARK_ICON_COLORS
+
+
+def _get_teal():
+    return QColor(_icon_colors()["teal"])
+
+def _get_green():
+    return QColor(_icon_colors()["green"])
+
+def _get_red():
+    return QColor(_icon_colors()["red"])
+
+def _get_orange():
+    return QColor(_icon_colors()["orange"])
+
+def _get_mauve():
+    return QColor(_icon_colors()["mauve"])
+
+def _get_text():
+    return QColor(_icon_colors()["text"])
+
+
+# Keep module-level names for backward compatibility but they are now
+# only used as fallback defaults. Each icon function fetches fresh colors.
 TEAL    = QColor("#94e2d5")
 GREEN   = QColor("#a6e3a1")
 RED     = QColor("#f38ba8")
@@ -38,7 +100,7 @@ def icon_new_file() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEAL, 2)
+    pen = QPen(_get_teal(), 2)
     p.setPen(pen)
     # document outline
     p.drawRect(QRect(6, 2, 18, 26))
@@ -59,9 +121,9 @@ def icon_open() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEAL, 2)
+    pen = QPen(_get_teal(), 2)
     p.setPen(pen)
-    p.setBrush(QBrush(TEAL.darker(200)))
+    p.setBrush(QBrush(_get_teal().darker(200)))
     # back of folder
     pts_back = QPolygonF([
         QPointF(3, 10), QPointF(3, 27), QPointF(29, 27),
@@ -70,7 +132,7 @@ def icon_open() -> QIcon:
     ])
     p.drawPolygon(pts_back)
     # front flap (open)
-    p.setBrush(QBrush(TEAL.darker(150)))
+    p.setBrush(QBrush(_get_teal().darker(150)))
     pts_front = QPolygonF([
         QPointF(1, 14), QPointF(7, 27), QPointF(29, 27),
         QPointF(31, 14),
@@ -85,16 +147,16 @@ def icon_save() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEAL, 2)
+    pen = QPen(_get_teal(), 2)
     p.setPen(pen)
-    p.setBrush(QBrush(TEAL.darker(250)))
+    p.setBrush(QBrush(_get_teal().darker(250)))
     # outer body
     p.drawRect(QRect(4, 4, 24, 24))
     # label area (white-ish)
-    p.setBrush(QBrush(TEAL.darker(150)))
+    p.setBrush(QBrush(_get_teal().darker(150)))
     p.drawRect(QRect(9, 4, 14, 10))
     # metal shutter
-    p.setBrush(QBrush(TEAL))
+    p.setBrush(QBrush(_get_teal()))
     p.drawRect(QRect(8, 18, 16, 10))
     p.end()
     return QIcon(pm)
@@ -110,7 +172,7 @@ def icon_run() -> QIcon:
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QBrush(GREEN))
+    p.setBrush(QBrush(_get_green()))
     tri = QPolygonF([
         QPointF(8, 4), QPointF(8, 28), QPointF(28, 16),
     ])
@@ -125,7 +187,7 @@ def icon_stop() -> QIcon:
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QBrush(RED))
+    p.setBrush(QBrush(_get_red()))
     p.drawRect(QRect(6, 6, 20, 20))
     p.end()
     return QIcon(pm)
@@ -140,10 +202,10 @@ def icon_debug() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(ORANGE, 2)
+    pen = QPen(_get_orange(), 2)
     p.setPen(pen)
     # body (ellipse)
-    p.setBrush(QBrush(ORANGE.darker(180)))
+    p.setBrush(QBrush(_get_orange().darker(180)))
     p.drawEllipse(QRect(9, 10, 14, 18))
     # head
     p.drawEllipse(QRect(12, 4, 8, 8))
@@ -164,7 +226,7 @@ def icon_step_in() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(MAUVE, 2.5)
+    pen = QPen(_get_mauve(), 2.5)
     p.setPen(pen)
     # vertical arrow shaft
     p.drawLine(16, 4, 16, 22)
@@ -184,10 +246,10 @@ def icon_step_over() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(MAUVE, 2.5)
+    pen = QPen(_get_mauve(), 2.5)
     p.setPen(pen)
     # obstacle dot
-    p.setBrush(QBrush(MAUVE.darker(150)))
+    p.setBrush(QBrush(_get_mauve().darker(150)))
     p.drawEllipse(QRect(13, 20, 6, 6))
     # arc over
     p.setBrush(Qt.BrushStyle.NoBrush)
@@ -204,7 +266,7 @@ def icon_step_out() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(MAUVE, 2.5)
+    pen = QPen(_get_mauve(), 2.5)
     p.setPen(pen)
     # bracket at bottom
     p.drawLine(8, 24, 8, 29)
@@ -228,7 +290,7 @@ def icon_undo() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEXT_FG, 2.5)
+    pen = QPen(_get_text(), 2.5)
     p.setPen(pen)
     # arc
     p.drawArc(QRect(6, 8, 20, 18), 90 * 16, 180 * 16)
@@ -244,7 +306,7 @@ def icon_redo() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEXT_FG, 2.5)
+    pen = QPen(_get_text(), 2.5)
     p.setPen(pen)
     # arc
     p.drawArc(QRect(6, 8, 20, 18), -90 * 16, 180 * 16)
@@ -260,7 +322,7 @@ def icon_search() -> QIcon:
     pm = _make_pixmap()
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(TEXT_FG, 2.5)
+    pen = QPen(_get_text(), 2.5)
     p.setPen(pen)
     # lens circle
     p.drawEllipse(QRect(4, 4, 18, 18))
