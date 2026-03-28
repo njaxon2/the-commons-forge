@@ -162,6 +162,9 @@ class FileBrowserWidget(QWidget):
         super().__init__(parent)
         self._root = root_path or os.path.expanduser("~")
         self._search_paths = []
+        self._nav_history = [self._root]
+        self._nav_index = 0
+        self._nav_recording = True
         self._build_ui()
 
     def set_search_paths(self, paths):
@@ -263,6 +266,14 @@ class FileBrowserWidget(QWidget):
 
         layout.addLayout(self._filter_row)
         layout.addWidget(self.tree)
+
+        # Keyboard navigation shortcuts
+        self._shortcut_up = QShortcut(QKeySequence('Alt+Up'), self)
+        self._shortcut_up.activated.connect(self._go_up)
+        self._shortcut_back = QShortcut(QKeySequence('Alt+Left'), self)
+        self._shortcut_back.activated.connect(self._go_back)
+        self._shortcut_fwd = QShortcut(QKeySequence('Alt+Right'), self)
+        self._shortcut_fwd.activated.connect(self._go_forward)
 
     def _on_filter_glob_changed(self, text):
         if hasattr(self, '_proxy'):
@@ -437,6 +448,20 @@ class FileBrowserWidget(QWidget):
 
     # -- Navigation --
 
+    def _go_back(self):
+        if self._nav_index > 0:
+            self._nav_index -= 1
+            self._nav_recording = False
+            self._set_root(self._nav_history[self._nav_index])
+            self._nav_recording = True
+
+    def _go_forward(self):
+        if self._nav_index < len(self._nav_history) - 1:
+            self._nav_index += 1
+            self._nav_recording = False
+            self._set_root(self._nav_history[self._nav_index])
+            self._nav_recording = True
+
     def _go_home(self):
         self._set_root(os.path.expanduser("~"))
 
@@ -455,6 +480,14 @@ class FileBrowserWidget(QWidget):
         self.path_edit.setText(path)
         self.fs_model.setRootPath(path)
         self.tree.setRootIndex(self.fs_model.index(path))
+        # Record in navigation history
+        if self._nav_recording:
+            # Trim any forward history beyond current index
+            self._nav_history = self._nav_history[:self._nav_index + 1]
+            # Avoid duplicates at the tip
+            if not self._nav_history or self._nav_history[-1] != path:
+                self._nav_history.append(path)
+                self._nav_index = len(self._nav_history) - 1
 
     # -- Double-click --
 

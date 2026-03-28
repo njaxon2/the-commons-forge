@@ -640,6 +640,10 @@ class ForgeMainWindow(QMainWindow):
         help_menu.addAction(self.act_feature_request)
         help_menu.addSeparator()
         help_menu.addAction(self.act_ams_toggle)
+        help_menu.addSeparator()
+        act_tiga = QAction("Load TIGA Demo Bookmarks", self)
+        act_tiga.triggered.connect(self._load_tiga_demo)
+        help_menu.addAction(act_tiga)
 
     # ==================================================================
     # Toolbar
@@ -1802,6 +1806,15 @@ class ForgeMainWindow(QMainWindow):
                     cursor = QTextCursor(block)
                     editor.setTextCursor(cursor)
                     editor.centerCursor()
+
+    def _load_tiga_demo(self):
+        """Load the TIGA IGA codebase with guided bookmarks."""
+        try:
+            from forge.gui.tiga_demo_bookmarks import setup_demo
+            setup_demo(self)
+            self._show_toast("TIGA demo loaded — check Bookmarks panel", 4000, "info")
+        except Exception as e:
+            self._show_toast(f"TIGA demo error: {e}", 3000, "error")
 
     def _show_toast(self, message, duration=3000, level="info"):
         """Show a brief toast notification at the bottom of the window."""
