@@ -31,52 +31,92 @@ class BookmarksPanel(QWidget):
         self._editor_widget = None  # set via set_editor_widget()
 
         self.setObjectName("BookmarksPanel")
-        self.setStyleSheet("""
-            #BookmarksPanel {
-                background-color: #1e1e2e;
+        self.apply_theme()
+
+    def apply_theme(self):
+        """Apply current theme colors to the bookmarks panel."""
+        try:
+            from forge.gui.themes import get_theme_palette
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            qss = app.styleSheet() if app else ""
+            palette = None
+            for name in ("dark", "light", "midnight"):
+                try:
+                    p = get_theme_palette(name)
+                    if p.get("bg0", "NONE") in qss:
+                        palette = p
+                        break
+                except Exception:
+                    pass
+            if palette is None:
+                palette = get_theme_palette("dark")
+        except Exception:
+            palette = {
+                "bg0": "#1e1e2e", "bg1": "#252536", "bg2": "#2a2a3c",
+                "fg0": "#cdd6f4", "fg3": "#6c7086", "border1": "#44445a",
+                "accent": "#00BCD4", "accent_p": "#0097A7", "alt_row": "#282840",
+                "selection": "#264f78", "bg5": "#44445a",
             }
-            #BookmarksPanel QTreeWidget {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+
+        bg0 = palette.get("bg0", "#1e1e2e")
+        bg1 = palette.get("bg1", "#252536")
+        bg3 = palette.get("bg3", "#313145")
+        bg5 = palette.get("bg5", "#44445a")
+        fg0 = palette.get("fg0", "#cdd6f4")
+        fg3 = palette.get("fg3", "#6c7086")
+        border1 = palette.get("border1", "#44445a")
+        accent = palette.get("accent", "#00BCD4")
+        accent_p = palette.get("accent_p", "#0097A7")
+        selection = palette.get("selection", "#264f78")
+        alt_row = palette.get("alt_row", "#282840")
+
+        self.setStyleSheet(f"""
+            #BookmarksPanel {{
+                background-color: {bg0};
+            }}
+            #BookmarksPanel QTreeWidget {{
+                background-color: {bg0};
+                color: {fg0};
+                border: 1px solid {border1};
                 font-family: "Courier New", monospace;
                 font-size: 12px;
-                selection-background-color: #1e6e5e;
-                selection-color: #cdd6f4;
-                alternate-background-color: #232336;
-            }
-            #BookmarksPanel QTreeWidget::item:hover {
-                background-color: #2a2a3d;
-            }
-            #BookmarksPanel QTreeWidget::item:selected {
-                background-color: #1e6e5e;
-            }
-            #BookmarksPanel QHeaderView::section {
-                background-color: #181825;
-                color: #94e2d5;
-                border: 1px solid #45475a;
+                selection-background-color: {selection};
+                selection-color: {fg0};
+                alternate-background-color: {alt_row};
+            }}
+            #BookmarksPanel QTreeWidget::item:hover {{
+                background-color: {bg1};
+            }}
+            #BookmarksPanel QTreeWidget::item:selected {{
+                background-color: {selection};
+            }}
+            #BookmarksPanel QHeaderView::section {{
+                background-color: {bg3};
+                color: {accent};
+                border: 1px solid {border1};
                 padding: 4px 8px;
                 font-weight: bold;
-            }
-            #BookmarksPanel QPushButton {
-                background-color: #1e6e5e;
-                color: #cdd6f4;
+            }}
+            #BookmarksPanel QPushButton {{
+                background-color: {accent_p};
+                color: {fg0};
                 border: none;
                 border-radius: 4px;
                 padding: 5px 12px;
                 font-weight: bold;
                 font-size: 12px;
-            }
-            #BookmarksPanel QPushButton:hover {
-                background-color: #2a9d8f;
-            }
-            #BookmarksPanel QPushButton:pressed {
-                background-color: #14524a;
-            }
-            #BookmarksPanel QPushButton:disabled {
-                background-color: #45475a;
-                color: #6c7086;
-            }
+            }}
+            #BookmarksPanel QPushButton:hover {{
+                background-color: {accent};
+            }}
+            #BookmarksPanel QPushButton:pressed {{
+                background-color: {accent_p};
+            }}
+            #BookmarksPanel QPushButton:disabled {{
+                background-color: {bg5};
+                color: {fg3};
+            }}
         """)
 
         self._build_ui()

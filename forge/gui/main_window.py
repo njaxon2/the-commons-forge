@@ -35,32 +35,145 @@ from forge.gui.icons import (
 
 
 class _DockTitleBar(QWidget):
-    """Custom dock title bar: double-click floating = maximize/restore, not re-dock."""
+    """Custom dock title bar: theme-aware, sheen gradient, visible close button.
+    Double-click floating = maximize/restore (not re-dock)."""
 
     def __init__(self, title, dock, parent=None):
         super().__init__(parent)
         self._dock = dock
+        self._title = title
         self._maximized_geo = None
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 0, 4, 0)
+        layout.setSpacing(6)
 
         self._label = QLabel(title)
-        self._label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 11px;")
+        self._label.setObjectName("DockTitleLabel")
         layout.addWidget(self._label)
         layout.addStretch()
 
-        btn_close = QPushButton("x")
-        btn_close.setFixedSize(18, 18)
-        btn_close.setStyleSheet(
-            "QPushButton { background: transparent; color: #6c7086; border: none; font-size: 12px; }"
-            "QPushButton:hover { color: #f38ba8; }"
-        )
-        btn_close.clicked.connect(dock.close)
-        layout.addWidget(btn_close)
+        # Float button
+        self._btn_float = QPushButton()
+        self._btn_float.setObjectName("DockFloatBtn")
+        self._btn_float.setFixedSize(20, 20)
+        self._btn_float.setToolTip("Float / Dock")
+        self._btn_float.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
+        layout.addWidget(self._btn_float)
 
-        self.setFixedHeight(24)
-        self.setStyleSheet("background: #181825; border-bottom: 1px solid #313244;")
+        # Close button
+        self._btn_close = QPushButton()
+        self._btn_close.setObjectName("DockCloseBtn")
+        self._btn_close.setFixedSize(20, 20)
+        self._btn_close.setToolTip("Close")
+        self._btn_close.clicked.connect(dock.close)
+        layout.addWidget(self._btn_close)
+
+        self.setFixedHeight(28)
+        self.setObjectName("DockTitleBar")
+        self._apply_theme()
+
+    def _apply_theme(self):
+        """Apply styling from the current theme palette."""
+        try:
+            from forge.gui.themes import get_theme_palette, get_available_themes
+            # Detect current theme from app stylesheet
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            current_qss = app.styleSheet() if app else ""
+
+            # Detect theme from main window or QSS
+            palette = None
+            # Check if main window stores current theme
+            for w in app.topLevelWidgets():
+                if hasattr(w, '_current_theme'):
+                    try:
+                        palette = get_theme_palette(w._current_theme)
+                    except Exception:
+                        pass
+                    break
+            if palette is None:
+                for name in get_available_themes():
+                    try:
+                        p = get_theme_palette(name)
+                        if p.get("bg0", "") in current_qss:
+                            palette = p
+                            break
+                    except Exception:
+                        pass
+            if palette is None:
+                palette = get_theme_palette("dark")
+        except Exception:
+            # Fallback colors
+            palette = {
+                "bg1": "#252536", "bg3": "#313145", "bg4": "#3a3a50",
+                "fg0": "#cdd6f4", "fg2": "#a6adc8", "fg3": "#6c7086",
+                "border0": "#313145", "border1": "#44445a",
+                "accent": "#00BCD4", "error": "#f38ba8",
+                "bg5": "#44445a",
+            }
+
+        bg1 = palette.get("bg1", "#252536")
+        bg3 = palette.get("bg3", "#313145")
+        bg4 = palette.get("bg4", "#3a3a50")
+        bg5 = palette.get("bg5", "#44445a")
+        fg0 = palette.get("fg0", "#cdd6f4")
+        fg2 = palette.get("fg2", "#a6adc8")
+        fg3 = palette.get("fg3", "#6c7086")
+        border0 = palette.get("border0", "#313145")
+        border1 = palette.get("border1", "#44445a")
+        accent = palette.get("accent", "#00BCD4")
+        error = palette.get("error", "#f38ba8")
+
+        self.setStyleSheet(f"""
+            #DockTitleBar {{
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {bg4}, stop:0.5 {bg3}, stop:1 {bg1});
+                border: 1px solid {border1};
+                border-bottom: 2px solid {accent};
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }}
+            #DockTitleLabel {{
+                color: {fg0};
+                font-weight: bold;
+                font-size: 11px;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                background: transparent;
+                border: none;
+            }}
+            #DockFloatBtn {{
+                background: transparent;
+                border: 1px solid {border0};
+                border-radius: 3px;
+                color: {fg3};
+                font-size: 11px;
+                font-family: monospace;
+            }}
+            #DockFloatBtn:hover {{
+                background: {bg5};
+                color: {fg0};
+                border-color: {fg3};
+            }}
+            #DockCloseBtn {{
+                background: transparent;
+                border: 1px solid {border0};
+                border-radius: 3px;
+                color: {fg3};
+                font-size: 13px;
+                font-weight: bold;
+                font-family: monospace;
+            }}
+            #DockCloseBtn:hover {{
+                background: {error};
+                color: {fg0};
+                border-color: {error};
+            }}
+        """)
+        self._btn_float.setText("□")  # □ square
+        self._btn_close.setText("✕")  # ✕ cross
 
     def mouseDoubleClickEvent(self, event):
         if self._dock.isFloating():
@@ -88,6 +201,7 @@ class _DockTitleBar(QWidget):
                 self._dock.move(self._dock.pos() + delta)
                 self._drag_pos = event.globalPosition().toPoint()
         super().mouseMoveEvent(event)
+
 
 
 class ForgeMainWindow(QMainWindow):
@@ -1106,6 +1220,9 @@ class ForgeMainWindow(QMainWindow):
         # Update editor colours
         from forge.gui.editor_widget import set_editor_palette
         set_editor_palette(theme_name)
+        self._refresh_dock_title_bars()
+        if hasattr(self, '_bookmarks_panel') and hasattr(self._bookmarks_panel, 'apply_theme'):
+            self._bookmarks_panel.apply_theme()
 
     # ==================================================================
     # Helpers
@@ -1888,6 +2005,13 @@ class ForgeMainWindow(QMainWindow):
                 cursor = QTextCursor(block)
                 editor.setTextCursor(cursor)
                 editor.centerCursor()
+
+    def _refresh_dock_title_bars(self):
+        """Re-apply theme to all custom dock title bars."""
+        for dock in self.findChildren(QDockWidget):
+            tb = dock.titleBarWidget()
+            if isinstance(tb, _DockTitleBar):
+                tb._apply_theme()
 
     def _load_tiga_demo(self):
         """Load the TIGA IGA codebase with guided bookmarks."""
