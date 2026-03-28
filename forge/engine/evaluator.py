@@ -457,6 +457,7 @@ class Session:
         b["permute"] = lambda x, order: ForgeArray(np.transpose(_unwrap(x), [int(_to_py(o))-1 for o in _unwrap(order).flatten()]))
         b["ndims"] = lambda x: ForgeArray(np.float64(max(2, _unwrap(x).ndim)))
         b["transpose"] = lambda x: x.T if isinstance(x, ForgeArray) else ForgeArray(np.asarray(x).T)
+        b["ctranspose"] = lambda x: ForgeArray(np.conj(np.asarray(x.data if isinstance(x, ForgeArray) else x).T))
         b["sum"] = lambda x, *a: ForgeArray(np.sum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
         b["prod"] = lambda x, *a: ForgeArray(np.prod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
         b["min"] = lambda x, *a: ForgeArray(np.min(_unwrap(x))) if not a else ForgeArray(np.minimum(_unwrap(x), _unwrap(a[0])))

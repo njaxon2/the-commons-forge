@@ -1105,7 +1105,9 @@ class ForgeSession:
             # Convert ForgeArray args to Python scalars
             conv_args = []
             for a in args:
-                if isinstance(a, ForgeArray):
+                if isinstance(a, ForgeChar):
+                    conv_args.append(a.to_str())
+                elif isinstance(a, ForgeArray):
                     v = a.data.flat[0]
                     if isinstance(v, (np.integer,)):
                         conv_args.append(int(v))
@@ -1113,8 +1115,6 @@ class ForgeSession:
                         conv_args.append(float(v))
                     else:
                         conv_args.append(v)
-                elif isinstance(a, ForgeChar):
-                    conv_args.append(a.to_str())
                 else:
                     conv_args.append(a)
             # Process escape sequences
@@ -5072,14 +5072,14 @@ class ForgeSession:
             if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
             vals = []
             for a in args:
-                if isinstance(a, ForgeArray):
+                if isinstance(a, ForgeChar):
+                    vals.append(a.to_str())
+                elif isinstance(a, ForgeArray):
                     v = a.data.flat[0]
                     if a.data.dtype in (np.float64, np.float32):
                         vals.append(float(v))
                     else:
                         vals.append(int(v))
-                elif isinstance(a, ForgeChar):
-                    vals.append(a.to_str())
                 else:
                     vals.append(a)
             try:
