@@ -39,6 +39,8 @@ class DataCursorWidget(QLabel):
             "font-size: 11px; padding: 2px 8px; "
             "color: #cdd6f4; background: transparent;"
         )
+        self.setFixedWidth(260)
+        self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def update_coords(self, x, y, label=""):
         if label:
@@ -340,6 +342,14 @@ class PlotWidget(QWidget):
     def _on_mouse_click(self, event):
         if event.inaxes and event.button == 1:
             self.data_cursor.update_coords(event.xdata, event.ydata, "Click")
+        if event.dblclick:
+            self._reset_view()
+
+    def _reset_view(self):
+        """Reset zoom/pan to the original data limits."""
+        self.ax.autoscale()
+        self.ax.set_aspect('auto')
+        self.canvas.draw()
 
     def _toggle_grid(self, on):
         self.ax.grid(on)
@@ -347,7 +357,16 @@ class PlotWidget(QWidget):
 
     def _toggle_legend(self, on):
         if on:
-            self.ax.legend()
+            lines = self.ax.get_lines()
+            # Auto-label any unlabeled lines
+            labeled = False
+            for i, line in enumerate(lines):
+                lbl = line.get_label()
+                if not lbl or lbl.startswith('_'):
+                    line.set_label(f"Series {i + 1}")
+                labeled = True
+            if labeled:
+                self.ax.legend()
         else:
             leg = self.ax.get_legend()
             if leg:
