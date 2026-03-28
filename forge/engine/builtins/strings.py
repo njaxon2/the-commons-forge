@@ -847,6 +847,12 @@ def forge_strjoin(parts, delim=None):
                 strs.append(p.to_str())
             else:
                 strs.append(str(p))
+    elif isinstance(parts, (list, tuple)):
+        for p in parts:
+            if isinstance(p, ForgeChar):
+                strs.append(p.to_str())
+            else:
+                strs.append(str(p))
     return ForgeChar(delim.join(strs))
 
 

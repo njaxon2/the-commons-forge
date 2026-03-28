@@ -9511,12 +9511,16 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
             if len(args) == 0:
-                session._format = "short"
+                # No args: report current format
+                current = getattr(session, "_format", "short")
+                msg = f"  format type: {current}"
+                print(msg)
+                return ForgeChar(msg)
             else:
                 fmt = args[0]
                 if isinstance(fmt, ForgeChar):
                     fmt = fmt.to_str()
-                session._format = fmt
+                session._format = str(fmt).lower()
             return ForgeArray(np.array(0.0))
 
         def forge_help(name=None):

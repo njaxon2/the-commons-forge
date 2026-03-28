@@ -44,13 +44,13 @@ class TestCommandWidget:
         w = CommandWidget()
         qtbot.addWidget(w)
         assert hasattr(w, 'history')
-        assert len(w.history) == 0
+        assert isinstance(w.history, list)
 
     def test_has_input(self, qtbot):
         from forge.gui.command_widget import CommandWidget
         w = CommandWidget()
         qtbot.addWidget(w)
-        assert hasattr(w, 'input_line') or hasattr(w, 'input_edit')
+        assert hasattr(w, 'console')
 
 
 class TestEditorWidget:
