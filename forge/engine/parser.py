@@ -396,8 +396,14 @@ class Parser:
             "hold", "axis", "format", "grid", "box", "legend",
             "colormap", "shading", "view", "cd", "type", "help",
             "doc", "edit", "dbstop", "dbclear", "dbcont",
+            "who", "whos", "clear", "clc", "close", "figure",
+            "load", "save", "diary", "more", "pkg", "addpath",
+            "rmpath", "which", "lookfor", "run", "source",
+            "exist", "methods", "properties",
         }
-        _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc"}
+        _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc", "load",
+                          "save", "run", "source", "addpath", "rmpath",
+                          "diary", "which", "lookfor"}
         _next_tt = self._peek().type
         _is_cmd_trigger = _next_tt == TokenType.IDENT
         # For path commands, also trigger on / ~ . (common path starts)

@@ -449,7 +449,7 @@ class Session:
 
         # Array ops
         b["size"] = self._builtin_size
-        b["length"] = lambda x: ForgeArray(np.array(max(x._shape) if hasattr(x, "_shape") else (x.length() if isinstance(x, ForgeArray) else len(x))))
+        b["length"] = lambda x: ForgeArray(np.array(max(x._shape) if (hasattr(x, "_shape") and len(x._data) > 0) else (0 if hasattr(x, "_data") and len(x._data) == 0 else (x.length() if isinstance(x, ForgeArray) else len(x)))))
         b["numel"] = lambda x: ForgeArray(np.array(x._shape[0]*x._shape[1] if hasattr(x, "_shape") else (x.numel() if isinstance(x, ForgeArray) else len(x))))
         b["ndims"] = lambda x: ForgeArray(np.array(x.ndim if isinstance(x, ForgeArray) else 0))
         b["reshape"] = lambda x, *a: ForgeArray(_unwrap(x).reshape(*[int(_to_py(v)) for v in a]))
@@ -666,6 +666,83 @@ class Session:
             return FC(type(x).__name__)
         b["class"] = _class_name
         b["typecast"] = lambda x, t: x.astype(t.to_str() if isinstance(t, ForgeChar) else str(t))
+
+        # narginchk / nargoutchk
+        def _narginchk(minargs, maxargs):
+            # These are checked at call time; standalone just validates
+            pass
+        def _nargoutchk(minargs, maxargs):
+            pass
+        b["narginchk"] = _narginchk
+        b["nargoutchk"] = _nargoutchk
+
+        # exist(name, type) - check if name exists
+        def _exist(name, *args):
+            name = name.to_str() if isinstance(name, ForgeChar) else str(name)
+            kind = args[0].to_str() if args and isinstance(args[0], ForgeChar) else (str(args[0]) if args else "")
+            if kind == "var":
+                return ForgeArray(np.array(1.0 if self.workspace.has(name) else 0.0))
+            if kind == "file":
+                return ForgeArray(np.array(2.0 if os.path.isfile(name) else 0.0))
+            if kind == "dir":
+                return ForgeArray(np.array(7.0 if os.path.isdir(name) else 0.0))
+            if kind == "builtin":
+                return ForgeArray(np.array(5.0 if name in b else 0.0))
+            # Default: check var, then builtin, then file
+            if self.workspace.has(name):
+                return ForgeArray(np.array(1.0))
+            if name in b:
+                return ForgeArray(np.array(5.0))
+            if os.path.isfile(name):
+                return ForgeArray(np.array(2.0))
+            if os.path.isdir(name):
+                return ForgeArray(np.array(7.0))
+            return ForgeArray(np.array(0.0))
+        b["exist"] = _exist
+
+        # feval(funcname, args...) - call function by name
+        def _feval(name, *args):
+            name = name.to_str() if isinstance(name, ForgeChar) else str(name)
+            if name in self.builtins:
+                return self.builtins[name](*args)
+            raise NameError(f"undefined function '{name}'")
+        b["feval"] = _feval
+
+        # mfilename - returns empty (we're not in an m-file in REPL)
+        b["mfilename"] = lambda *a: ForgeChar("")
+
+        # inputname(n) - returns empty in REPL context
+        b["inputname"] = lambda n: ForgeChar("")
+
+        # nargs / nargout as functions (for querying builtins)
+        def _nargout_query(*args):
+            if args:
+                name = args[0].to_str() if isinstance(args[0], ForgeChar) else str(args[0])
+                if name in b and hasattr(b[name], '__code__'):
+                    return ForgeArray(np.array(-1.0))  # -1 = variable
+                return ForgeArray(np.array(-1.0))
+            return ForgeArray(np.array(0.0))
+        b["nargout"] = _nargout_query
+
+        def _nargin_query(*args):
+            if args:
+                name = args[0].to_str() if isinstance(args[0], ForgeChar) else str(args[0])
+                if name in b:
+                    func = b[name]
+                    if hasattr(func, '__code__'):
+                        import inspect
+                        try:
+                            sig = inspect.signature(func)
+                            # Count non-var params
+                            count = sum(1 for p in sig.parameters.values()
+                                       if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD))
+                            has_var = any(p.kind == p.VAR_POSITIONAL for p in sig.parameters.values())
+                            return ForgeArray(np.array(float(-count if has_var else count)))
+                        except (ValueError, TypeError):
+                            pass
+                return ForgeArray(np.array(-1.0))
+            return ForgeArray(np.array(0.0))
+        b["nargin"] = _nargin_query
 
         # Merge toolbox registries (elfun, general, specfun, ...)
         b.update(BUILTIN_REGISTRY)
@@ -1526,8 +1603,8 @@ class Session:
                 return self._exec_stmts(node.catch_body, ws)
             return None
 
-    def _call_function(self, funcdef: FunctionDef, args: list, caller_ws: Workspace) -> Any:
-        """Call a user-defined function."""
+    def _call_function(self, funcdef: FunctionDef, args: list, caller_ws: Workspace, nargout=None) -> Any:
+        """Call a user-defined function with varargin/varargout support."""
         local_ws = Workspace()
         # Copy constants from base workspace into local workspace
         _CONSTANTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
@@ -1535,13 +1612,25 @@ class Session:
         for const in _CONSTANTS:
             if self.workspace.has(const):
                 local_ws.set(const, self.workspace.get(const))
+        # varargin/varargout detection
+        has_varargin = (len(funcdef.params) > 0 and funcdef.params[-1] == "varargin")
+        has_varargout = (len(funcdef.returns) > 0 and funcdef.returns[-1] == "varargout")
+        fixed_params = funcdef.params[:-1] if has_varargin else funcdef.params
         # Set nargin/nargout
         local_ws.set("nargin", ForgeArray(np.array(float(len(args)))))
-        local_ws.set("nargout", ForgeArray(np.array(float(len(funcdef.returns)))))
-        # Bind parameters
-        for i, param in enumerate(funcdef.params):
+        _nout = nargout if nargout is not None else len(funcdef.returns)
+        local_ws.set("nargout", ForgeArray(np.array(float(_nout))))
+        # Bind fixed parameters
+        for i, param in enumerate(fixed_params):
             if i < len(args):
                 local_ws.set(param, args[i])
+        # Bind varargin: collect extra args into a cell array
+        if has_varargin:
+            extra = args[len(fixed_params):]
+            local_ws.set("varargin", ForgeCell(extra))
+        # Initialize varargout as empty cell
+        if has_varargout:
+            local_ws.set("varargout", ForgeCell([]))
         # Initialize return variables
         for ret in funcdef.returns:
             if not local_ws.has(ret):
@@ -1551,12 +1640,23 @@ class Session:
             self._exec_stmts(funcdef.body, local_ws)
         except ReturnSignal:
             pass
-        # Collect return values
-        if len(funcdef.returns) == 0:
+        # Collect return values (expand varargout)
+        returns = funcdef.returns
+        if len(returns) == 0:
             return None
-        if len(funcdef.returns) == 1:
-            return local_ws.get(funcdef.returns[0])
-        return tuple(local_ws.get(r) for r in funcdef.returns)
+        results = []
+        for ret in returns:
+            if ret == "varargout" and has_varargout:
+                va = local_ws.get("varargout")
+                if isinstance(va, ForgeCell):
+                    results.extend(va._data if hasattr(va, "_data") else [])
+                else:
+                    results.append(va)
+            else:
+                results.append(local_ws.get(ret))
+        if len(results) == 1:
+            return results[0]
+        return tuple(results)
 
 
     def _eval_multi_output(self, expr, ws, nargout):
