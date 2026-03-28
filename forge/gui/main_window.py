@@ -907,6 +907,7 @@ class ForgeMainWindow(QMainWindow):
             self.profiler_widget.set_editor_widget(self.editor_widget)
         if hasattr(self, '_bookmarks_panel'):
             self._bookmarks_panel.set_editor_widget(self.editor_widget)
+            self._bookmarks_panel.navigate_requested.connect(self._on_bookmark_navigate)
 
     def _make_dock(self, title, object_name, widget):
         dock = QDockWidget(title, self)
@@ -1868,6 +1869,18 @@ class ForgeMainWindow(QMainWindow):
                     cursor = QTextCursor(block)
                     editor.setTextCursor(cursor)
                     editor.centerCursor()
+
+    def _on_bookmark_navigate(self, file_path, line_no):
+        """Jump to a bookmarked file and line."""
+        self.open_file_in_editor(file_path)
+        editor = self.editor_widget.get_current_editor()
+        if editor and line_no > 0:
+            from PySide6.QtGui import QTextCursor
+            block = editor.document().findBlockByNumber(line_no - 1)
+            if block.isValid():
+                cursor = QTextCursor(block)
+                editor.setTextCursor(cursor)
+                editor.centerCursor()
 
     def _load_tiga_demo(self):
         """Load the TIGA IGA codebase with guided bookmarks."""
