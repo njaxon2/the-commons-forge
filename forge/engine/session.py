@@ -4701,6 +4701,7 @@ class ForgeSession:
         session._engine.functions["finv"] = forge_finv
         session._engine.functions["isfile"] = forge_isfile
         session._engine.functions["isfolder"] = forge_isfolder
+        session._engine.functions["isdir"] = forge_isfolder
         session._engine.functions["mkdir"] = forge_mkdir_func
         session._engine.functions["rmdir"] = forge_rmdir
         session._engine.functions["copyfile"] = forge_copyfile
