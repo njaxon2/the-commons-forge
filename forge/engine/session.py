@@ -5066,26 +5066,49 @@ class ForgeSession:
 
         # --- More string functions ---
         def forge_sprintf2(fmt, *args):
-            """sprintf(fmt, ...) — format string."""
+            """sprintf(fmt, ...) — format string with Octave vectorization."""
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
             if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
-            vals = []
+            # Check if any arg is a multi-element array (vectorized sprintf)
+            max_len = 1
+            expanded = []
             for a in args:
                 if isinstance(a, ForgeChar):
-                    vals.append(a.to_str())
+                    expanded.append([a.to_str()])
+                elif isinstance(a, ForgeArray) and a.data.size > 1:
+                    elems = []
+                    for v in a.data.flat:
+                        if isinstance(v, (np.floating, float)):
+                            elems.append(float(v))
+                        else:
+                            elems.append(int(v))
+                    expanded.append(elems)
+                    max_len = max(max_len, len(elems))
                 elif isinstance(a, ForgeArray):
                     v = a.data.flat[0]
                     if a.data.dtype in (np.float64, np.float32):
-                        vals.append(float(v))
+                        expanded.append([float(v)])
                     else:
-                        vals.append(int(v))
+                        expanded.append([int(v)])
                 else:
-                    vals.append(a)
-            try:
-                return ForgeChar(fmt % tuple(vals))
-            except:
-                return ForgeChar(fmt)
+                    expanded.append([a])
+            if max_len > 1:
+                # Vectorized: repeat format for each element
+                result = []
+                for i in range(max_len):
+                    vals = [e[i % len(e)] for e in expanded]
+                    try:
+                        result.append(fmt % tuple(vals))
+                    except:
+                        result.append(fmt)
+                return ForgeChar("".join(result))
+            else:
+                vals = [e[0] for e in expanded]
+                try:
+                    return ForgeChar(fmt % tuple(vals))
+                except:
+                    return ForgeChar(fmt)
 
         def forge_num2str2(n, *args):
             """num2str(n, fmt) — convert number to string."""
