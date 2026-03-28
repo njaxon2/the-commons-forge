@@ -174,6 +174,21 @@ class FunctionDef:
     body: List[Any]
 
 @dataclass
+class UnwindProtect:
+    """unwind_protect ... unwind_protect_cleanup ... end"""
+    try_body: list
+    cleanup_body: list
+
+@dataclass
+class ClassDef:
+    """classdef Name < SuperClass"""
+    name: str
+    superclasses: list  # list of str
+    properties: dict    # {name: default_value}
+    methods: list       # list of FunctionDef
+    is_handle: bool = False
+
+@dataclass
 class ExpressionStatement:
     """Bare expression (possibly with ; to suppress output)."""
     expr: Any
@@ -267,7 +282,7 @@ class Parser:
     def _is_end_keyword(self):
         """Check if current token is 'end' or end-variant."""
         return self._at(TokenType.KEYWORD) and self._peek().value in (
-            'end', 'endif', 'endfor', 'endwhile', 'endfunction', 'endswitch', 'end_try_catch')
+            'end', 'endif', 'endfor', 'endwhile', 'endfunction', 'endswitch', 'end_try_catch', 'endclassdef', 'end_unwind_protect')
 
     # ============================================================
     # Top-level parsing
@@ -332,6 +347,11 @@ class Parser:
             elif kw == 'persistent':
                 return self._parse_persistent()
 
+            elif kw == 'classdef':
+                return self._parse_classdef()
+            elif kw == 'unwind_protect':
+                return self._parse_unwind_protect()
+
         # Expression or assignment
         return self._parse_expr_or_assign()
 
@@ -341,6 +361,107 @@ class Parser:
             pass
         elif self._match(TokenType.NEWLINE):
             pass
+
+    def _parse_classdef(self):
+        """Parse classdef Name [< SuperClass] ... end"""
+        self._advance()  # consume 'classdef'
+        # Check for (Handle)
+        is_handle = False
+        if self._at(TokenType.LPAREN):
+            self._advance()
+            if self._at(TokenType.IDENT) and self._peek().value == "Handle":
+                self._advance()
+                is_handle = True
+            self._expect(TokenType.RPAREN)
+        # Class name
+        name = self._expect(TokenType.IDENT).value
+        # Superclasses
+        superclasses = []
+        if self._at(TokenType.LT):
+            self._advance()
+            superclasses.append(self._expect(TokenType.IDENT).value)
+            while self._at(TokenType.AND):
+                self._advance()
+                superclasses.append(self._expect(TokenType.IDENT).value)
+        self._skip_newlines()
+        # Parse blocks: properties, methods, events, enumeration
+        properties = {}
+        methods = []
+        while not self._is_end_keyword():
+            self._skip_newlines()
+            if self._at(TokenType.EOF):
+                break
+            if self._at(TokenType.KEYWORD) and self._peek().value == "properties":
+                self._advance()
+                self._skip_newlines()
+                # Properties block
+                while not self._is_end_keyword():
+                    self._skip_newlines()
+                    if self._at(TokenType.EOF) or (self._at(TokenType.KEYWORD) and self._peek().value in ("methods", "events", "enumeration")):
+                        break
+                    if self._at(TokenType.IDENT):
+                        prop_name = self._advance().value
+                        default = None
+                        if self._at(TokenType.ASSIGN):
+                            self._advance()
+                            default = self._parse_expression(0)
+                        properties[prop_name] = default
+                        self._match(TokenType.SEMICOLON)
+                        self._match(TokenType.NEWLINE)
+                    else:
+                        self._advance()  # skip unknown
+                if self._is_end_keyword():
+                    self._advance()  # consume 'end'
+                self._skip_newlines()
+            elif self._at(TokenType.KEYWORD) and self._peek().value == "methods":
+                self._advance()
+                self._skip_newlines()
+                while not self._is_end_keyword():
+                    self._skip_newlines()
+                    if self._at(TokenType.EOF) or (self._at(TokenType.KEYWORD) and self._peek().value in ("properties", "events", "enumeration")):
+                        break
+                    if self._at(TokenType.KEYWORD) and self._peek().value == "function":
+                        methods.append(self._parse_function_def())
+                    else:
+                        self._advance()
+                    self._skip_newlines()
+                if self._is_end_keyword():
+                    self._advance()  # consume 'end'
+                self._skip_newlines()
+            elif self._at(TokenType.KEYWORD) and self._peek().value in ("events", "enumeration"):
+                self._advance()
+                # Skip events/enumeration blocks
+                while not self._is_end_keyword() and not self._at(TokenType.EOF):
+                    self._advance()
+                if self._is_end_keyword():
+                    self._advance()
+                self._skip_newlines()
+            else:
+                self._advance()
+        if self._is_end_keyword():
+            self._advance()
+        return ClassDef(name, superclasses, properties, methods, is_handle)
+
+    def _parse_unwind_protect(self):
+        """Parse unwind_protect ... unwind_protect_cleanup ... end"""
+        self._advance()  # consume 'unwind_protect'
+        self._skip_newlines()
+        try_body = []
+        while not (self._at(TokenType.KEYWORD) and self._peek().value == "unwind_protect_cleanup") and not self._is_end_keyword() and not self._at(TokenType.EOF):
+            stmt = self._parse_statement()
+            if stmt:
+                try_body.append(stmt)
+        cleanup_body = []
+        if self._at(TokenType.KEYWORD) and self._peek().value == "unwind_protect_cleanup":
+            self._advance()
+            self._skip_newlines()
+            while not self._is_end_keyword() and not self._at(TokenType.EOF):
+                stmt = self._parse_statement()
+                if stmt:
+                    cleanup_body.append(stmt)
+        if self._is_end_keyword():
+            self._advance()
+        return UnwindProtect(try_body, cleanup_body)
 
     def _parse_expr_or_assign(self) -> Any:
         """Parse expression, checking for assignment."""

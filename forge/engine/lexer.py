@@ -77,6 +77,7 @@ KEYWORDS = {
     'global', 'persistent',
     'classdef', 'properties', 'methods', 'events', 'enumeration',
     'parfor', 'spmd',
+    'unwind_protect', 'unwind_protect_cleanup', 'end_unwind_protect',
     'true', 'false',
 }
 

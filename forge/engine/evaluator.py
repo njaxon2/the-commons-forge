@@ -31,7 +31,7 @@ from forge.engine.parser import (
     EndKeyword, BareColon, Assignment, IfStatement, ForStatement, WhileStatement,
     DoUntilStatement, SwitchStatement, TryCatchStatement, ReturnStatement,
     BreakStatement, ContinueStatement, FunctionDef, ExpressionStatement,
-    GlobalStatement, PersistentStatement, parse,
+    GlobalStatement, PersistentStatement, ClassDef, UnwindProtect, parse,
 )
 
 
@@ -940,6 +940,12 @@ class Session:
         if isinstance(node, TryCatchStatement):
             return self._exec_try(node, ws)
 
+        if isinstance(node, ClassDef):
+            return self._exec_classdef(node, ws)
+
+        if isinstance(node, UnwindProtect):
+            return self._exec_unwind_protect(node, ws)
+
         if isinstance(node, ReturnStatement):
             raise ReturnSignal()
 
@@ -1039,6 +1045,10 @@ class Session:
             target = self._eval_expr(node.target, ws)
             if isinstance(target, ForgeStruct):
                 return target._fields[node.field]
+            # Support ForgeObject (classdef instances)
+            from forge.engine.classdef import ForgeObject
+            if isinstance(target, ForgeObject):
+                return getattr(target, node.field)
             raise TypeError(f"Field access on {type(target).__name__}")
 
         if isinstance(node, DynamicFieldAccess):
@@ -1046,6 +1056,9 @@ class Session:
             field = self._eval_expr(node.field_expr, ws)
             if isinstance(field, ForgeChar):
                 field = field.to_str()
+            from forge.engine.classdef import ForgeObject as _FO
+            if isinstance(target, _FO):
+                return getattr(target, str(field))
             return target._fields[str(field)]
 
         if isinstance(node, MatrixLiteral):
@@ -1513,6 +1526,10 @@ class Session:
             obj = self._eval_expr(target.target, ws)
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
+            else:
+                from forge.engine.classdef import ForgeObject
+                if isinstance(obj, ForgeObject):
+                    obj.set(target.field, value)
             return value
 
         if isinstance(target, CellIndex):
@@ -1602,6 +1619,64 @@ class Session:
                     ws.set(node.catch_var, err_struct)
                 return self._exec_stmts(node.catch_body, ws)
             return None
+
+    def _exec_classdef(self, node: ClassDef, ws: Workspace):
+        """Register a classdef as a constructable class."""
+        from forge.engine.classdef import (
+            ForgeClass, Property, Method, register_class, ForgeObject
+        )
+        # Build properties
+        props = {}
+        for name, default_expr in node.properties.items():
+            default_val = self._eval_expr(default_expr, ws) if default_expr is not None else None
+            props[name] = Property(name=name, default_value=default_val)
+        # Build methods
+        methods = {}
+        for func_def in node.methods:
+            def make_method(fd):
+                def method_impl(obj, *args):
+                    # Create local workspace with obj as first parameter
+                    local_ws = Workspace()
+                    if fd.params:
+                        local_ws.set(fd.params[0], obj)
+                    for i, param in enumerate(fd.params[1:], 1):
+                        if i - 1 < len(args):
+                            local_ws.set(param, args[i - 1])
+                    local_ws.set("nargin", ForgeArray(np.array(float(len(args) + 1))))
+                    try:
+                        self._exec_stmts(fd.body, local_ws)
+                    except ReturnSignal:
+                        pass
+                    if fd.returns:
+                        return local_ws.get(fd.returns[0])
+                    return obj
+                return method_impl
+            methods[func_def.name] = Method(
+                name=func_def.name,
+                function_def=make_method(func_def),
+            )
+        # Create and register class
+        forge_cls = ForgeClass(
+            name=node.name,
+            superclasses=node.superclasses,
+            properties=props,
+            methods=methods,
+            is_handle=node.is_handle,
+        )
+        register_class(forge_cls)
+        # Register constructor as a callable in functions dict
+        self.functions[node.name] = lambda *args: forge_cls.construct(*args)
+        return None
+
+    def _exec_unwind_protect(self, node: UnwindProtect, ws: Workspace):
+        """Execute unwind_protect: always run cleanup."""
+        try:
+            result = self._exec_stmts(node.try_body, ws)
+        except Exception:
+            result = None
+        finally:
+            self._exec_stmts(node.cleanup_body, ws)
+        return result
 
     def _call_function(self, funcdef: FunctionDef, args: list, caller_ws: Workspace, nargout=None) -> Any:
         """Call a user-defined function with varargin/varargout support."""
