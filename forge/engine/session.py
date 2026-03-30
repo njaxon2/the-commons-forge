@@ -501,7 +501,7 @@ class ForgeSession:
                 session._next_fid += 1
                 session._file_handles[fid] = fh
                 return ForgeArray(np.float64(fid))
-            except:
+            except Exception:
                 return ForgeArray(np.float64(-1))
 
         def forge_fclose(fid=None):
@@ -511,7 +511,7 @@ class ForgeSession:
             if fid is None or (isinstance(fid, ForgeChar) and fid.to_str() == "all"):
                 for f in session._file_handles.values():
                     try: f.close()
-                    except: pass
+                    except Exception: pass
                 session._file_handles.clear()
                 return ForgeArray(np.float64(0))
             fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
@@ -559,7 +559,7 @@ class ForgeSession:
                 else:
                     py_args = [e[0] for e in expanded]
                     text = fmt % tuple(py_args) if py_args else fmt
-            except:
+            except Exception:
                 text = fmt
             if fid_val == 1:
                 return text  # stdout
@@ -2067,7 +2067,7 @@ class ForgeSession:
                             fmt = f'%.{int(fmt.data.flat[0])}f'
                         try:
                             return ForgeChar(fmt % v)
-                        except:
+                        except Exception:
                             return ForgeChar(str(v))
                     if v == int(v) and abs(v) < 1e15:
                         return ForgeChar(str(int(v)))
@@ -2771,7 +2771,7 @@ class ForgeSession:
             try:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
                 return ForgeArray(np.float64(result.returncode)), ForgeChar(result.stdout)
-            except:
+            except Exception:
                 return ForgeArray(np.float64(1)), ForgeChar("")
 
         def forge_getenv(name):
@@ -3517,7 +3517,7 @@ class ForgeSession:
             try:
                 ni = np.linalg.norm(np.linalg.inv(Ad), 1)
                 return ForgeArray(np.float64(1.0 / (n * ni)))
-            except:
+            except Exception:
                 return ForgeArray(np.float64(0.0))
 
         def forge_bandwidth(A):
@@ -3584,7 +3584,7 @@ class ForgeSession:
             try:
                 np.linalg.cholesky(Ad)
                 return ForgeArray(np.float64(1))
-            except:
+            except Exception:
                 return ForgeArray(np.float64(0))
 
         def forge_subspace(A, B):
@@ -4587,7 +4587,7 @@ class ForgeSession:
                 vecs_inv = np.linalg.inv(vecs)
                 for i in range(len(vals)):
                     cond[i] = np.linalg.norm(vecs[:, i]) * np.linalg.norm(vecs_inv[i, :])
-            except:
+            except Exception:
                 cond[:] = np.inf
             return ForgeArray(vecs), ForgeArray(np.diag(vals)), ForgeArray(cond.reshape(-1, 1))
 
@@ -5436,14 +5436,14 @@ class ForgeSession:
                     vals = [e[i % len(e)] for e in expanded]
                     try:
                         result.append(fmt % tuple(vals))
-                    except:
+                    except Exception:
                         result.append(fmt)
                 return ForgeChar("".join(result))
             else:
                 vals = [e[0] for e in expanded]
                 try:
                     return ForgeChar(fmt % tuple(vals))
-                except:
+                except Exception:
                     return ForgeChar(fmt)
 
         def forge_num2str2(n, *args):
@@ -5462,7 +5462,7 @@ class ForgeSession:
                             fmt = f'%.{int(fmt.data.flat[0])}f'
                         try:
                             return ForgeChar(fmt % v)
-                        except:
+                        except Exception:
                             return ForgeChar(str(v))
                     if v == int(v) and abs(v) < 1e15:
                         return ForgeChar(str(int(v)))
@@ -5484,7 +5484,7 @@ class ForgeSession:
             if isinstance(s, ForgeChar): s = s.to_str()
             try:
                 return ForgeArray(np.float64(float(s)))
-            except:
+            except Exception:
                 return ForgeArray(np.array([[]]))
 
         def forge_dec2hex(n):
@@ -5856,7 +5856,7 @@ class ForgeSession:
             from forge.engine.types import ForgeArray
             fd = int(fid.data.flat[0]) if isinstance(fid, ForgeArray) else int(fid)
             d = data.data if isinstance(data, ForgeArray) else np.atleast_2d(data)
-            with open(f'/tmp/forge_fid_{fd}', 'ab') as f:
+            with open(os.path.join(tempfile.gettempdir(), f'forge_fid_{fd}'), 'ab') as f:
                 d.tofile(f)
             return ForgeArray(np.float64(d.size))
 
@@ -5868,13 +5868,13 @@ class ForgeSession:
             if args and isinstance(args[0], ForgeArray):
                 count = int(args[0].data.flat[0])
             try:
-                with open(f'/tmp/forge_fid_{fd}', 'rb') as f:
+                with open(os.path.join(tempfile.gettempdir(), f'forge_fid_{fd}'), 'rb') as f:
                     if count > 0:
                         data = np.fromfile(f, dtype=np.float64, count=count)
                     else:
                         data = np.fromfile(f, dtype=np.float64)
                 return ForgeArray(data.reshape(-1, 1))
-            except:
+            except Exception:
                 return ForgeArray(np.array([[]]))
 
         # Register all R146b functions
@@ -6082,7 +6082,7 @@ class ForgeSession:
                 from PIL import Image
                 img = np.array(Image.open(fname)).astype(float) / 255.0
                 return ForgeArray(img)
-            except:
+            except Exception:
                 return ForgeArray(np.array([[]]))
 
         def forge_imwrite_func(img, fname, *args):
@@ -6096,7 +6096,7 @@ class ForgeSession:
             try:
                 from PIL import Image
                 Image.fromarray(data.astype(np.uint8)).save(fname)
-            except:
+            except Exception:
                 pass
 
         # --- Audio stubs ---
@@ -6109,7 +6109,7 @@ class ForgeSession:
                 import soundfile as sf
                 data, fs = sf.read(fname)
                 return ForgeArray(data.reshape(-1, 1) if data.ndim == 1 else data), ForgeArray(np.float64(fs))
-            except:
+            except Exception:
                 return ForgeArray(np.array([[]])), ForgeArray(np.float64(44100))
 
         def forge_audiowrite_func(fname, y, fs):
@@ -6122,7 +6122,7 @@ class ForgeSession:
             try:
                 import soundfile as sf
                 sf.write(fname, data.flatten(), fsd)
-            except:
+            except Exception:
                 pass
 
         def forge_sound_func(*args):
@@ -6444,7 +6444,7 @@ class ForgeSession:
                     vals.append(a)
             try:
                 return ForgeChar(fmt % tuple(vals))
-            except:
+            except Exception:
                 return ForgeChar(fmt)
 
         def forge_join2(sep, *args):
@@ -6495,7 +6495,7 @@ class ForgeSession:
                 t = ForgeStruct()
                 t._fields["data"] = ForgeArray(data)
                 return t
-            except:
+            except Exception:
                 return ForgeStruct()
 
         def forge_writetable2(tbl, fname, *args):
@@ -7587,7 +7587,7 @@ class ForgeSession:
                 import urllib.request
                 with urllib.request.urlopen(url) as resp:
                     return ForgeChar(resp.read().decode('utf-8', errors='replace'))
-            except:
+            except Exception:
                 return ForgeChar('')
 
         def forge_urlwrite2(url, fname):
@@ -7600,7 +7600,7 @@ class ForgeSession:
                 import urllib.request
                 urllib.request.urlretrieve(url, fname)
                 return ForgeArray(np.float64(1))
-            except:
+            except Exception:
                 return ForgeArray(np.float64(0))
 
         # --- Workspace ---
@@ -7836,7 +7836,7 @@ class ForgeSession:
             try:
                 with open(fname) as f:
                     return ForgeChar(f.read())
-            except:
+            except Exception:
                 return ForgeChar('')
 
         def forge_xmlwrite2(fname, content):
@@ -8407,7 +8407,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "SVM"
                 return mdl
-            except:
+            except Exception:
                 mdl = ForgeStruct()
                 mdl._fields["type"] = "SVM_stub"
                 return mdl
@@ -8426,7 +8426,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "DecisionTree"
                 return mdl
-            except:
+            except Exception:
                 mdl = ForgeStruct()
                 mdl._fields["type"] = "DecisionTree_stub"
                 return mdl
@@ -8445,7 +8445,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "KNN"
                 return mdl
-            except:
+            except Exception:
                 mdl = ForgeStruct()
                 mdl._fields["type"] = "KNN_stub"
                 return mdl
@@ -8464,7 +8464,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "Ensemble"
                 return mdl
-            except:
+            except Exception:
                 mdl = ForgeStruct()
                 mdl._fields["type"] = "Ensemble_stub"
                 return mdl
@@ -8910,7 +8910,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "RegressionTree"
                 return mdl
-            except:
+            except Exception:
                 return ForgeStruct()
 
         def forge_fitrensemble2(X, y, *args):
@@ -8927,7 +8927,7 @@ class ForgeSession:
                 mdl._fields["_clf"] = clf
                 mdl._fields["type"] = "RegressionEnsemble"
                 return mdl
-            except:
+            except Exception:
                 return ForgeStruct()
 
         # --- Time series ---

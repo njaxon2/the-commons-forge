@@ -2109,6 +2109,11 @@ class EditorWidget(QWidget):
     # ------------------------------------------------------------------
 
 
+        # Show welcome tab if no files are open
+        if self.tabs.count() == 0:
+            self._create_welcome_tab()
+
+
     def _mark_tab_modified(self, modified=True):
         """Mark the current tab as modified with a dot indicator."""
         idx = self.tabs.currentIndex()

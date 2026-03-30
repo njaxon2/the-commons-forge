@@ -14,7 +14,7 @@ The legacy "..." line-continuation syntax is also preserved.
 """
 
 from forge import __version__ as _forge_version
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import (
     QFont, QTextCursor, QColor, QTextCharFormat,
     QSyntaxHighlighter, QTextDocument, QAction,
@@ -221,6 +221,28 @@ def _depth_after_line(current_depth: int, line: str) -> int:
 # ======================================================================
 # Command widget
 # ======================================================================
+
+
+class _EngineWorker(QThread):
+    """Run engine.eval() off the UI thread so the GUI stays responsive."""
+    result_ready = Signal(object)   # result value (or None)
+    error_ready = Signal(str)       # error message
+    finished_eval = Signal()
+
+    def __init__(self, engine, code: str, parent=None):
+        super().__init__(parent)
+        self._engine = engine
+        self._code = code
+
+    def run(self):
+        try:
+            result = self._engine.eval(self._code)
+            self.result_ready.emit(result)
+        except Exception as exc:
+            self.error_ready.emit(str(exc))
+        finally:
+            self.finished_eval.emit()
+
 
 class CommandWidget(QWidget):
     """Interactive command window — single-pane terminal style."""
@@ -940,41 +962,66 @@ class CommandWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _execute(self, full_text: str):
-        """Run *full_text* through the engine and show results."""
+        """Run *full_text* through the engine and show results.
+
+        Uses a background thread so the GUI stays responsive during
+        long-running computations.
+        """
         if full_text.strip():
             self.history.append(full_text)
         self._save_persistent_history()
 
         if self.engine is not None and full_text.strip():
-            try:
-                result = self.engine.eval(full_text)
-                if result is not None and str(result).strip():
-                    self._append_text(str(result) + "\n")
-            except Exception as exc:
-                self._append_error(f"error: {exc}\n")
+            # Disable input while running
+            self.console.setReadOnly(True)
+            self._worker = _EngineWorker(self.engine, full_text)
+            self._worker.result_ready.connect(self._on_result)
+            self._worker.error_ready.connect(self._on_error)
+            self._worker.finished_eval.connect(
+                lambda ft=full_text: self._on_eval_done(ft))
+            self._worker.start()
+            return  # prompt written in _on_eval_done
         elif not self.engine and full_text.strip():
             self._append_error("(no engine connected)\n")
 
+        self._write_prompt()
+        self.command_executed.emit(full_text)
+
+    def _on_result(self, result):
+        """Handle engine result on main thread."""
+        if result is not None and str(result).strip():
+            self._append_text(str(result) + "\n")
+
+    def _on_error(self, msg: str):
+        """Handle engine error on main thread."""
+        self._append_error(f"error: {msg}\n")
+
+    def _on_eval_done(self, full_text: str):
+        """Post-execution cleanup on main thread."""
+        self.console.setReadOnly(False)
+
         # Check for clc request
-        if self.engine and hasattr(self.engine, '_clc_request') and self.engine._clc_request:
+        if self.engine and hasattr(self.engine, "_clc_request") and self.engine._clc_request:
             self.engine._clc_request = False
             self._clear_output()
+            self._write_prompt()
+            self.command_executed.emit(full_text)
             return
 
         # Check for edit request
-        if self.engine and hasattr(self.engine, '_edit_request') and self.engine._edit_request:
+        if self.engine and hasattr(self.engine, "_edit_request") and self.engine._edit_request:
             path = self.engine._edit_request
             self.engine._edit_request = None
             self.edit_requested.emit(path)
 
         # Check for doc request
-        if self.engine and hasattr(self.engine, '_doc_request') and self.engine._doc_request:
+        if self.engine and hasattr(self.engine, "_doc_request") and self.engine._doc_request:
             name = self.engine._doc_request
             self.engine._doc_request = None
             self.help_requested.emit(name)
 
         # Check for plot requests
-        if self.engine and hasattr(self.engine, '_plot_requests') and self.engine._plot_requests:
+        if self.engine and hasattr(self.engine, "_plot_requests") and self.engine._plot_requests:
             requests = list(self.engine._plot_requests)
             self.engine._plot_requests = []
             self.plot_requested.emit(requests)

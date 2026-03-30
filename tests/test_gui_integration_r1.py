@@ -129,6 +129,10 @@ def gui_exec(fw, command):
     # Press Enter
     cw._execute(command)
     qapp.processEvents()
+    # Wait for async worker to finish (if running)
+    if hasattr(cw, '_worker') and cw._worker is not None:
+        cw._worker.wait(5000)  # 5 second timeout
+        qapp.processEvents()
     if _DELAY:
         time.sleep(_DELAY)  # Pause so observer sees the result
 
