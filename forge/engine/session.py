@@ -271,7 +271,8 @@ class ForgeSession:
             return os.getcwd()
 
         def forge_who():
-            return '\n'.join(sorted(session._engine.workspace.names()))
+            _CONSTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan", "true", "false", "i", "j", "realmin", "realmax", "containers", "ans"}
+            return chr(10).join(sorted(n for n in session._engine.workspace.names() if n not in _CONSTS))
 
         def forge_whos():
             _dtype_map = {
@@ -282,7 +283,8 @@ class ForgeSession:
             }
             lines = []
             ws = session._engine.workspace
-            for name in sorted(ws.names()):
+            _CONSTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan", "true", "false", "i", "j", "realmin", "realmax", "containers", "ans"}
+            for name in sorted(n for n in ws.names() if n not in _CONSTS):
                 val = ws.get(name)
                 if isinstance(val, ForgeChar):
                     s_val = val.to_str()
