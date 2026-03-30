@@ -1742,8 +1742,8 @@ class Session:
             if node.catch_body is not None:
                 if node.catch_var:
                     err_struct = ForgeStruct()
-                    err_struct.identifier = getattr(e, "identifier", "")
-                    err_struct.message = str(e)
+                    err_struct._fields["identifier"] = ForgeChar(getattr(e, "identifier", ""))
+                    err_struct._fields["message"] = ForgeChar(str(e))
                     ws.set(node.catch_var, err_struct)
                 return self._exec_stmts(node.catch_body, ws)
             return None

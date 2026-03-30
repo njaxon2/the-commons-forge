@@ -1410,10 +1410,27 @@ class ForgeSession:
             raise NameError(f"Undefined function: {fname}")
 
         def forge_nargin_func(fname):
-            """nargin(fname) - number of input arguments."""
+            """nargin(fname) or nargin(@handle) - number of input arguments."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
             import inspect
+            # Accept function handles (callables) directly
+            if callable(fname) and not isinstance(fname, (str, ForgeChar)):
+                func = fname
+                try:
+                    sig = inspect.signature(func)
+                    count = 0
+                    has_var = False
+                    for p in sig.parameters.values():
+                        if p.kind == p.VAR_POSITIONAL:
+                            has_var = True
+                        elif p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
+                            count += 1
+                    if has_var:
+                        return ForgeArray(np.float64(-1))
+                    return ForgeArray(np.float64(count))
+                except (ValueError, TypeError):
+                    return ForgeArray(np.float64(-1))
             if isinstance(fname, ForgeChar):
                 fname = fname.to_str()
             if fname in session._engine.functions:
@@ -1510,12 +1527,36 @@ class ForgeSession:
             return ForgeChar(result)
 
         def forge_error(msg, *args):
-            """error(msg, args...) - throw error."""
+            """error(id, msg, args...) or error(msg, args...) - throw error.
+
+            If msg contains a colon and there are additional args,
+            treat it as error(identifier, template, args...).
+            """
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
             if isinstance(msg, ForgeChar):
                 msg = msg.to_str()
-            if args:
+            identifier = ""
+            # Detect identifier form: error('id:sub', 'message', ...)
+            if args and ":" in msg:
+                identifier = msg
+                fmt = args[0]
+                if isinstance(fmt, ForgeChar):
+                    fmt = fmt.to_str()
+                fmt_args = args[1:]
+                conv_args = []
+                for a in fmt_args:
+                    if isinstance(a, ForgeArray):
+                        conv_args.append(a.data.flat[0])
+                    elif isinstance(a, ForgeChar):
+                        conv_args.append(a.to_str())
+                    else:
+                        conv_args.append(a)
+                if conv_args:
+                    msg = str(fmt).replace("\\n", "\n") % tuple(conv_args)
+                else:
+                    msg = str(fmt).replace("\\n", "\n")
+            elif args:
                 conv_args = []
                 for a in args:
                     if isinstance(a, ForgeArray):
@@ -1525,7 +1566,7 @@ class ForgeSession:
                     else:
                         conv_args.append(a)
                 msg = msg.replace("\\n", "\n") % tuple(conv_args)
-            raise RuntimeError(msg)
+            raise ForgeError(identifier, msg)
 
         def forge_warning(msg, *args):
             """warning(msg) - print warning."""
