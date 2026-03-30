@@ -13,6 +13,16 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3-D projecti
 
 from forge.engine.types import ForgeArray, _unwrap
 
+
+def _enhance_current():
+    # Enhance the current figure window with Forge tools (Probe, etc.).
+    try:
+        from forge.gui.figure_enhancer import enhance_figure
+        enhance_figure(plt.gcf())
+    except Exception:
+        pass
+
+
 # Enable interactive mode so figures appear without blocking
 plt.ion()
 
@@ -171,6 +181,7 @@ def forge_plot(*args):
             ax.plot(y_data, **fmt_kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_semilogx(*args):
@@ -179,6 +190,7 @@ def forge_semilogx(*args):
     _cur_ax().set_xscale("log")
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_semilogy(*args):
@@ -187,6 +199,7 @@ def forge_semilogy(*args):
     _cur_ax().set_yscale("log")
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_loglog(*args):
@@ -197,6 +210,7 @@ def forge_loglog(*args):
     ax.set_yscale("log")
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_bar(*args, **kwargs):
@@ -267,6 +281,7 @@ def forge_bar(*args, **kwargs):
     _cur_ax().bar(x, y, **bar_kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_barh(x, y=None, height=0.8):
@@ -279,6 +294,7 @@ def forge_barh(x, y=None, height=0.8):
     _cur_ax().barh(x, y, height=height)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_scatter(x, y, s=None, c=None, **kwargs):
@@ -286,6 +302,7 @@ def forge_scatter(x, y, s=None, c=None, **kwargs):
     _cur_ax().scatter(_to_np(x), _to_np(y), s=s, c=c, **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_stem(x, y=None):
@@ -296,6 +313,7 @@ def forge_stem(x, y=None):
         _cur_ax().stem(_to_np(x), _to_np(y))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_stairs(x, y=None):
@@ -306,6 +324,7 @@ def forge_stairs(x, y=None):
         _cur_ax().step(_to_np(x), _to_np(y), where="post")
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_area(x, y=None):
@@ -318,6 +337,7 @@ def forge_area(x, y=None):
     _cur_ax().fill_between(x, y)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_errorbar(x, y, err, **kwargs):
@@ -325,6 +345,7 @@ def forge_errorbar(x, y, err, **kwargs):
     _cur_ax().errorbar(_to_np(x), _to_np(y), yerr=_to_np(err), **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_histogram(data, bins=10):
@@ -333,6 +354,7 @@ def forge_histogram(data, bins=10):
     _cur_ax().bar(edges[:-1], counts, width=np.diff(edges), align="edge")
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_pie(x, **kwargs):
@@ -340,6 +362,7 @@ def forge_pie(x, **kwargs):
     _cur_ax().pie(_to_np(x), **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_polar(theta, r):
@@ -348,6 +371,7 @@ def forge_polar(theta, r):
     ax.plot(_to_np(theta), _to_np(r))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_fill(x, y, *args, **kwargs):
@@ -355,6 +379,7 @@ def forge_fill(x, y, *args, **kwargs):
     _cur_ax().fill(_to_np(x), _to_np(y), *args, **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_line(x, y, **kwargs):
@@ -362,6 +387,7 @@ def forge_line(x, y, **kwargs):
     _cur_ax().plot(_to_np(x), _to_np(y), **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_rectangle(pos, width, height, **kwargs):
@@ -372,6 +398,7 @@ def forge_rectangle(pos, width, height, **kwargs):
     _cur_ax().autoscale_view()
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 # ===================================================================
@@ -437,6 +464,7 @@ def forge_plot3(*args, **kwargs):
         ax.plot(x, y, z, **fmt_kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_scatter3(x, y, z, **kwargs):
@@ -444,6 +472,7 @@ def forge_scatter3(x, y, z, **kwargs):
     ax.scatter(_to_np(x), _to_np(y), _to_np(z), **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def _prepare_surf_args(*args):
@@ -512,6 +541,7 @@ def forge_surf(*args, **kwargs):
     fig._forge_last_mappable = surf_obj
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_surfc(*args, **kwargs):
@@ -526,6 +556,7 @@ def forge_surfc(*args, **kwargs):
     fig._forge_last_mappable = surf_obj
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_surfl(*args, **kwargs):
@@ -537,6 +568,7 @@ def forge_surfl(*args, **kwargs):
     ax.plot_surface(X, Y, Z, **kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_mesh(*args, **kwargs):
@@ -548,6 +580,7 @@ def forge_mesh(*args, **kwargs):
     ax.plot_wireframe(X, Y, Z, **kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_meshc(*args, **kwargs):
@@ -560,6 +593,7 @@ def forge_meshc(*args, **kwargs):
     ax.contour(X, Y, Z, zdir="z", offset=Z.min())
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_meshz(*args, **kwargs):
@@ -572,6 +606,7 @@ def forge_meshz(*args, **kwargs):
     ax.plot_surface(X, Y, np.zeros_like(Z), alpha=0.1)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_contour(X, Y, Z, *args, **kwargs):
@@ -579,6 +614,7 @@ def forge_contour(X, Y, Z, *args, **kwargs):
     _cur_ax().contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_contourf(X, Y, Z, *args, **kwargs):
@@ -603,6 +639,7 @@ def forge_contourf(X, Y, Z, *args, **kwargs):
     _cur_fig()._forge_last_mappable = cs
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_contour3(X, Y, Z, *args, **kwargs):
@@ -610,6 +647,7 @@ def forge_contour3(X, Y, Z, *args, **kwargs):
     ax.contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_waterfall(X, Y, Z, **kwargs):
@@ -619,6 +657,7 @@ def forge_waterfall(X, Y, Z, **kwargs):
         ax.plot(Xn[i, :], Yn[i, :], Zn[i, :], color="blue", **kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_pcolor(*args, **kwargs):
@@ -639,6 +678,7 @@ def forge_pcolor(*args, **kwargs):
     _cur_fig()._forge_last_mappable = pc
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_imagesc(*args, **kwargs):
@@ -658,6 +698,7 @@ def forge_imagesc(*args, **kwargs):
     _cur_fig()._forge_last_mappable = im
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_shading(*args):
@@ -681,6 +722,7 @@ def forge_shading(*args):
                 coll.set_linewidth(0.5)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_peaks(*args):
@@ -769,6 +811,7 @@ def forge_title(*args):
     _cur_ax().set_title(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_xlabel(*args):
@@ -784,6 +827,7 @@ def forge_xlabel(*args):
     _cur_ax().set_xlabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_ylabel(*args):
@@ -799,6 +843,7 @@ def forge_ylabel(*args):
     _cur_ax().set_ylabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_zlabel(*args):
@@ -812,6 +857,7 @@ def forge_zlabel(*args):
         ax.set_zlabel(text, **mpl_kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_legend(*args, **kwargs):
@@ -889,6 +935,7 @@ def forge_legend(*args, **kwargs):
         ax.legend(**kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_grid(on=None):
@@ -906,6 +953,7 @@ def forge_grid(on=None):
             _cur_ax().grid(bool(on))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_axis(spec=None):
@@ -923,6 +971,7 @@ def forge_axis(spec=None):
         ax.set_ylim(lims[2], lims[3])
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_xlim(lo=None, hi=None):
@@ -935,6 +984,7 @@ def forge_xlim(lo=None, hi=None):
         _cur_ax().set_xlim(float(lo), float(hi))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_ylim(lo=None, hi=None):
@@ -948,6 +998,7 @@ def forge_ylim(lo=None, hi=None):
         _cur_ax().set_ylim(float(lo), float(hi))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_zlim(lo=None, hi=None):
@@ -959,6 +1010,7 @@ def forge_zlim(lo=None, hi=None):
     ax.set_zlim(float(lo), float(hi))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_hold(state=None):
@@ -988,8 +1040,10 @@ def forge_colorbar(**kwargs):
         plt.colorbar(**kwargs)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_colormap(name: str):
@@ -1017,6 +1071,7 @@ def forge_figure(n=None):
         pass
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
     return fig
 
 
@@ -1029,6 +1084,7 @@ def forge_subplot(m, n, p):
     plt.sca(ax)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
     return ax
 
 
@@ -1044,12 +1100,14 @@ def forge_cla():
     _cur_ax().cla()
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_clf():
     _cur_fig().clf()
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_close(n=None):
@@ -1184,6 +1242,7 @@ def forge_drawnow():
     """Force figure update."""
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_pause(t=None):
@@ -1222,6 +1281,7 @@ def forge_view(*args):
         ax.view_init(elev=float(el), azim=float(az))
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_clim(*args):
@@ -1243,6 +1303,7 @@ def forge_clim(*args):
             im.set_clim(lo, hi)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_rotate3d(state=None):
@@ -1345,6 +1406,7 @@ def forge_text_func(*args):
         ax.text(x, y, str(s), **kw)
     plt.draw()
     plt.pause(0.01)
+    _enhance_current()
 
 
 def forge_xline(x, *args):

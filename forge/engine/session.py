@@ -1140,6 +1140,13 @@ class ForgeSession:
                 return name  # fall through -- will raise FileNotFoundError
 
             fname = _find_file(fname)
+            if not os.path.isfile(fname):
+                cwd = os.getcwd()
+                bdir = getattr(session, "_file_browser_dir", None)
+                msg = "load: unable to find file " + repr(fname) + "; CWD: " + cwd
+                if bdir:
+                    msg += "; File browser dir: " + bdir
+                raise FileNotFoundError(msg)
             _varname_filter = [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames] if varnames else None
             ws = session._engine.workspace
 
