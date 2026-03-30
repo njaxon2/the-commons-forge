@@ -2311,8 +2311,8 @@ class EditorWidget(QWidget):
         from forge import __version__ as _fv
         # Dynamic function count from engine registry
         try:
-            from forge.engine.session import ForgeSession as _FS
-            _func_count = f"{len(_FS()._engine.functions):,}"
+            from forge.engine.builtins import BUILTIN_REGISTRY
+            _func_count = f"{len(BUILTIN_REGISTRY):,}"
         except Exception:
             _func_count = "800+"
         version_label = QLabel(f"Forge v{_fv}  ·  {_func_count} functions across 29 toolboxes  ·  1,153 tests passing")

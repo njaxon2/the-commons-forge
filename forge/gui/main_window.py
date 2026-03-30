@@ -535,7 +535,7 @@ class ForgeMainWindow(QMainWindow):
             if editor:
                 try:
                     editor.cursorPositionChanged.disconnect(self._update_cursor_status)
-                except (TypeError, RuntimeError, RuntimeWarning):
+                except Exception:
                     pass
                 editor.cursorPositionChanged.connect(self._update_cursor_status)
                 self._update_cursor_status()

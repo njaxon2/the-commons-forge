@@ -1,3 +1,6 @@
+LICENSE
+NOTICE
+README.md
 pyproject.toml
 forge/__init__.py
 forge/__main__.py

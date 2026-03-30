@@ -1395,6 +1395,101 @@ def forge_meshgrid(x, y=None):
     return _FA(X), _FA(Y)
 
 
+
+# ---------------------------------------------------------------------------
+# bar3 -- 3D bar chart
+# ---------------------------------------------------------------------------
+
+def forge_bar3(*args, **kwargs):
+    """bar3(Z) or bar3(Y, Z) -- 3D bar chart."""
+    from mpl_toolkits.mplot3d import Axes3D
+    from forge.engine.types import ForgeArray, _unwrap
+    if len(args) == 0:
+        raise ValueError("bar3 requires at least one argument")
+    Z = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
+    if Z.ndim == 1:
+        Z = Z.reshape(1, -1)
+    fig = plt.gcf()
+    ax = fig.add_subplot(111, projection='3d')
+    rows, cols = Z.shape
+    xpos, ypos = np.meshgrid(np.arange(cols), np.arange(rows))
+    xpos = xpos.flatten()
+    ypos = ypos.flatten()
+    zpos = np.zeros_like(xpos, dtype=float)
+    dx = dy = 0.6
+    dz = Z.flatten().astype(float)
+    ax.bar3d(xpos, ypos, zpos, dx, dy, dz, alpha=0.8)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    return ForgeArray(np.array(0.0))
+
+
+# ---------------------------------------------------------------------------
+# boxplot -- Box-and-whisker plot
+# ---------------------------------------------------------------------------
+
+def forge_boxplot(*args, **kwargs):
+    """boxplot(X) -- Box-and-whisker plot."""
+    from forge.engine.types import ForgeArray, _unwrap
+    if len(args) == 0:
+        raise ValueError("boxplot requires at least one argument")
+    X = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
+    if X.ndim == 1:
+        data = [X]
+    else:
+        data = [X[:, j] for j in range(X.shape[1])]
+    ax = plt.gca()
+    bp = ax.boxplot(data, patch_artist=True)
+    for box in bp['boxes']:
+        box.set_facecolor('#89b4fa')
+        box.set_alpha(0.7)
+    return ForgeArray(np.array(0.0))
+
+
+# ---------------------------------------------------------------------------
+# heatmap -- 2D heatmap visualization
+# ---------------------------------------------------------------------------
+
+def forge_heatmap(*args, **kwargs):
+    """heatmap(Z) -- Display matrix as a color-coded heatmap."""
+    from forge.engine.types import ForgeArray, _unwrap
+    if len(args) == 0:
+        raise ValueError("heatmap requires at least one argument")
+    Z = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
+    cmap = 'viridis'
+    if len(args) > 1 and isinstance(args[1], str):
+        cmap = args[1]
+    ax = plt.gca()
+    im = ax.imshow(Z, cmap=cmap, aspect='auto')
+    plt.colorbar(im, ax=ax)
+    return ForgeArray(np.array(0.0))
+
+
+# ---------------------------------------------------------------------------
+# ginput -- Graphical input from mouse
+# ---------------------------------------------------------------------------
+
+def forge_ginput(*args, **kwargs):
+    """ginput(n) -- Get n points from the current axes using the mouse.
+
+    Note: In headless mode, returns empty arrays.
+    """
+    from forge.engine.types import ForgeArray
+    n = 1
+    if len(args) > 0:
+        n = int(args[0])
+    try:
+        pts = plt.ginput(n, timeout=30)
+        if pts:
+            x = np.array([p[0] for p in pts])
+            y = np.array([p[1] for p in pts])
+            return ForgeArray(x), ForgeArray(y)
+    except Exception:
+        pass
+    return ForgeArray(np.array([])), ForgeArray(np.array([]))
+
+
 PLOTTING_REGISTRY = {
     # 2-D
     "plot":         forge_plot,
@@ -1470,4 +1565,8 @@ PLOTTING_REGISTRY = {
     "xline":         forge_xline,
     "yline":         forge_yline,
     "meshgrid":      forge_meshgrid,
+    "bar3":         forge_bar3,
+    "boxplot":      forge_boxplot,
+    "heatmap":      forge_heatmap,
+    "ginput":       forge_ginput,
 }

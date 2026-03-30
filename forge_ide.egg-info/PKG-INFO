@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
 Name: forge-ide
-Version: 0.1.9
+Version: 0.2.0
 Summary: Octave-compatible numerical computing environment with PySide6 GUI
-License: MIT
+License: Apache-2.0
 Project-URL: Homepage, https://github.com/forge-ide/forge
 Project-URL: Documentation, https://forge-ide.readthedocs.io
 Classifier: Development Status :: 3 - Alpha
@@ -12,10 +12,12 @@ Classifier: Topic :: Scientific/Engineering :: Mathematics
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Classifier: License :: OSI Approved :: MIT License
+Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: NOTICE
 Requires-Dist: PySide6>=6.5
 Requires-Dist: numpy>=1.24
 Requires-Dist: scipy>=1.10
@@ -30,3 +32,156 @@ Provides-Extra: full
 Requires-Dist: sympy>=1.12; extra == "full"
 Requires-Dist: soundfile; extra == "full"
 Requires-Dist: requests; extra == "full"
+Dynamic: license-file
+
+# Forge IDE™
+
+**A professional-grade computational platform built in Python.** Forge is an Octave-compatible computing environment with a modern PySide6 desktop GUI, 1,300+ built-in functions, and 29 integrated toolboxes — all open source under the Apache 2.0 license.
+
+Forge aims to provide a free, fully-featured alternative to expensive proprietary numerical computing environments, with particular focus on students, educators, and researchers.
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
+[![Tests](https://img.shields.io/badge/Tests-1%2C153_passing-brightgreen.svg)](#testing)
+
+---
+
+## Features
+
+- **Octave-compatible language engine** — M-language parser and evaluator with 1-based indexing, matrix literals, cell arrays, structs, classdef OOP, and command-style syntax
+- **1,320+ built-in functions** across 29 toolboxes (signal processing, linear algebra, statistics, image processing, control systems, and more)
+- **PySide6 desktop GUI** with dockable panels: command window (REPL), code editor with syntax highlighting, file browser, workspace browser, plot figures, documentation viewer, and more
+- **Matplotlib-powered plotting** — 2D/3D plots, subplots, figure management, zoom, pan, and export
+- **MATLAB `.mat` file compatibility** via `scipy.io` for load/save interop
+- **1,153 validated tests** — every function numerically verified against established reference implementations
+- **Cross-platform** — runs on Windows, Linux, and macOS
+
+## Quick Start
+
+### Install from PyPI Mirror
+
+**Windows (PowerShell):**
+```powershell
+pip install --index-url https://thecommons.cc/pypi/ --trusted-host thecommons.cc forge-ide
+```
+
+**Linux / macOS:**
+```bash
+pip install --index-url https://thecommons.cc/pypi/ --trusted-host thecommons.cc forge-ide
+```
+
+### Launch
+
+```
+forge
+```
+
+Or:
+```
+python -m forge
+```
+
+### Update
+
+```
+pip install --upgrade --no-cache-dir --index-url https://thecommons.cc/pypi/ --trusted-host thecommons.cc forge-ide
+```
+
+### Windows PATH Fix (one-time, if `forge` command not found)
+
+```powershell
+$sd = python -c "import site; print(site.getusersitepackages().replace('site-packages','Scripts'))"
+[Environment]::SetEnvironmentVariable("PATH","$([Environment]::GetEnvironmentVariable('PATH','User'));$sd","User")
+```
+
+## Toolboxes
+
+Forge ships with 29 integrated toolboxes — all included by default:
+
+| Category | Toolbox | Functions |
+|----------|---------|-----------|
+| Math | Elementary Functions, Special Functions, Polynomials | 80+ |
+| Linear Algebra | Core LA, Decompositions, Special Matrices | 90+ |
+| Signal Processing | Filters, Windows, Transforms, Spectral Analysis | 260+ |
+| Statistics & ML | Distributions, Descriptive Stats, Regression | 250+ |
+| Image Processing | Filtering, Morphology, Transforms, I/O | 170+ |
+| Control Systems | Transfer Functions, State-Space, Stability | 60+ |
+| Optimization | Minimization, Root-Finding, Linear Programming | 30+ |
+| ODE Solvers | ode45, ode23, ode15s, Event Detection | 15+ |
+| Geometry | Convex Hull, Delaunay, Voronoi, Grid Data | 15+ |
+| Sparse Matrices | Construction, Iterative Solvers, Eigenvalues | 30+ |
+| Plotting | 2D, 3D, Handle Graphics, Export | 240+ |
+| And more... | Audio, Financial, Symbolic, Communications, etc. | — |
+
+## Architecture
+
+```
+forge/
+├── app.py                 # QApplication entry point
+├── gui/
+│   ├── main_window.py     # MainWindow with dockable panels
+│   ├── command_widget.py  # REPL / command window
+│   ├── editor_widget.py   # Multi-tab code editor
+│   ├── file_browser.py    # Directory tree navigator
+│   ├── workspace_browser.py # Variable inspector
+│   ├── plot_widget.py     # Matplotlib figure windows
+│   └── ...                # Additional panels
+├── engine/
+│   ├── parser.py          # M-language tokenizer + AST parser
+│   ├── evaluator.py       # AST execution engine
+│   ├── session.py         # Workspace, path, state management
+│   ├── types.py           # ForgeArray, ForgeChar, ForgeMap
+│   └── builtins/          # 29 toolbox modules
+└── tests/                 # 1,153 pytest tests
+```
+
+## Development
+
+### Prerequisites
+
+- Python 3.10+
+- PySide6
+- NumPy, SciPy, Matplotlib
+
+### Install for Development
+
+```bash
+git clone https://github.com/njaxon2/the-commons-forge.git
+cd the-commons-forge
+pip install -e .
+```
+
+### Run Tests
+
+```bash
+pytest tests/ -x -q
+```
+
+### Run Headless (CI/VPS)
+
+```bash
+export QT_QPA_PLATFORM=offscreen
+pytest tests/ -x -q
+```
+
+## Contributing
+
+Contributions are welcome. Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all existing tests pass (`pytest tests/ -x`)
+5. Submit a pull request
+
+## License
+
+Copyright 2026 The Commons™
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+Forge IDE™ is a trademark of The Commons™. See [NOTICE](NOTICE) for trademark and third-party attribution.
+
+---
+
+*Built by [The Commons](https://thecommons.cc) — professional computing tools for everyone.*
