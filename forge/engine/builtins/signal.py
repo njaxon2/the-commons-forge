@@ -314,6 +314,60 @@ def fftconv(a, b, n=None):
     return _fa(c[:outlen])
 
 
+
+def conv(a, b, shape="full"):
+    """Convolution of two vectors."""
+    import numpy as np
+    a = np.asarray(a, dtype=float).ravel()
+    b = np.asarray(b, dtype=float).ravel()
+    if isinstance(shape, str):
+        shape = shape.lower()
+    else:
+        shape = "full"
+    return np.convolve(a, b, mode=shape)
+
+
+def deconv(b, a):
+    """Deconvolution: [q, r] = deconv(b, a)."""
+    import numpy as np
+    b = np.asarray(b, dtype=float).ravel()
+    a = np.asarray(a, dtype=float).ravel()
+    q, r = np.polydiv(b, a)
+    r_full = np.zeros_like(b)
+    r_full[len(b) - len(r):] = r
+    return q, r_full
+
+
+def conv2(a, b, shape="full"):
+    """2-D convolution."""
+    import numpy as np
+    from scipy.signal import convolve2d
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    if a.ndim == 1: a = a.reshape(1, -1)
+    if b.ndim == 1: b = b.reshape(1, -1)
+    if isinstance(shape, str):
+        shape = shape.lower()
+    else:
+        shape = "full"
+    return convolve2d(a, b, mode=shape)
+
+
+def medfilt1(x, n=3):
+    """One-dimensional median filter."""
+    import numpy as np
+    x = np.asarray(x, dtype=float).ravel()
+    n = int(n)
+    if n < 1: return x.copy()
+    if n % 2 == 0: n += 1
+    half = n // 2
+    result = np.empty_like(x)
+    padded = np.concatenate([np.zeros(half), x, np.zeros(half)])
+    for i in range(len(x)):
+        result[i] = np.median(padded[i:i + n])
+    return result
+
+
 def filtfilt(b, a, x, padtype='odd', padlen=None):
     """Zero-phase digital filtering.
 
@@ -1455,6 +1509,10 @@ SIGNAL_REGISTRY: dict[str, callable] = {
     # ── Filtering ────────────────────────────────────────────────
     'fftfilt':          fftfilt,
     'fftconv':          fftconv,
+    'conv':             conv,
+    'deconv':           deconv,
+    'conv2':            conv2,
+    'medfilt1':         medfilt1,
     'filtfilt':         filtfilt,
     'lfilter':          lfilter,
     'sosfilt':          sosfilt,

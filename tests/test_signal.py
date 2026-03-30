@@ -149,7 +149,6 @@ class TestUtility:
         assert abs(w[0]) < 1e-10
         assert abs(w[-1]) < 1e-10
 
-    @pytest.mark.skip(reason="medfilt1 not implemented in signal toolbox")
     def test_medfilt1(self):
         from forge.engine.builtins.signal import medfilt1
         from forge.engine.types import _unwrap
@@ -160,7 +159,6 @@ class TestUtility:
         arr = _unwrap(y).ravel()
         assert abs(arr[25]) < 1e-10
 
-    @pytest.mark.skip(reason="conv not implemented; use fftconv instead")
     def test_conv(self):
         from forge.engine.builtins.signal import conv
         from forge.engine.types import _unwrap
