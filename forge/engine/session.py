@@ -372,12 +372,17 @@ class ForgeSession:
             return type(x).__name__
 
         def forge_format(*args):
+            from forge.engine.containers import ForgeChar
             if not args:
-                return session.format
-            fmt_str = str(args[0])
-            if len(args) > 1:
-                fmt_str += ' ' + str(args[1])
-            session.format = fmt_str
+                session._format = 'short'
+                return None
+            parts = []
+            for a in args:
+                if isinstance(a, ForgeChar):
+                    parts.append(a.to_str())
+                else:
+                    parts.append(str(a))
+            session._format = ' '.join(parts).lower().strip()
             return None  # format command produces no output
 
         def forge_run(*args, path_arg=None):
@@ -9941,20 +9946,18 @@ class ForgeSession:
 
         # R118: format, help, doc, lookfor, version, date functions
         def forge_format(*args):
-            """format short/long/shortE/longE — set display format."""
+            """format short/long/short e/long e — set display format."""
             from forge.engine.containers import ForgeChar
-            from forge.engine.types import ForgeArray
-            if len(args) == 0:
-                # No args: report current format
-                current = getattr(session, "_format", "short")
-                msg = f"  format type: {current}"
-                print(msg)
-                return ForgeChar(msg)
-            else:
-                fmt = args[0]
-                if isinstance(fmt, ForgeChar):
-                    fmt = fmt.to_str()
-                session._format = str(fmt).lower()
+            if not args:
+                session._format = "short"
+                return None
+            parts = []
+            for a in args:
+                if isinstance(a, ForgeChar):
+                    parts.append(a.to_str())
+                else:
+                    parts.append(str(a))
+            session._format = " ".join(parts).lower().strip()
             return None  # format command produces no output
 
         def forge_help(name=None):

@@ -84,8 +84,10 @@ class TestFormatCommand:
     def test_format_default(self):
         from forge.engine.session import ForgeSession
         s = ForgeSession()
-        result = s.eval("format()")
-        assert "short" in result
+        s.eval("format()")
+        # format() resets to short; verify by checking pi display
+        r = s.eval("pi")
+        assert "3.1416" in str(r)
 
     def test_format_display(self):
         from forge.engine.session import ForgeSession
