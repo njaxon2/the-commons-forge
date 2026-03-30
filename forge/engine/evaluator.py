@@ -1760,23 +1760,53 @@ class Session:
             props[name] = Property(name=name, default_value=default_val)
         # Build methods
         methods = {}
+        _cls_name = node.name
         for func_def in node.methods:
-            def make_method(fd):
+            def make_method(fd, _cn=_cls_name):
                 def method_impl(obj, *args):
-                    # Create local workspace with obj as first parameter
+                    # Create local workspace
                     local_ws = Workspace()
-                    if fd.params:
-                        local_ws.set(fd.params[0], obj)
-                    for i, param in enumerate(fd.params[1:], 1):
-                        if i - 1 < len(args):
-                            local_ws.set(param, args[i - 1])
+                    # Set caller context for access control
+                    from forge.engine.classdef import ForgeObject as _FO
+                    if isinstance(obj, _FO):
+                        obj._caller_context = 'internal'
+                    is_ctor = (fd.name == _cn)
+                    if is_ctor:
+                        # Constructor: bind return var to ForgeObject
+                        ret_name = fd.returns[0] if fd.returns else None
+                        obj_in_params = ret_name and ret_name in fd.params
+                        if ret_name:
+                            local_ws.set(ret_name, obj)
+                        if obj_in_params:
+                            param_list = [p for p in fd.params if p != ret_name]
+                            for i, param in enumerate(param_list):
+                                if i < len(args):
+                                    local_ws.set(param, args[i])
+                        else:
+                            for i, param in enumerate(fd.params):
+                                if i < len(args):
+                                    local_ws.set(param, args[i])
+                    else:
+                        # Regular method: first param is self/obj
+                        if fd.params:
+                            local_ws.set(fd.params[0], obj)
+                        for i, param in enumerate(fd.params[1:]):
+                            if i < len(args):
+                                local_ws.set(param, args[i])
                     local_ws.set("nargin", ForgeArray(np.array(float(len(args) + 1))))
                     try:
                         self._exec_stmts(fd.body, local_ws)
                     except ReturnSignal:
                         pass
+                    finally:
+                        if isinstance(obj, _FO):
+                            obj._caller_context = None
                     if fd.returns:
-                        return local_ws.get(fd.returns[0])
+                        ret_val = local_ws.get(fd.returns[0])
+                        # For constructors: if return var was overwritten with non-object, use original
+                        if is_ctor and isinstance(obj, _FO) and not isinstance(ret_val, _FO):
+                            return obj
+                        return ret_val
                     return obj
                 return method_impl
             methods[func_def.name] = Method(
