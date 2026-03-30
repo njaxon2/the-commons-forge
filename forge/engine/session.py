@@ -9739,6 +9739,95 @@ class ForgeSession:
         session._engine.functions["exist"] = forge_exist
         session._engine.functions["which"] = forge_which
         session._engine.functions["methods"] = forge_methods
+        # --- Utility builtins: system info, timing, environment ---
+        def forge_computer(*args):
+            import platform
+            from forge.engine.containers import ForgeChar
+            m = {"Linux": "x86_64-pc-linux-gnu", "Darwin": "x86_64-apple-darwin", "Windows": "x86_64-w64-mingw32"}
+            return ForgeChar(m.get(platform.system(), platform.platform()))
+
+        def forge_version_func(*args):
+            from forge.engine.containers import ForgeChar
+            from forge import __version__ as _fv
+            return ForgeChar("Forge " + _fv)
+
+        def forge_ver_func(*args):
+            import platform
+            from forge.engine.containers import ForgeChar
+            from forge import __version__ as _fv
+            parts = ["Forge IDE Version " + _fv,
+                     "Python " + platform.python_version() + " on " + platform.system()]
+            try:
+                import numpy; parts.append("NumPy " + numpy.__version__)
+            except Exception: pass
+            try:
+                import scipy; parts.append("SciPy " + scipy.__version__)
+            except Exception: pass
+            return ForgeChar(chr(10).join(parts))
+
+        def forge_license_func(*args):
+            from forge.engine.containers import ForgeChar
+            return ForgeChar("Apache-2.0")
+
+        def forge_getenv(name):
+            from forge.engine.containers import ForgeChar
+            if hasattr(name, "to_str"): name = name.to_str()
+            val = os.environ.get(str(name), "")
+            return ForgeChar(val)
+
+        def forge_setenv(name, value):
+            if hasattr(name, "to_str"): name = name.to_str()
+            if hasattr(value, "to_str"): value = value.to_str()
+            os.environ[str(name)] = str(value)
+
+        def forge_system_func(cmd, *args):
+            import subprocess
+            from forge.engine.containers import ForgeChar
+            if hasattr(cmd, "to_str"): cmd = cmd.to_str()
+            try:
+                result = subprocess.run(str(cmd), shell=True, capture_output=True, text=True, timeout=30)
+                status = ForgeArray(np.array(float(result.returncode)))
+                output = ForgeChar(result.stdout + result.stderr)
+                return (status, output)
+            except subprocess.TimeoutExpired:
+                return (ForgeArray(np.array(1.0)), ForgeChar("Command timed out"))
+            except Exception as e:
+                return (ForgeArray(np.array(1.0)), ForgeChar(str(e)))
+
+        def forge_tic_func(*args):
+            import time as _time
+            session._tic_time = _time.time()
+            return ForgeArray(np.array(session._tic_time))
+
+        def forge_toc_func(*args):
+            import time as _time
+            elapsed = _time.time() - getattr(session, "_tic_time", _time.time())
+            return ForgeArray(np.array(elapsed))
+
+        def forge_clock_func(*args):
+            import datetime
+            now = datetime.datetime.now()
+            return ForgeArray(np.array([now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond/1e6]))
+
+        def forge_now_func(*args):
+            import datetime
+            now = datetime.datetime.now()
+            epoch = datetime.datetime(1, 1, 1)
+            delta = now - epoch
+            return ForgeArray(np.array(delta.days + 1 + delta.seconds / 86400.0))
+
+        session._engine.functions["computer"] = forge_computer
+        session._engine.functions["version"] = forge_version_func
+        session._engine.functions["ver"] = forge_ver_func
+        session._engine.functions["license"] = forge_license_func
+        session._engine.functions["getenv"] = forge_getenv
+        session._engine.functions["setenv"] = forge_setenv
+        session._engine.functions["system"] = forge_system_func
+        session._engine.functions["unix"] = forge_system_func
+        session._engine.functions["tic"] = forge_tic_func
+        session._engine.functions["toc"] = forge_toc_func
+        session._engine.functions["clock"] = forge_clock_func
+        session._engine.functions["now"] = forge_now_func
 
         # R115: Linear algebra decompositions + conv2
         def forge_schur(A):
