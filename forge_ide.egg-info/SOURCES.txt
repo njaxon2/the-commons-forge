@@ -115,6 +115,8 @@ tests/test_optimization.py
 tests/test_oqe.py
 tests/test_parser.py
 tests/test_plotting.py
+tests/test_polish_r2.py
+tests/test_polish_r3.py
 tests/test_polynomial.py
 tests/test_requirements_r1.py
 tests/test_scripts.py

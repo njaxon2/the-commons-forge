@@ -213,7 +213,7 @@ class ForgeMainWindow(QMainWindow):
         # Minimal central widget so QMainWindow dock separators work
         from PySide6.QtWidgets import QWidget
         _cw = QWidget()
-        _cw.setMinimumSize(200, 100)
+        _cw.setMaximumSize(0, 0)
         self.setCentralWidget(_cw)
 
         self._recent_files = self._load_recent_files()
