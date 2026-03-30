@@ -153,7 +153,7 @@ QMainWindow {{
 }}
 
 QWidget {{
-    background-color: transparent;
+    background-color: {c["bg0"]};
     color: {c["fg0"]};
 }}
 
@@ -399,7 +399,7 @@ QTextEdit:focus, QPlainTextEdit:focus {{
 
 /* ── Tab Widget ──────────────────────────────────────────────── */
 QTabWidget {{
-    background: transparent;
+    background-color: {c["bg0"]};
 }}
 
 QTabWidget::pane {{
@@ -950,17 +950,28 @@ QToolTip {{
     font-size: 12px;
 }}
 
+/* ── Main Window Dock Separator ───────────────────────────────── */
+QMainWindow::separator {{
+    background-color: {c["border0"]};
+    width: 5px;
+    height: 5px;
+}}
+
+QMainWindow::separator:hover {{
+    background-color: {c["accent"]};
+}}
+
 /* ── Splitter ────────────────────────────────────────────────── */
 QSplitter::handle {{
     background-color: {c["border0"]};
 }}
 
 QSplitter::handle:horizontal {{
-    width: 2px;
+    width: 4px;
 }}
 
 QSplitter::handle:vertical {{
-    height: 2px;
+    height: 4px;
 }}
 
 QSplitter::handle:hover {{

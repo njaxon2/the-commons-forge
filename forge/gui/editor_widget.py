@@ -467,9 +467,9 @@ class MinimapWidget(QWidget):
         if event.modifiers() & Qt.ControlModifier:
             delta = event.angleDelta().y()
             if delta > 0:
-                self.zoomIn(1)
+                self.editor.zoomIn(1)
             elif delta < 0:
-                self.zoomOut(1)
+                self.editor.zoomOut(1)
             event.accept()
             return
         super().wheelEvent(event)
@@ -536,6 +536,9 @@ class CodeEditor(QPlainTextEdit):
         font.setFixedPitch(True)
         self.setFont(font)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
+
+        # Let the global QSS from themes.py handle colors
+        # (detect_palette() returns dark fallbacks during construction)
 
         # Line number area
         self._line_area = _LineNumberArea(self)
@@ -771,7 +774,7 @@ class CodeEditor(QPlainTextEdit):
 
         # Try to find the function file on path
         # Look in common locations
-        search_dirs = [os.path.dirname(self._file_path)] if hasattr(self, '_file_path') and self._file_path else []
+        search_dirs = [os.path.dirname(self.file_path)] if hasattr(self, 'file_path') and self.file_path else []
         search_dirs.append(os.path.expanduser('~'))
 
         for d in search_dirs:
@@ -895,7 +898,7 @@ class CodeEditor(QPlainTextEdit):
         from PySide6.QtGui import QAction
 
         menu = QMenu(self)
-        palette = get_palette()
+        from forge.gui.theme_utils import detect_palette as _dp; palette = _dp()
         menu.setStyleSheet(f"""
             QMenu {{
                 background: {palette.get('bg2', '#313244')};
@@ -1055,7 +1058,7 @@ class CodeEditor(QPlainTextEdit):
             text = self.toPlainText()
             pattern = r'\b' + re.escape(word) + r'\b'
 
-            _phw = get_palette()
+            from forge.gui.theme_utils import detect_palette as _dp; _phw = _dp()
             highlight_color = QColor(_phw.get('line_bg', '#2a2a3c'))
             highlight_color.setAlpha(200)
 
@@ -2128,7 +2131,7 @@ class EditorWidget(QWidget):
         if not hasattr(editor, 'toPlainText'):
             return None
 
-        path = getattr(editor, '_file_path', None)
+        path = getattr(editor, 'file_path', None)
         if not path:
             return self.save_as()
 
@@ -2172,7 +2175,7 @@ class EditorWidget(QWidget):
             fname = os.path.basename(path)
             self.tabs.setTabText(idx, fname)
             # Store path on editor
-            editor._file_path = path
+            editor.file_path = path
             # Mark as unmodified
             editor.document().setModified(False)
             if hasattr(self, '_add_to_recent'):
@@ -2193,7 +2196,7 @@ class EditorWidget(QWidget):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(60, 40, 60, 40)
 
-        palette = get_palette()
+        from forge.gui.theme_utils import detect_palette as _dp; palette = _dp()
         bg = palette.get('bg0', '#1e1e2e')
         fg = palette.get('fg0', '#cdd6f4')
         fg2 = palette.get('fg2', '#a6adc8')
@@ -2298,7 +2301,14 @@ class EditorWidget(QWidget):
         layout.addStretch()
 
         # Version info
-        version_label = QLabel("Forge v0.1.0  ·  1,303 functions  ·  352 tests passing")
+        from forge import __version__ as _fv
+        # Dynamic function count from engine registry
+        try:
+            from forge.engine.session import ForgeSession as _FS
+            _func_count = f"{len(_FS()._engine.functions):,}"
+        except Exception:
+            _func_count = "800+"
+        version_label = QLabel(f"Forge v{_fv}  ·  {_func_count} functions across 29 toolboxes  ·  1,153 tests passing")
         version_label.setFont(QFont("Fira Code", 10))
         version_label.setStyleSheet(f"color: {fg2}; background: transparent;")
         version_label.setAlignment(Qt.AlignCenter)
@@ -2610,58 +2620,3 @@ class EditorWidget(QWidget):
                 self.file_run_requested.emit(editor.file_path)
         else:
             super().keyPressEvent(event)
-
-        # Trigger autocomplete
-        if self._completer and event.text() and event.text().isalpha():
-            prefix = self._completion_prefix()
-            if len(prefix) >= 2:
-                self._completer.setCompletionPrefix(prefix)
-                if self._completer.completionCount() > 0:
-                    popup = self._completer.popup()
-                    cr = self.cursorRect()
-                    cr.setWidth(popup.sizeHintForColumn(0) +
-                               popup.verticalScrollBar().sizeHint().width() + 20)
-                    self._completer.complete(cr)
-                else:
-                    self._completer.popup().hide()
-            else:
-                self._completer.popup().hide()
-        self._draw_indent_guides(event)
-
-
-    # -- indent guides --
-    def _draw_indent_guides(self, event):
-        """Draw subtle vertical lines at each indentation level."""
-        painter = QPainter(self.viewport())
-        _pdg = get_palette()
-        color = QColor(_pdg.get('line_bg', '#313244'))
-        color.setAlpha(40)
-        painter.setPen(color)
-
-        block = self.firstVisibleBlock()
-        font_metrics = self.fontMetrics()
-        space_width = font_metrics.horizontalAdvance(" ")
-        tab_stop = 4  # spaces per indent level
-
-        while block.isValid():
-            geom = self.blockBoundingGeometry(block).translated(self.contentOffset())
-            if geom.top() > event.rect().bottom():
-                break
-
-            text = block.text()
-            if text:
-                # Count leading spaces
-                stripped = text.lstrip(" ")
-                leading = len(text) - len(stripped)
-                indent_levels = leading // tab_stop
-
-                for level in range(1, indent_levels + 1):
-                    x = int(level * tab_stop * space_width) + self.contentOffset().x()
-                    top = int(geom.top())
-                    bottom = int(geom.bottom())
-                    painter.drawLine(x, top, x, bottom)
-
-            block = block.next()
-
-        painter.end()
-

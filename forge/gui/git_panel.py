@@ -1,12 +1,16 @@
-"""Git integration panel – shows status, staged files, diff preview."""
+"""Git integration panel – shows status, staged files, diff preview,
+visual commit history, repo init, remote management, pull/push."""
 
 import subprocess
+import os
 from PySide6.QtCore import Qt, Signal, QProcess
 from PySide6.QtGui import QColor, QFont, QIcon
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QTextEdit, QLineEdit,
-    QSplitter, QHeaderView, QMessageBox, QFrame,
+    QSplitter, QHeaderView, QMessageBox, QFrame, QPlainTextEdit,
+    QDialog, QFormLayout, QDialogButtonBox, QListWidget,
+    QTabWidget, QStackedWidget,
 )
 
 
@@ -42,6 +46,116 @@ def _run_git(args: list[str], cwd: str | None = None) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _is_git_repo(cwd: str | None) -> bool:
+    """Check if cwd is inside a git repository."""
+    if not cwd:
+        return False
+    ok, _ = _run_git(["rev-parse", "--is-inside-work-tree"], cwd)
+    return ok
+
+
+class RemoteDialog(QDialog):
+    """Dialog for viewing/adding/removing git remotes."""
+
+    def __init__(self, cwd: str, parent=None):
+        super().__init__(parent)
+        self._cwd = cwd
+        self.setWindowTitle("Git Remotes")
+        self.setMinimumWidth(480)
+        self.setMinimumHeight(300)
+        self._build_ui()
+        self._refresh_remotes()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        # Remote list
+        layout.addWidget(QLabel("Current remotes:"))
+        self._remote_list = QListWidget()
+        self._remote_list.setFont(QFont("Courier New", 9))
+        layout.addWidget(self._remote_list, 1)
+
+        # Remove button
+        rm_layout = QHBoxLayout()
+        rm_layout.addStretch()
+        self._remove_btn = QPushButton("Remove Selected")
+        self._remove_btn.clicked.connect(self._remove_remote)
+        rm_layout.addWidget(self._remove_btn)
+        layout.addLayout(rm_layout)
+
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        layout.addWidget(sep)
+
+        # Add remote form
+        layout.addWidget(QLabel("Add remote:"))
+        form = QFormLayout()
+        self._name_input = QLineEdit()
+        self._name_input.setPlaceholderText("e.g. origin")
+        form.addRow("Name:", self._name_input)
+        self._url_input = QLineEdit()
+        self._url_input.setPlaceholderText("e.g. git@github.com:user/repo.git")
+        form.addRow("URL:", self._url_input)
+        layout.addLayout(form)
+
+        self._add_btn = QPushButton("Add Remote")
+        self._add_btn.clicked.connect(self._add_remote)
+        layout.addWidget(self._add_btn)
+
+        # Close button
+        btn_box = QDialogButtonBox(QDialogButtonBox.Close)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    def _refresh_remotes(self):
+        self._remote_list.clear()
+        ok, text = _run_git(["remote", "-v"], self._cwd)
+        if ok and text:
+            for line in text.splitlines():
+                self._remote_list.addItem(line)
+        else:
+            self._remote_list.addItem("(no remotes configured)")
+
+    def _add_remote(self):
+        name = self._name_input.text().strip()
+        url = self._url_input.text().strip()
+        if not name or not url:
+            QMessageBox.warning(self, "Add Remote", "Both name and URL are required.")
+            return
+        ok, err = _run_git(["remote", "add", name, url], self._cwd)
+        if ok:
+            self._name_input.clear()
+            self._url_input.clear()
+            self._refresh_remotes()
+        else:
+            QMessageBox.critical(self, "Git Error", f"Failed to add remote:\n{err}")
+
+    def _remove_remote(self):
+        item = self._remote_list.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Remove Remote", "Select a remote first.")
+            return
+        text = item.text()
+        # Parse remote name from "origin\thttps://... (fetch)" format
+        name = text.split()[0] if text else ""
+        if not name or name.startswith("("):
+            return
+        reply = QMessageBox.question(
+            self, "Remove Remote",
+            f"Remove remote '{name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            ok, err = _run_git(["remote", "remove", name], self._cwd)
+            if ok:
+                self._refresh_remotes()
+            else:
+                QMessageBox.critical(
+                    self, "Git Error", f"Failed to remove remote:\n{err}"
+                )
+
+
 class GitPanel(QWidget):
     """Dock-able Git integration panel."""
 
@@ -60,12 +174,62 @@ class GitPanel(QWidget):
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(4)
 
+        # -- Stacked widget: no-repo view vs repo view --
+        self._stack = QStackedWidget()
+        root.addWidget(self._stack, 1)
+
+        # Page 0: No git repo
+        self._no_repo_page = QWidget()
+        self._build_no_repo_page()
+        self._stack.addWidget(self._no_repo_page)
+
+        # Page 1: Active repo
+        self._repo_page = QWidget()
+        self._build_repo_page()
+        self._stack.addWidget(self._repo_page)
+
+    def _build_no_repo_page(self):
+        layout = QVBoxLayout(self._no_repo_page)
+        layout.setContentsMargins(20, 40, 20, 40)
+
+        lbl = QLabel("No Git Repository")
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #95a5a6;")
+        layout.addWidget(lbl)
+
+        desc = QLabel("Initialize a new repository in the current directory.")
+        desc.setAlignment(Qt.AlignCenter)
+        desc.setStyleSheet("color: #7f8c8d;")
+        layout.addWidget(desc)
+
+        layout.addSpacing(16)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        self._init_btn_large = QPushButton("  Init Repository  ")
+        self._init_btn_large.setMinimumHeight(36)
+        self._init_btn_large.setStyleSheet(
+            "QPushButton { font-size: 14px; font-weight: bold;"
+            " padding: 8px 24px; }"
+        )
+        self._init_btn_large.clicked.connect(self._do_init)
+        btn_layout.addWidget(self._init_btn_large)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        layout.addStretch()
+
+    def _build_repo_page(self):
+        repo_layout = QVBoxLayout(self._repo_page)
+        repo_layout.setContentsMargins(0, 0, 0, 0)
+        repo_layout.setSpacing(4)
+
         # -- Info bar --
         info_frame = QFrame()
         info_layout = QHBoxLayout(info_frame)
         info_layout.setContentsMargins(4, 2, 4, 2)
 
-        self._branch_label = QLabel("Branch: –")
+        self._branch_label = QLabel("Branch: -")
         self._branch_label.setStyleSheet("font-weight: bold;")
         info_layout.addWidget(self._branch_label)
 
@@ -74,14 +238,47 @@ class GitPanel(QWidget):
 
         info_layout.addStretch()
 
+        # Action buttons
+        self._init_btn = QPushButton("Init")
+        self._init_btn.setToolTip("Initialize a git repository here")
+        self._init_btn.setMinimumWidth(50)
+        self._init_btn.clicked.connect(self._do_init)
+        info_layout.addWidget(self._init_btn)
+
+        self._remote_btn = QPushButton("Remote")
+        self._remote_btn.setToolTip("Manage remotes")
+        self._remote_btn.setMinimumWidth(60)
+        self._remote_btn.clicked.connect(self._do_remote)
+        info_layout.addWidget(self._remote_btn)
+
+        self._pull_btn = QPushButton("Pull")
+        self._pull_btn.setToolTip("Pull from remote")
+        self._pull_btn.setMinimumWidth(50)
+        self._pull_btn.clicked.connect(self._do_pull)
+        info_layout.addWidget(self._pull_btn)
+
+        self._push_btn = QPushButton("Push")
+        self._push_btn.setToolTip("Push to remote")
+        self._push_btn.setMinimumWidth(50)
+        self._push_btn.clicked.connect(self._do_push)
+        info_layout.addWidget(self._push_btn)
+
         self._refresh_btn = QPushButton("Refresh")
-        self._refresh_btn.setFixedWidth(70)
+        self._refresh_btn.setMinimumWidth(70)
         self._refresh_btn.clicked.connect(self.refresh)
         info_layout.addWidget(self._refresh_btn)
 
-        root.addWidget(info_frame)
+        repo_layout.addWidget(info_frame)
 
-        # -- Splitter: file tree + diff preview --
+        # -- Tabs: Changes | History --
+        self._tabs = QTabWidget()
+        repo_layout.addWidget(self._tabs, 1)
+
+        # Tab 0: Changes (file tree + diff)
+        changes_widget = QWidget()
+        changes_layout = QVBoxLayout(changes_widget)
+        changes_layout.setContentsMargins(0, 0, 0, 0)
+
         splitter = QSplitter(Qt.Vertical)
 
         # File tree
@@ -101,12 +298,28 @@ class GitPanel(QWidget):
         self._diff_view = QTextEdit()
         self._diff_view.setReadOnly(True)
         self._diff_view.setFont(QFont("Courier New", 9))
-        self._diff_view.setPlaceholderText("Select a file to view its diff…")
+        self._diff_view.setPlaceholderText("Select a file to view its diff...")
         splitter.addWidget(self._diff_view)
 
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
-        root.addWidget(splitter, 1)
+        changes_layout.addWidget(splitter, 1)
+
+        self._tabs.addTab(changes_widget, "Changes")
+
+        # Tab 1: History (visual commit log)
+        history_widget = QWidget()
+        history_layout = QVBoxLayout(history_widget)
+        history_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._history_view = QPlainTextEdit()
+        self._history_view.setReadOnly(True)
+        self._history_view.setFont(QFont("Courier New", 9))
+        self._history_view.setPlaceholderText("Commit history will appear here...")
+        self._history_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        history_layout.addWidget(self._history_view, 1)
+
+        self._tabs.addTab(history_widget, "History")
 
         # -- Commit bar --
         commit_frame = QFrame()
@@ -114,16 +327,16 @@ class GitPanel(QWidget):
         commit_layout.setContentsMargins(0, 0, 0, 0)
 
         self._msg_input = QLineEdit()
-        self._msg_input.setPlaceholderText("Commit message…")
+        self._msg_input.setPlaceholderText("Commit message...")
         self._msg_input.returnPressed.connect(self._do_commit)
         commit_layout.addWidget(self._msg_input, 1)
 
         self._commit_btn = QPushButton("Commit")
-        self._commit_btn.setFixedWidth(70)
+        self._commit_btn.setMinimumWidth(90)
         self._commit_btn.clicked.connect(self._do_commit)
         commit_layout.addWidget(self._commit_btn)
 
-        root.addWidget(commit_frame)
+        repo_layout.addWidget(commit_frame)
 
     # --------------------------------------------------------- Public API
     def set_cwd(self, path: str | None):
@@ -133,30 +346,41 @@ class GitPanel(QWidget):
 
     def refresh(self):
         """Re-read git state and update the UI."""
+        if not self._cwd:
+            self._stack.setCurrentIndex(0)
+            return
+
+        if not _is_git_repo(self._cwd):
+            self._stack.setCurrentIndex(0)
+            return
+
+        self._stack.setCurrentIndex(1)
+        self._refresh_changes()
+        self._refresh_history()
+
+    def _refresh_changes(self):
+        """Refresh the Changes tab."""
         self._tree.blockSignals(True)
         self._tree.clear()
         self._files.clear()
         self._diff_view.clear()
 
-        if not self._cwd:
-            self._branch_label.setText("Branch: –")
-            self._status_label.setText("(no directory)")
-            self._tree.blockSignals(False)
-            return
-
         # Branch name
         ok, branch = _run_git(["branch", "--show-current"], self._cwd)
         if not ok:
-            self._branch_label.setText("Branch: –")
+            self._branch_label.setText("Branch: -")
             self._status_label.setText("Not a git repo")
             self._tree.blockSignals(False)
             return
-        self._branch_label.setText(f"Branch: {branch or 'HEAD detached'}")
+        self._branch_label.setText(
+            "Branch: " + (branch or "HEAD detached")
+        )
 
         # Ahead / behind
         ahead_behind = ""
         ok_ab, ab_text = _run_git(
-            ["rev-list", "--left-right", "--count", f"{branch}...@{{u}}"],
+            ["rev-list", "--left-right", "--count",
+             branch + "...@{u}"],
             self._cwd,
         )
         if ok_ab:
@@ -165,15 +389,14 @@ class GitPanel(QWidget):
                 ahead, behind = int(parts[0]), int(parts[1])
                 segments = []
                 if ahead:
-                    segments.append(f"↑{ahead}")
+                    segments.append("\u2191" + str(ahead))
                 if behind:
-                    segments.append(f"↓{behind}")
+                    segments.append("\u2193" + str(behind))
                 if segments:
                     ahead_behind = "  " + " ".join(segments)
 
         # Last commit
         ok_log, log_line = _run_git(["log", "--oneline", "-1"], self._cwd)
-        last_commit = log_line if ok_log else ""
 
         # Porcelain status
         ok_st, st_text = _run_git(["status", "--porcelain"], self._cwd)
@@ -184,7 +407,7 @@ class GitPanel(QWidget):
 
         lines = [l for l in st_text.splitlines() if l.strip()] if st_text else []
         self._status_label.setText(
-            f"{len(lines)} changed{ahead_behind}"
+            str(len(lines)) + " changed" + ahead_behind
         )
 
         for line in lines:
@@ -213,7 +436,7 @@ class GitPanel(QWidget):
             item = QTreeWidgetItem()
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(0, Qt.Checked if staged else Qt.Unchecked)
-            item.setText(1, f"[{code}] {label}")
+            item.setText(1, "[" + code + "] " + label)
             item.setForeground(1, color)
             item.setText(2, filepath)
             item.setForeground(2, color)
@@ -221,6 +444,131 @@ class GitPanel(QWidget):
             self._tree.addTopLevelItem(item)
 
         self._tree.blockSignals(False)
+
+    def _refresh_history(self):
+        """Refresh the History tab with visual branch graph."""
+        self._history_view.clear()
+
+        ok, log_text = _run_git(
+            ["log", "--oneline", "--graph", "--all", "--decorate", "-50"],
+            self._cwd,
+        )
+        if not ok or not log_text:
+            if not ok and "does not have any commits" in (log_text or ""):
+                self._history_view.setPlainText("(no commits yet)")
+            elif not log_text:
+                self._history_view.setPlainText("(no commits yet)")
+            else:
+                self._history_view.setPlainText(log_text)
+            return
+
+        self._history_view.setPlainText(log_text)
+
+    # ------------------------------------------------- Action slots
+    def _do_init(self):
+        """Initialize a new git repository."""
+        if not self._cwd:
+            QMessageBox.warning(
+                self, "Init", "No working directory set."
+            )
+            return
+
+        if _is_git_repo(self._cwd):
+            QMessageBox.information(
+                self, "Init", "Already a git repository."
+            )
+            return
+
+        ok, msg = _run_git(["init"], self._cwd)
+        if ok:
+            QMessageBox.information(
+                self, "Init",
+                "Initialized git repository in:\n" + self._cwd
+            )
+            self.refresh()
+        else:
+            QMessageBox.critical(
+                self, "Git Error", "Failed to init:\n" + msg
+            )
+
+    def _do_remote(self):
+        """Open the remote management dialog."""
+        if not self._cwd or not _is_git_repo(self._cwd):
+            QMessageBox.warning(
+                self, "Remote", "Not a git repository."
+            )
+            return
+        dlg = RemoteDialog(self._cwd, parent=self)
+        dlg.exec()
+        self.refresh()
+
+    def _do_pull(self):
+        """Pull from the tracking remote."""
+        if not self._cwd:
+            return
+
+        # Check for a configured upstream
+        ok_branch, branch = _run_git(["branch", "--show-current"], self._cwd)
+        if not ok_branch or not branch:
+            QMessageBox.warning(self, "Pull", "Cannot determine current branch.")
+            return
+
+        ok_remote, remote = _run_git(
+            ["config", "branch." + branch + ".remote"], self._cwd
+        )
+        if not ok_remote or not remote:
+            QMessageBox.warning(
+                self, "Pull",
+                "No tracking remote configured for this branch.\n"
+                "Use Remote dialog to add a remote, then set upstream with:\n"
+                "  git push -u <remote> <branch>"
+            )
+            return
+
+        ok, msg = _run_git(["pull", "--ff-only"], self._cwd)
+        if ok:
+            self.refresh()
+            QMessageBox.information(self, "Pull", msg or "Already up to date.")
+        else:
+            QMessageBox.critical(self, "Pull Failed", msg)
+
+    def _do_push(self):
+        """Push to the tracking remote."""
+        if not self._cwd:
+            return
+
+        ok_branch, branch = _run_git(["branch", "--show-current"], self._cwd)
+        if not ok_branch or not branch:
+            QMessageBox.warning(self, "Push", "Cannot determine current branch.")
+            return
+
+        ok_remote, remote = _run_git(
+            ["config", "branch." + branch + ".remote"], self._cwd
+        )
+        if not ok_remote or not remote:
+            # Offer to set upstream
+            reply = QMessageBox.question(
+                self, "Push",
+                "No upstream configured. Push with --set-upstream to origin?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                ok, msg = _run_git(
+                    ["push", "--set-upstream", "origin", branch], self._cwd
+                )
+                if ok:
+                    self.refresh()
+                    QMessageBox.information(self, "Push", msg or "Pushed.")
+                else:
+                    QMessageBox.critical(self, "Push Failed", msg)
+            return
+
+        ok, msg = _run_git(["push"], self._cwd)
+        if ok:
+            self.refresh()
+            QMessageBox.information(self, "Push", msg or "Pushed.")
+        else:
+            QMessageBox.critical(self, "Push Failed", msg)
 
     # ----------------------------------------------------------- Slots
     def _on_item_clicked(self, item: QTreeWidgetItem, column: int):
@@ -241,16 +589,14 @@ class GitPanel(QWidget):
     def _show_diff(self, entry: dict):
         path = entry["path"]
         if entry["status"] == "?":
-            # Untracked – show file contents (limited)
-            ok, content = _run_git([], self._cwd)  # won't use this
+            # Untracked - show file contents (limited)
             try:
-                import os
                 full = os.path.join(self._cwd, path)
                 with open(full, "r", errors="replace") as f:
                     text = f.read(50_000)
-                self._diff_view.setPlainText(f"(untracked file)\n\n{text}")
+                self._diff_view.setPlainText("(untracked file)\n\n" + text)
             except Exception as exc:
-                self._diff_view.setPlainText(f"Cannot read file: {exc}")
+                self._diff_view.setPlainText("Cannot read file: " + str(exc))
             return
 
         ok, diff_text = _run_git(["diff", "--", path], self._cwd)
@@ -283,13 +629,13 @@ class GitPanel(QWidget):
             ok, err = _run_git(["add", "--", fp], self._cwd)
             if not ok:
                 QMessageBox.critical(
-                    self, "Git Error", f"Failed to stage {fp}:\n{err}"
+                    self, "Git Error", "Failed to stage " + fp + ":\n" + err
                 )
                 return
 
         ok, err = _run_git(["commit", "-m", msg], self._cwd)
         if not ok:
-            QMessageBox.critical(self, "Git Error", f"Commit failed:\n{err}")
+            QMessageBox.critical(self, "Git Error", "Commit failed:\n" + err)
             return
 
         self._msg_input.clear()

@@ -162,6 +162,7 @@ class FileBrowserWidget(QWidget):
     file_open_requested = Signal(str)
     open_terminal_requested = Signal(str)
     path_changed = Signal(list)
+    directory_changed = Signal(str)
 
     def __init__(self, root_path=None, parent=None):
         super().__init__(parent)
@@ -254,7 +255,7 @@ class FileBrowserWidget(QWidget):
         self.tree.setColumnWidth(0, 220)
         self.tree.doubleClicked.connect(self._on_double_click)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._context_menu)
+        self.tree.customContextMenuRequested.connect(self._show_context_menu)
 
         # --- filter / search bar ---
         self._filter_row = QHBoxLayout()
@@ -404,6 +405,7 @@ class FileBrowserWidget(QWidget):
                 QMessageBox.warning(self, "Error", str(e))
 
     def _action_delete(self, path):
+        import shutil
         reply = QMessageBox.question(
             self, "Confirm Delete",
             f"Delete '{os.path.basename(path)}'?\n\nThis cannot be undone.",
@@ -490,6 +492,7 @@ class FileBrowserWidget(QWidget):
         self.path_edit.setText(path)
         self.fs_model.setRootPath(path)
         self.tree.setRootIndex(self.fs_model.index(path))
+        self.directory_changed.emit(path)
         # Record in navigation history
         if self._nav_recording:
             # Trim any forward history beyond current index
@@ -501,10 +504,20 @@ class FileBrowserWidget(QWidget):
 
     # -- Double-click --
 
+    _TEXT_EXTENSIONS = frozenset((
+        ".m", ".py", ".pyw", ".txt", ".json", ".csv", ".cfg", ".ini",
+        ".yaml", ".yml", ".toml", ".md", ".rst", ".html", ".css",
+        ".js", ".ts", ".xml", ".log", ".sh", ".bat", ".ps1",
+        ".c", ".cpp", ".h", ".hpp", ".java", ".r", ".jl", ".tex",
+        ".mat",
+    ))
+
     def _on_double_click(self, index):
         path = self.fs_model.filePath(index)
-        if os.path.isfile(path) and path.endswith(".m"):
-            self.file_open_requested.emit(path)
+        if os.path.isfile(path):
+            ext = os.path.splitext(path)[1].lower()
+            if ext in self._TEXT_EXTENSIONS:
+                self.file_open_requested.emit(path)
         elif os.path.isdir(path):
             self._set_root(path)
 

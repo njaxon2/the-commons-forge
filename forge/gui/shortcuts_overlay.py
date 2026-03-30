@@ -66,36 +66,34 @@ SHORTCUT_DATA = {
 
 def _get_overlay_colors():
     """Get overlay colors based on current theme."""
-    try:
-        from forge.gui.theme_utils import is_light_theme
-        if is_light_theme():
-            return {
-                "overlay_bg": "rgba(240, 242, 248, 230)",
-                "card_bg": "#ffffff",
-                "accent": "#00897B",
-                "text": "#1e1e2e",
-                "dim_text": "#6c6f85",
-                "key_bg": "#eef0f5",
-                "key_border": "#bcc0cc",
-                "title_clr": "#00897B",
-                "card_border": "#dce0e8",
-                "scrollbar_bg": "#eef0f5",
-                "scrollbar_handle": "#bcc0cc",
-            }
-    except Exception:
-        pass
+    from forge.gui.theme_utils import detect_palette, is_light_theme
+    _p = detect_palette()
+    if is_light_theme():
+        return {
+            "overlay_bg": "rgba(240, 242, 248, 230)",
+            "card_bg": "#ffffff",
+            "accent": _p.get("accent", "#00897B"),
+            "text": _p.get("fg0", "#1e1e2e"),
+            "dim_text": _p.get("fg3", "#6c6f85"),
+            "key_bg": _p.get("bg2", "#eef0f5"),
+            "key_border": _p.get("border1", "#bcc0cc"),
+            "title_clr": _p.get("accent", "#00897B"),
+            "card_border": _p.get("border0", "#dce0e8"),
+            "scrollbar_bg": _p.get("bg2", "#eef0f5"),
+            "scrollbar_handle": _p.get("border1", "#bcc0cc"),
+        }
     return {
         "overlay_bg": "rgba(20, 20, 36, 225)",
-        "card_bg": "#1e1e2e",
-        "accent": "#00BCD4",
-        "text": "#cdd6f4",
-        "dim_text": "#a6adc8",
-        "key_bg": "#2a2a3e",
-        "key_border": "#45475a",
-        "title_clr": "#00BCD4",
-        "card_border": "#313244",
-        "scrollbar_bg": "#1e1e2e",
-        "scrollbar_handle": "#45475a",
+        "card_bg": _p.get("bg0", "#1e1e2e"),
+        "accent": _p.get("accent", "#00BCD4"),
+        "text": _p.get("fg0", "#cdd6f4"),
+        "dim_text": _p.get("fg2", "#a6adc8"),
+        "key_bg": _p.get("bg2", "#2a2a3e"),
+        "key_border": _p.get("border1", "#45475a"),
+        "title_clr": _p.get("accent", "#00BCD4"),
+        "card_border": _p.get("border0", "#313244"),
+        "scrollbar_bg": _p.get("bg0", "#1e1e2e"),
+        "scrollbar_handle": _p.get("border1", "#45475a"),
     }
 
 # Legacy aliases (used by _overlay_qss / _key_badge_qss at import time — refreshed in __init__)

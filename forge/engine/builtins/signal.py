@@ -1391,6 +1391,41 @@ def idwt(cA, cD, wavelet='db4', mode='symmetric'):
         return _fa(x)
 
 
+
+
+def rectwin(N):
+    """Rectangular window.
+
+    W = rectwin(N)
+    Returns an N-point rectangular window (all ones) as a column vector.
+    """
+    return _fa(np.ones((int(N), 1)))
+
+
+def zerocrossing(x):
+    """Find zero-crossing indices of a signal.
+
+    idx = zerocrossing(x)
+    Returns the indices where the signal *x* crosses zero.
+    Uses linear interpolation to estimate fractional crossing points.
+    """
+    x = _ensure_float(x).ravel()
+    signs = np.sign(x)
+    # Find where sign changes (ignore zeros)
+    sign_changes = np.where(np.diff(signs) != 0)[0]
+    crossings = []
+    for i in sign_changes:
+        if x[i] == 0:
+            crossings.append(float(i))
+        elif x[i + 1] == 0:
+            crossings.append(float(i + 1))
+        else:
+            # Linear interpolation
+            frac = -x[i] / (x[i + 1] - x[i])
+            crossings.append(i + frac)
+    return _fa(np.array(crossings)) if crossings else _fa(np.array([]))
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SIGNAL_REGISTRY — maps Octave/MATLAB function names to implementations
 # ═══════════════════════════════════════════════════════════════════
@@ -1403,6 +1438,7 @@ SIGNAL_REGISTRY: dict[str, callable] = {
     'hamming':          hamming,
     'hanning':          hanning,
     'kaiser':           kaiser_win,
+    'rectwin':          rectwin,
     # ── Filter design (IIR) ─────────────────────────────────────
     'butter':           butter,
     'cheby1':           cheby1,
@@ -1468,6 +1504,7 @@ SIGNAL_REGISTRY: dict[str, callable] = {
     'movslice':         movslice,
     'sinetone':         sinetone,
     'sinewave':         sinewave,
+    'zerocrossing':     zerocrossing,
     # ── Wavelets ────────────────────────────────────────────────
     'cwt':              cwt_transform,
     'dwt':              dwt,

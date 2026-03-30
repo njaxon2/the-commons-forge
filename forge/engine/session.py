@@ -4,7 +4,9 @@ import sys
 import io
 import numpy as np
 from forge.engine.evaluator import Session as _EvalSession, Workspace, ForgeError, UndefinedFunctionError
+from forge import __version__ as _forge_version
 from forge.engine.builtins import BUILTIN_REGISTRY
+from forge.engine.addon_manager import AddonManager
 from forge.engine.types import ForgeArray, _unwrap
 from forge.engine.containers import ForgeChar
 from forge.engine.parser import parse
@@ -19,16 +21,37 @@ class ForgeSession:
         self.format = 'short'
         self.history = []
         self.last_error = None
+        self._file_browser_dir = None  # set by GUI when file browser navigates
 
-        # Register all toolbox builtins into the engine's function table
-        for name, func in BUILTIN_REGISTRY.items():
-            self._engine.functions[name] = func
+        # Add-on manager: tracks which Forge toolboxes and Octave packages are active
+        self.addon_manager = AddonManager()
+        self._apply_addons()
 
         # Register session-level builtins (cd, pwd, who, clear, etc.)
         self._register_session_builtins()
 
         # Give engine a back-reference for .m file discovery (R13)
         self._engine._session_ref = self
+
+    def _apply_addons(self):
+        """Register functions from all enabled add-ons."""
+        active = self.addon_manager.get_all_active_functions()
+        for name, func in active.items():
+            self._engine.functions[name] = func
+
+    def reload_addons(self):
+        """Re-apply addon state after enable/disable changes."""
+        from forge.engine.builtins import TOOLBOX_MANIFEST
+        all_tb_funcs = set()
+        for _, (_, registry) in TOOLBOX_MANIFEST.items():
+            all_tb_funcs.update(registry.keys())
+        to_remove = []
+        for name, func in self._engine.functions.items():
+            if name in all_tb_funcs or getattr(func, "_is_octave_proxy", False):
+                to_remove.append(name)
+        for name in to_remove:
+            del self._engine.functions[name]
+        self._apply_addons()
 
     # -- public API --------------------------------------------------------
 
@@ -321,7 +344,7 @@ class ForgeSession:
                 return ForgeArray(np.array(1.0))
             if n in session._engine.functions:
                 return ForgeArray(np.array(5.0))
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_class(x):
             from forge.engine.containers import ForgeCell, ForgeStruct
@@ -353,10 +376,16 @@ class ForgeSession:
             if len(args) > 1:
                 fmt_str += ' ' + str(args[1])
             session.format = fmt_str
+            return None  # format command produces no output
 
-        def forge_run(path_arg):
+        def forge_run(*args, path_arg=None):
             """Execute a .m script file."""
             from forge.engine.parser import parse as _parse
+            # Accept both command-style (single string) and function-style args
+            if args:
+                path_arg = args[0]
+            if path_arg is None:
+                raise ValueError("run requires a file path argument")
             p = str(path_arg)
             if isinstance(path_arg, ForgeChar):
                 p = path_arg.to_str()
@@ -943,42 +972,278 @@ class ForgeSession:
             return ForgeArray(result)
 
         def forge_save(fname, *varnames):
-            """Save workspace variables to .mat-like file."""
-            import json
+            """Save workspace variables to MATLAB-compatible .mat file using scipy.io.savemat."""
+            import scipy.io as _sio
             if isinstance(fname, ForgeChar): fname = fname.to_str()
+            fname = str(fname)
+            if not fname.endswith('.mat'):
+                fname += '.mat'
+
+            # Built-in constants that should not be saved
+            _BUILTIN_NAMES = {'pi', 'e', 'i', 'j', 'Inf', 'inf', 'NaN', 'nan', 'eps', 'true', 'false', 'ans', 'realmin', 'realmax'}
+
             ws = session._engine.workspace
+            if varnames:
+                names = [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames]
+            else:
+                names = [n for n in ws.names() if n not in _BUILTIN_NAMES]
+
             data = {}
-            names = [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames] if varnames else list(ws.names())
             for name in names:
-                val = ws.get(name)
-                if isinstance(val, ForgeArray):
-                    data[name] = {"type": "array", "data": val.data.tolist(), "shape": list(val.data.shape)}
-                elif isinstance(val, ForgeChar):
-                    data[name] = {"type": "char", "data": val.to_str()}
-                elif isinstance(val, (int, float)):
-                    data[name] = {"type": "scalar", "data": float(val)}
-            with open(str(fname), 'w') as f:
-                json.dump(data, f)
+                if name in _BUILTIN_NAMES:
+                    continue
+                try:
+                    val = ws.get(name)
+                except Exception:
+                    continue
+                # Convert Forge types to scipy-compatible types
+                if isinstance(val, ForgeChar):
+                    data[name] = val.to_str()
+                elif isinstance(val, ForgeArray):
+                    arr = val.data
+                    if arr.ndim == 0:
+                        arr = arr.reshape(1, 1)
+                    data[name] = arr
+                elif isinstance(val, ForgeStruct):
+                    d = {}
+                    for fld, fval in val._fields.items():
+                        if isinstance(fval, ForgeArray):
+                            d[fld] = fval.data
+                        elif isinstance(fval, ForgeChar):
+                            d[fld] = fval.to_str()
+                        elif isinstance(fval, (int, float, complex)):
+                            d[fld] = np.array([[fval]])
+                        else:
+                            d[fld] = fval
+                    data[name] = d
+                elif isinstance(val, ForgeCell):
+                    obj_arr = np.empty((val._shape[0], val._shape[1]), dtype=object)
+                    for idx, item in enumerate(val._data):
+                        r = idx // val._shape[1]
+                        c = idx % val._shape[1]
+                        if isinstance(item, ForgeArray):
+                            obj_arr[r, c] = item.data
+                        elif isinstance(item, ForgeChar):
+                            obj_arr[r, c] = item.to_str()
+                        elif isinstance(item, (int, float, complex)):
+                            obj_arr[r, c] = np.array([[item]])
+                        else:
+                            obj_arr[r, c] = item
+                    data[name] = obj_arr
+                elif isinstance(val, (int, float, complex)):
+                    data[name] = np.array([[val]])
+                elif isinstance(val, np.ndarray):
+                    data[name] = val
+                else:
+                    _wname = name
+                    _wtype = type(val).__name__
+                    session.disp("Warning: variable '" + _wname + "' has unsupported type " + _wtype + ", skipping.")
+                    continue
+
+            _sio.savemat(fname, data)
             return ''
 
         def forge_load(fname, *varnames):
             """Load workspace variables from saved file."""
             import json
             if isinstance(fname, ForgeChar): fname = fname.to_str()
-            with open(str(fname), 'r') as f:
-                data = json.load(f)
+            fname = str(fname)
+
+            def _find_file(name):
+                """Resolve filename searching multiple locations.
+
+                Search order:
+                  1. Absolute path (as-is)
+                  2. Relative to process CWD
+                  3. Relative to each entry in session.path
+                     (session.path[0] tracks engine/file-browser CWD)
+                  4. Relative to session._file_browser_dir (GUI fallback)
+                Each location is tried as given, then with .mat appended.
+                """
+                candidates = []
+                if os.path.isabs(name):
+                    candidates.append(name)
+                else:
+                    # Process CWD
+                    candidates.append(os.path.join(os.getcwd(), name))
+                    # session.path entries (engine CWD at index 0)
+                    for p in session.path:
+                        full = os.path.join(p, name)
+                        if full not in candidates:
+                            candidates.append(full)
+                    # GUI file-browser directory fallback
+                    browser_dir = getattr(session, "_file_browser_dir", None)
+                    if browser_dir:
+                        full = os.path.join(browser_dir, name)
+                        if full not in candidates:
+                            candidates.append(full)
+                # Check each candidate, with and without .mat
+                for c in candidates:
+                    if os.path.isfile(c):
+                        return c
+                    if not name.endswith(".mat") and os.path.isfile(c + ".mat"):
+                        return c + ".mat"
+                return name  # fall through -- will raise FileNotFoundError
+
+            fname = _find_file(fname)
+            _varname_filter = [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames] if varnames else None
             ws = session._engine.workspace
-            for name, val_dict in data.items():
-                if varnames and name not in [v.to_str() if isinstance(v, ForgeChar) else str(v) for v in varnames]:
-                    continue
-                if val_dict["type"] == "array":
-                    arr = np.array(val_dict["data"], dtype=np.float64).reshape(val_dict["shape"])
-                    ws.set(name, ForgeArray(arr))
-                elif val_dict["type"] == "char":
-                    ws.set(name, ForgeChar(val_dict["data"]))
-                elif val_dict["type"] == "scalar":
-                    ws.set(name, ForgeArray(np.float64(val_dict["data"])))
+
+            # Try scipy.io.loadmat first (real MATLAB/Octave binary .mat)
+            _loaded_scipy = False
+            try:
+                import scipy.io as _sio
+                mat_data = _sio.loadmat(fname, squeeze_me=False)
+                for key, val in mat_data.items():
+                    if key.startswith('__'):
+                        continue
+                    if _varname_filter and key not in _varname_filter:
+                        continue
+                    if isinstance(val, np.ndarray):
+                        if val.dtype.kind in ('U', 'S', 'O') and val.size == 1:
+                            s = str(val.flat[0])
+                            ws.set(key, ForgeChar(s))
+                        elif val.dtype.kind in ('U', 'S'):
+                            ws.set(key, ForgeChar(str(val.flat[0]) if val.size else ''))
+                        elif np.issubdtype(val.dtype, np.complexfloating):
+                            ws.set(key, ForgeArray(np.array(val, dtype=np.complex128)))
+                        elif val.dtype == object:
+                            ws.set(key, ForgeArray(np.array(val, dtype=np.float64)))
+                        else:
+                            ws.set(key, ForgeArray(np.array(val, dtype=np.float64)))
+                    elif isinstance(val, dict):
+                        s = ForgeStruct()
+                        for fld, fval in val.items():
+                            if fld.startswith('__'):
+                                continue
+                            if isinstance(fval, np.ndarray):
+                                if fval.dtype.kind in ('U', 'S') and fval.size > 0:
+                                    s._fields[fld] = ForgeChar(str(fval.flat[0]))
+                                else:
+                                    s._fields[fld] = ForgeArray(np.array(fval, dtype=np.float64))
+                            else:
+                                s._fields[fld] = fval
+                        ws.set(key, s)
+                    elif isinstance(val, (int, float, np.integer, np.floating)):
+                        ws.set(key, ForgeArray(np.float64(val)))
+                    elif isinstance(val, str):
+                        ws.set(key, ForgeChar(val))
+                    elif isinstance(val, bytes):
+                        ws.set(key, ForgeChar(val.decode('utf-8', errors='replace')))
+                    else:
+                        ws.set(key, ForgeArray(np.array(val, dtype=np.float64)))
+                _loaded_scipy = True
+            except Exception:
+                pass
+
+            if not _loaded_scipy:
+                # Fall back to Forge JSON format
+                with open(fname, 'r') as f:
+                    data = json.load(f)
+                for name, val_dict in data.items():
+                    if _varname_filter and name not in _varname_filter:
+                        continue
+                    if val_dict["type"] == "array":
+                        arr = np.array(val_dict["data"], dtype=np.float64).reshape(val_dict["shape"])
+                        ws.set(name, ForgeArray(arr))
+                    elif val_dict["type"] == "char":
+                        ws.set(name, ForgeChar(val_dict["data"]))
+                    elif val_dict["type"] == "scalar":
+                        ws.set(name, ForgeArray(np.float64(val_dict["data"])))
             return ''
+
+        def forge_pkg(*args):
+            """Octave-compatible pkg command.
+
+            Usage:
+              pkg list              — list installed packages
+              pkg load <name>       — enable/load a package
+              pkg unload <name>     — disable/unload a package
+              pkg describe <name>   — show package details
+            """
+            from forge.engine.containers import ForgeChar
+            args = [a.to_str() if isinstance(a, ForgeChar) else str(a) for a in args]
+            if not args:
+                return "Usage: pkg list | pkg load <name> | pkg unload <name>"
+            action = args[0].lower()
+            mgr = session.addon_manager
+
+            if action == "list":
+                lines = []
+                lines.append("  Forge Toolboxes:")
+                for name, display, count, enabled in mgr.forge_toolboxes():
+                    status = "[loaded]" if enabled else "[unloaded]"
+                    lines.append(f"    {display:30s} {count:4d} functions  {status}")
+                if mgr._octave_bridge and mgr._octave_bridge.available:
+                    lines.append("")
+                    lines.append("  Octave Packages:")
+                    for _pkg_info in mgr.octave_packages():
+                        if isinstance(_pkg_info, (list, tuple)):
+                            _pname, _pver, _penabled = _pkg_info
+                        else:
+                            _pname = _pkg_info["name"]
+                            _pver = _pkg_info.get("version", "?")
+                            _penabled = mgr._octave_state.get(_pname, False)
+                        _pstatus = "[loaded]" if _penabled else "[unloaded]"
+                        lines.append(f"    {_pname:30s} v{_pver:10s} {_pstatus}")
+                else:
+                    lines.append("")
+                    lines.append("  Octave: not available (octave-cli not found)")
+                return "\n".join(lines)
+
+            elif action == "load":
+                if len(args) < 2:
+                    return "Usage: pkg load <package_name>"
+                pkg_name = args[1]
+                # Try Forge toolbox first
+                if pkg_name in mgr._forge_state:
+                    mgr.set_forge_enabled(pkg_name, True)
+                    session.reload_addons()
+                    return f"Package '{pkg_name}' loaded."
+                # Try Octave package
+                elif pkg_name in mgr._octave_state:
+                    mgr.set_octave_enabled(pkg_name, True)
+                    session.reload_addons()
+                    return f"Package '{pkg_name}' loaded."
+                else:
+                    return f"error: package '{pkg_name}' not found"
+
+            elif action == "unload":
+                if len(args) < 2:
+                    return "Usage: pkg unload <package_name>"
+                pkg_name = args[1]
+                if pkg_name in mgr._forge_state:
+                    mgr.set_forge_enabled(pkg_name, False)
+                    session.reload_addons()
+                    return f"Package '{pkg_name}' unloaded."
+                elif pkg_name in mgr._octave_state:
+                    mgr.set_octave_enabled(pkg_name, False)
+                    session.reload_addons()
+                    return f"Package '{pkg_name}' unloaded."
+                else:
+                    return f"error: package '{pkg_name}' not found"
+
+            elif action == "describe":
+                if len(args) < 2:
+                    return "Usage: pkg describe <package_name>"
+                pkg_name = args[1]
+                if pkg_name in mgr._forge_state:
+                    for name, display, count, enabled in mgr.forge_toolboxes():
+                        if name == pkg_name:
+                            return (f"Package: {display}\n"
+                                    f"Backend: Forge (Python)\n"
+                                    f"Functions: {count}\n"
+                                    f"Status: {'loaded' if enabled else 'unloaded'}")
+                elif pkg_name in mgr._octave_state:
+                    info = mgr._octave_packages.get(pkg_name, {})
+                    return (f"Package: {pkg_name}\n"
+                            f"Backend: Octave\n"
+                            f"Version: {info.get('version', '?')}\n"
+                            f"Status: {'loaded' if mgr._octave_state.get(pkg_name) else 'unloaded'}")
+                return f"error: package '{pkg_name}' not found"
+
+            else:
+                return f"pkg: unknown action '{action}'. Try: list, load, unload, describe"
 
         for _n, _f in [
             ("cbrt", forge_cbrt), ("pow2", forge_pow2),
@@ -986,6 +1251,7 @@ class ForgeSession:
             ("isa", forge_isa), ("isreal", forge_isreal),
             ("display", forge_display), ("interp2", forge_interp2),
             ("save", forge_save), ("load", forge_load),
+            ("pkg", forge_pkg),
         ]:
             self._engine.functions[_n] = _f
 
@@ -1184,7 +1450,7 @@ class ForgeSession:
                 msg = msg % tuple(conv_args)
             import sys
             print(f"warning: {msg}", file=sys.stderr)
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_assert(*args):
             """assert(cond) or assert(obs, exp) or assert(obs, exp, tol)."""
@@ -1626,7 +1892,7 @@ class ForgeSession:
             if isinstance(prompt, ForgeChar):
                 prompt = prompt.to_str()
             print(prompt, end='')
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_mpower(A, n):
             """mpower(A, n) — matrix power A^n."""
@@ -5206,88 +5472,6 @@ class ForgeSession:
             if isinstance(s, ForgeChar): s = s.to_str()
             return ForgeArray(np.float64(int(s, 2)))
 
-        # --- Plotting stubs (for M-code compatibility) ---
-        def forge_figure(*args):
-            """figure(n) — create/select figure (stub)."""
-            from forge.engine.types import ForgeArray
-            n = 1
-            if args and isinstance(args[0], ForgeArray):
-                n = int(args[0].data.flat[0])
-            return ForgeArray(np.float64(n))
-
-        def forge_subplot(*args):
-            """subplot(m, n, p) — create subplot (stub)."""
-            pass
-
-        def forge_hold(*args):
-            """hold on/off (stub)."""
-            pass
-
-        def forge_grid(*args):
-            """grid on/off (stub)."""
-            pass
-
-        def forge_title_func(*args):
-            """title(str) (stub)."""
-            pass
-
-        def forge_xlabel_func(*args):
-            """xlabel(str) (stub)."""
-            pass
-
-        def forge_ylabel_func(*args):
-            """ylabel(str) (stub)."""
-            pass
-
-        def forge_zlabel_func(*args):
-            """zlabel(str) (stub)."""
-            pass
-
-        def forge_legend_func(*args):
-            """legend(...) (stub)."""
-            pass
-
-        def forge_colorbar_func(*args):
-            """colorbar (stub)."""
-            pass
-
-        def forge_axis_func(*args):
-            """axis(...) (stub)."""
-            pass
-
-        def forge_xlim_func(*args):
-            """xlim([lo hi]) (stub)."""
-            pass
-
-        def forge_ylim_func(*args):
-            """ylim([lo hi]) (stub)."""
-            pass
-
-        def forge_set_func(*args):
-            """set(h, prop, val) (stub)."""
-            pass
-
-        def forge_get_func(*args):
-            """get(h, prop) (stub)."""
-            from forge.engine.types import ForgeArray
-            return ForgeArray(np.float64(0))
-
-        def forge_close_func(*args):
-            """close all/figure (stub)."""
-            pass
-
-        def forge_drawnow(*args):
-            """drawnow (stub)."""
-            pass
-
-        def forge_saveas_func(*args):
-            """saveas(fig, filename) (stub)."""
-            pass
-
-        def forge_print_func(*args):
-            """print(filename) (stub)."""
-            pass
-
         # Register R146 functions
         session._engine.functions["spline"] = forge_spline2
         session._engine.functions["pchip"] = forge_pchip2
@@ -5301,25 +5485,6 @@ class ForgeSession:
         session._engine.functions["hex2dec"] = forge_hex2dec
         session._engine.functions["dec2bin"] = forge_dec2bin
         session._engine.functions["bin2dec"] = forge_bin2dec
-        session._engine.functions["figure"] = forge_figure
-        session._engine.functions["subplot"] = forge_subplot
-        session._engine.functions["hold"] = forge_hold
-        session._engine.functions["grid"] = forge_grid
-        session._engine.functions["title"] = forge_title_func
-        session._engine.functions["xlabel"] = forge_xlabel_func
-        session._engine.functions["ylabel"] = forge_ylabel_func
-        session._engine.functions["zlabel"] = forge_zlabel_func
-        session._engine.functions["legend"] = forge_legend_func
-        session._engine.functions["colorbar"] = forge_colorbar_func
-        session._engine.functions["axis"] = forge_axis_func
-        session._engine.functions["xlim"] = forge_xlim_func
-        session._engine.functions["ylim"] = forge_ylim_func
-        session._engine.functions["set"] = forge_set_func
-        session._engine.functions["get"] = forge_get_func
-        session._engine.functions["close"] = forge_close_func
-        session._engine.functions["drawnow"] = forge_drawnow
-        session._engine.functions["saveas"] = forge_saveas_func
-        session._engine.functions["print"] = forge_print_func
 
         # R146b: Genuinely new functions
         # --- Signal waveforms ---
@@ -5704,7 +5869,6 @@ class ForgeSession:
 
         # R147: Plotting, utilities, string ops
 
-        # --- Plotting functions (stubs that record calls) ---
         def forge_plot(*args):
             """plot(x, y, ...) — 2D line plot."""
             from forge.engine.types import ForgeArray
@@ -6076,15 +6240,22 @@ class ForgeSession:
             return ForgeCell._from_list([ForgeChar(f) for f in mfiles])
 
         def forge_type2(name):
-            """type(name) — display file contents."""
+            """type(name) -- display file contents or function info."""
             from forge.engine.containers import ForgeChar
             if isinstance(name, ForgeChar): name = name.to_str()
-            for p in session._path:
-                fp = os.path.join(p, name + '.m')
+            name = str(name)
+            for p in session.path:
+                fp = os.path.join(p, name + ".m")
                 if os.path.exists(fp):
                     with open(fp) as f:
                         return ForgeChar(f.read())
-            return ForgeChar(f'{name} not found')
+            if name in session._engine.functions:
+                func = session._engine.functions[name]
+                doc = func.__doc__ or ""
+                return ForgeChar(name + " is a built-in function\n" + doc)
+            if session._engine.workspace.has(name):
+                return ForgeChar(name + " is a variable")
+            return ForgeChar(name + " is undefined")
 
         def forge_keyboard2(*args):
             """keyboard — pause execution (stub)."""
@@ -6305,38 +6476,10 @@ class ForgeSession:
             return ForgeArray(np.float64(1))
 
         # Register all R147 functions
-        session._engine.functions["plot"] = forge_plot
-        session._engine.functions["plot3"] = forge_plot3
-        session._engine.functions["scatter"] = forge_scatter_func
-        session._engine.functions["scatter3"] = forge_scatter3_func
-        session._engine.functions["bar"] = forge_bar_func
-        session._engine.functions["barh"] = forge_barh_func
-        session._engine.functions["surf"] = forge_surf_func
-        session._engine.functions["mesh"] = forge_mesh_func
-        session._engine.functions["contour"] = forge_contour_func
-        session._engine.functions["contourf"] = forge_contourf_func
         session._engine.functions["quiver"] = forge_quiver_func
-        session._engine.functions["semilogx"] = forge_semilogx_func
-        session._engine.functions["semilogy"] = forge_semilogy_func
-        session._engine.functions["loglog"] = forge_loglog_func
-        session._engine.functions["stem"] = forge_stem_func
-        session._engine.functions["stairs"] = forge_stairs_func
-        session._engine.functions["area"] = forge_area_func
-        session._engine.functions["pie"] = forge_pie_func
-        session._engine.functions["polar"] = forge_polar_func
-        session._engine.functions["errorbar"] = forge_errorbar_func
-        session._engine.functions["fill"] = forge_fill_func
         session._engine.functions["patch"] = forge_patch_func
-        session._engine.functions["line"] = forge_line_func
-        session._engine.functions["rectangle"] = forge_rectangle_func
-        session._engine.functions["text"] = forge_text_func
         session._engine.functions["annotation"] = forge_annotation_func
-        session._engine.functions["cla"] = forge_cla_func
-        session._engine.functions["clf"] = forge_clf_func
-        session._engine.functions["gca"] = forge_gca_func
-        session._engine.functions["gcf"] = forge_gcf_func
         session._engine.functions["imshow"] = forge_imshow_func
-        session._engine.functions["imagesc"] = forge_imagesc_func
         session._engine.functions["image"] = forge_image_func
         session._engine.functions["imread"] = forge_imread_func
         session._engine.functions["imwrite"] = forge_imwrite_func
@@ -9567,7 +9710,7 @@ class ForgeSession:
                 if isinstance(fmt, ForgeChar):
                     fmt = fmt.to_str()
                 session._format = str(fmt).lower()
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_help(name=None):
             """help(name) — display help for function."""
@@ -9576,22 +9719,16 @@ class ForgeSession:
                 msg = "Forge Computing Environment\n"
                 msg += "Type help('function_name') for help on a specific function.\n"
                 msg += f"Total registered functions: {len(session._engine.functions)}\n"
-                import sys
-                print(msg)
                 return ForgeChar(msg)
             if isinstance(name, ForgeChar):
                 name = name.to_str()
             if name in session._engine.functions:
                 func = session._engine.functions[name]
                 doc = func.__doc__ if func.__doc__ else f"{name} - no documentation available"
-                import sys
                 # Sanitize to ASCII-safe for ForgeChar (uint8)
                 doc = doc.encode('ascii', 'replace').decode('ascii')
-                print(doc)
                 return ForgeChar(doc)
             msg = f"No help available for '{name}'"
-            import sys
-            print(msg)
             return ForgeChar(msg)
 
         def forge_doc(name=None):
@@ -9622,12 +9759,12 @@ class ForgeSession:
         def forge_version():
             """version — return Forge version string."""
             from forge.engine.containers import ForgeChar
-            return ForgeChar("Forge 0.1.0 (R118)")
+            return ForgeChar(f"Forge {_forge_version}")
 
         def forge_ver():
             """ver — display version info."""
             from forge.engine.containers import ForgeChar
-            msg = "Forge Computing Environment v0.1.0 (R118)\n"
+            msg = f"Forge Computing Environment v{_forge_version}\n"
             msg += f"Registered functions: {len(session._engine.functions)}\n"
             msg += "Python backend with NumPy/SciPy\n"
             import sys
@@ -9870,7 +10007,7 @@ class ForgeSession:
                                 raise ValueError("Expected non-NaN values")
                             elif a == 'integer' and not np.all(data == np.floor(data)):
                                 raise ValueError("Expected integer values")
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         class ForgeInputParser:
             """inputParser — parse and validate function inputs."""
@@ -10087,7 +10224,7 @@ class ForgeSession:
                 minargs = int(minargs.data.flat[0])
             if isinstance(maxargs, ForgeArray):
                 maxargs = int(maxargs.data.flat[0])
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_nargoutchk(minargs, maxargs):
             """nargoutchk(min, max) — check number of output arguments."""
@@ -10096,7 +10233,7 @@ class ForgeSession:
                 minargs = int(minargs.data.flat[0])
             if isinstance(maxargs, ForgeArray):
                 maxargs = int(maxargs.data.flat[0])
-            return ForgeArray(np.array(0.0))
+            return None  # format command produces no output
 
         def forge_rosser():
             """rosser — classic test matrix for eigenvalue routines."""

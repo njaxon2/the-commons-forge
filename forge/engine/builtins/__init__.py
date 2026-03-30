@@ -80,3 +80,40 @@ BUILTIN_REGISTRY.update(PARALLEL_REGISTRY)
 BUILTIN_REGISTRY.update(FUZZY_REGISTRY)
 BUILTIN_REGISTRY.update(NEURAL_REGISTRY)
 BUILTIN_REGISTRY.update(INSTRUMENT_REGISTRY)
+
+# ── Toolbox manifest for the addon manager ────────────────────────────
+# Maps internal name -> (display_name, registry_dict)
+TOOLBOX_MANIFEST = {
+    # Core
+    "elfun":          ("Elementary Functions", ELFUN_REGISTRY),
+    "general":        ("General",              GENERAL_REGISTRY),
+    "specfun":        ("Special Functions",    SPECFUN_REGISTRY),
+    "linalg":         ("Linear Algebra",       LINALG_REGISTRY),
+    "polynomial":     ("Polynomials",          POLYNOMIAL_REGISTRY),
+    "sets":           ("Sets",                 SETS_REGISTRY),
+    "special_matrix": ("Special Matrices",     SPECIAL_MATRIX_REGISTRY),
+    "strings":        ("Strings",              STRINGS_REGISTRY),
+    "time_funcs":     ("Time",                 TIME_REGISTRY),
+    "ode":            ("ODE Solvers",           ODE_REGISTRY),
+    "optimization":   ("Optimization",         OPTIMIZATION_REGISTRY),
+    "geometry":       ("Geometry",             GEOMETRY_REGISTRY),
+    "fileio":         ("File I/O",             FILEIO_REGISTRY),
+    "sparse":         ("Sparse Matrices",      SPARSE_REGISTRY),
+    "plotting":       ("Plotting",             PLOTTING_REGISTRY),
+    # Carry-forward
+    "signal":         ("Signal Processing",    SIGNAL_REGISTRY),
+    "image":          ("Image Processing",     IMAGE_REGISTRY),
+    "statistics":     ("Statistics",           STATISTICS_REGISTRY),
+    "audio":          ("Audio",                AUDIO_REGISTRY),
+    "web":            ("Web",                  WEB_REGISTRY),
+    # Extended
+    "control":        ("Control Systems",      CONTROL_REGISTRY),
+    "financial":      ("Financial",            FINANCIAL_REGISTRY),
+    "symbolic":       ("Symbolic Math",        SYMBOLIC_REGISTRY),
+    "comms":          ("Communications",       COMMS_REGISTRY),
+    "database":       ("Database",             DATABASE_REGISTRY),
+    "parallel":       ("Parallel Computing",   PARALLEL_REGISTRY),
+    "fuzzy":          ("Fuzzy Logic",          FUZZY_REGISTRY),
+    "neural":         ("Neural Networks",      NEURAL_REGISTRY),
+    "instrument":     ("Instrument Control",   INSTRUMENT_REGISTRY),
+}

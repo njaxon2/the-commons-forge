@@ -23,19 +23,20 @@ class OutputPanel(QWidget):
 
     @staticmethod
     def _get_colours():
-        from forge.gui.theme_utils import is_light_theme
+        from forge.gui.theme_utils import detect_palette, is_light_theme
+        _p = detect_palette()
         if is_light_theme():
             return {
-                "normal":  "#1e1e2e",
+                "normal":  _p.get("fg0", "#1e1e2e"),
                 "info":    "#00897B",
                 "warning": "#e65100",
-                "error":   "#d32f2f",
+                "error":   _p.get("error", "#d32f2f"),
             }
         return {
-            "normal":  "#cdd6f4",
-            "info":    "#94e2d5",
-            "warning": "#fab387",
-            "error":   "#f38ba8",
+            "normal":  _p.get("fg0", "#cdd6f4"),
+            "info":    _p.get("info", "#94e2d5"),
+            "warning": _p.get("warning", "#fab387"),
+            "error":   _p.get("error", "#f38ba8"),
         }
 
     # ------------------------------------------------------------------

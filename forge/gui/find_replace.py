@@ -154,7 +154,7 @@ class FindReplaceBar(QFrame):
 
         fmt = QTextCharFormat()
         fmt.setBackground(QColor("#f9e2af"))
-        fmt.setForeground(QColor(p.get("bg0", "#1e1e2e")) if hasattr(self, "_apply_theme") else QColor("#1e1e2e"))
+        fmt.setForeground(QColor(p.get("bg0", "#1e1e2e")))
 
         while True:
             cursor = doc.find(text, cursor, flags)

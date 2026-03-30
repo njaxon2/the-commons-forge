@@ -15,6 +15,7 @@ from PySide6.QtGui import QAction, QColor, QFont, QIcon
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QMenu, QHeaderView, QLineEdit, QLabel, QPushButton, QApplication,
+    QMessageBox,
 )
 
 
@@ -41,6 +42,7 @@ class WorkspaceBrowserWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workspace = {}
+        self._session = None
         self._build_ui()
 
     def _build_ui(self):
@@ -58,7 +60,9 @@ class WorkspaceBrowserWidget(QWidget):
         filter_layout.addWidget(self.filter_edit)
 
         self.lbl_count = QLabel("0 vars")
-        self.lbl_count.setStyleSheet("color: #6c7086; font-size: 10px; padding: 0 4px;")
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
+        self.lbl_count.setStyleSheet(f"color: {_p.get('fg3', '#6c7086')}; font-size: 10px; padding: 0 4px;")
         filter_layout.addWidget(self.lbl_count)
         layout.addLayout(filter_layout)
 
@@ -288,7 +292,14 @@ class WorkspaceBrowserWidget(QWidget):
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _clear_workspace_requested(self):
-        """Delete all user variables."""
+        """Delete all user variables (with confirmation)."""
+        reply = QMessageBox.question(
+            self, "Clear Workspace",
+            "Delete all user variables from the workspace?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
         for name in list(self._workspace.keys()):
             # Keep built-in constants
             if name not in ('pi', 'e', 'eps', 'inf', 'Inf', 'nan', 'NaN',
@@ -296,12 +307,14 @@ class WorkspaceBrowserWidget(QWidget):
                 self.variable_delete_requested.emit(name)
 
     def _save_workspace(self):
+        if self._session is None:
+            return
         from PySide6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(self, 'Save Workspace', '', 'Forge Workspace (*.fws);;All (*)')
         if path:
             import json
             workspace = {}
-            if self._session and hasattr(self._session, '_workspace'):
+            if hasattr(self._session, '_workspace'):
                 for name, val in self._session._workspace.items():
                     try:
                         import numpy as np
@@ -317,6 +330,8 @@ class WorkspaceBrowserWidget(QWidget):
                 json.dump(workspace, f, indent=2)
 
     def _load_workspace(self):
+        if self._session is None:
+            return
         from PySide6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(self, 'Load Workspace', '', 'Forge Workspace (*.fws);;All (*)')
         if path:
@@ -324,7 +339,7 @@ class WorkspaceBrowserWidget(QWidget):
             try:
                 with open(path, 'r') as f:
                     workspace = json.load(f)
-                if self._session and hasattr(self._session, '_workspace'):
+                if hasattr(self._session, '_workspace'):
                     for name, info in workspace.items():
                         if info['type'] == 'ndarray':
                             self._session._workspace[name] = np.array(info['data'])

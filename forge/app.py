@@ -1,4 +1,7 @@
 """Forge application entry point."""
+import logging
+logging.basicConfig(level=logging.WARNING)
+from forge import __version__
 import sys
 import os
 
@@ -17,7 +20,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('Forge')
     app.setOrganizationName('Forge')
-    app.setApplicationVersion('0.1.0')
+    app.setApplicationVersion(__version__)
 
     # Show splash screen
     from PySide6.QtWidgets import QSplashScreen
@@ -46,7 +49,7 @@ def main():
     painter.setPen(QColor("#6c7086"))
     ver_font = QF("Consolas", 10)
     painter.setFont(ver_font)
-    painter.drawText(QRect(0, 165, 480, 25), Qt.AlignCenter, "v0.1.0")
+    painter.drawText(QRect(0, 165, 480, 25), Qt.AlignCenter, f"v{__version__}")
     # Loading text
     painter.setPen(QColor("#585b70"))
     painter.drawText(QRect(0, 250, 480, 25), Qt.AlignCenter,
@@ -75,6 +78,9 @@ def main():
 
     # Apply theme on startup
     apply_theme(app, theme_name)
+    from forge.gui.editor_widget import set_editor_palette
+    set_editor_palette(theme_name)
+
 
     # Create engine session
     from forge.engine.session import ForgeSession

@@ -208,9 +208,11 @@ class PreferencesDialog(QDialog):
             "end"
         )
         self._theme_preview.setFont(QFont("Fira Code", 11))
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
         self._theme_preview.setStyleSheet(
-            "padding: 16px; border-radius: 8px; "
-            "background: #1e1e2e; color: #cdd6f4;"
+            f"padding: 16px; border-radius: 8px; "
+            f"background: {_p.get('bg0', '#1e1e2e')}; color: {_p.get('fg0', '#cdd6f4')};"
         )
         preview_layout.addWidget(self._theme_preview)
         layout.addWidget(preview_group)
@@ -222,12 +224,12 @@ class PreferencesDialog(QDialog):
 
     def _update_theme_preview(self, theme_name):
         """Update the theme preview swatch."""
-        themes = {
-            "dark": ("background: #1e1e2e; color: #cdd6f4;", ),
-            "light": ("background: #eff1f5; color: #4c4f69;", ),
-            "midnight": ("background: #0d1117; color: #c9d1d9;", ),
-        }
-        style = themes.get(theme_name, themes["dark"])[0]
+        try:
+            from forge.gui.themes import get_theme_palette
+            p = get_theme_palette(theme_name)
+            style = f"background: {p.get('bg0', '#1e1e2e')}; color: {p.get('fg0', '#cdd6f4')};"
+        except Exception:
+            style = "background: #1e1e2e; color: #cdd6f4;"
         self._theme_preview.setStyleSheet(
             f"padding: 16px; border-radius: 8px; {style}"
         )

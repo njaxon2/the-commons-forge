@@ -1059,15 +1059,30 @@ def forge_close(n=None):
         plt.close(int(n))
 
 
+def _resolve_figure(h):
+    """Resolve a figure handle argument to a matplotlib Figure object."""
+    import matplotlib.pyplot as _plt
+    from matplotlib.figure import Figure as _Figure
+    # If h is a callable (e.g. gcf passed without parens), call it
+    if callable(h):
+        h = h()
+    # If h is already a matplotlib Figure, use it directly
+    if isinstance(h, _Figure):
+        return h
+    # If h is a ForgeArray, extract the number
+    if hasattr(h, 'array'):
+        h = int(h.array.flat[0])
+    elif hasattr(h, 'data'):
+        h = int(h.data.flat[0])
+    # Now h should be an int figure number
+    return _plt.figure(int(h))
+
+
 def forge_saveas(*args):
     """Save figure: saveas(handle, filename) or saveas(handle, filename, format) or saveas(filename)."""
-    import numpy as np
     # Parse args: saveas(h, file) or saveas(h, file, fmt) or saveas(file)
     if len(args) >= 2:
-        h = args[0]
-        # Convert ForgeArray to int
-        if hasattr(h, 'array'):
-            h = int(h.array.flat[0])
+        fig = _resolve_figure(args[0])
         filename = args[1]
         if hasattr(filename, 'to_str'):
             filename = filename.to_str()
@@ -1076,7 +1091,6 @@ def forge_saveas(*args):
         fmt = args[2] if len(args) > 2 else None
         if hasattr(fmt, 'to_str'):
             fmt = fmt.to_str()
-        fig = plt.figure(int(h))
     else:
         filename = args[0]
         if hasattr(filename, 'to_str'):
@@ -1091,11 +1105,19 @@ def forge_saveas(*args):
 
 def forge_print_fig(*args):
     """Octave-compatible print command: print(filename), print(h, filename), print('-dpng', filename)."""
+    from matplotlib.figure import Figure as _Figure
     dpi = 150
     fig = _cur_fig()
     filename = None
     fmt = None
     for a in args:
+        # Handle callable (e.g. gcf without parens)
+        if callable(a):
+            a = a()
+        # Handle matplotlib Figure directly
+        if isinstance(a, _Figure):
+            fig = a
+            continue
         if hasattr(a, 'to_str'):
             a = a.to_str()
         elif hasattr(a, 'array'):
@@ -1116,6 +1138,40 @@ def forge_print_fig(*args):
         if fmt:
             kwargs["format"] = fmt
         fig.savefig(filename, **kwargs)
+
+
+def forge_suptitle(*args, **kwargs):
+    """suptitle(str) or suptitle(str, 'FontSize', n, ...) -- add super title to figure."""
+    if not args:
+        return
+    title_str = args[0]
+    if hasattr(title_str, 'to_str'):
+        title_str = title_str.to_str()
+    mpl_kwargs = {}
+    i = 1
+    while i < len(args):
+        key = args[i]
+        if hasattr(key, 'to_str'):
+            key = key.to_str()
+        if isinstance(key, str) and i + 1 < len(args):
+            val = args[i + 1]
+            if hasattr(val, 'to_str'):
+                val = val.to_str()
+            elif hasattr(val, 'array'):
+                val = float(val.array.flat[0])
+            prop = key.lower()
+            if prop == 'fontsize':
+                mpl_kwargs['fontsize'] = val
+            elif prop == 'fontweight':
+                mpl_kwargs['fontweight'] = val
+            elif prop == 'color':
+                mpl_kwargs['color'] = val
+            i += 2
+        else:
+            i += 1
+    fig = _cur_fig()
+    fig.suptitle(str(title_str), **mpl_kwargs)
+    plt.draw()
 
 
 # ===================================================================
@@ -1398,6 +1454,7 @@ PLOTTING_REGISTRY = {
     "close":        forge_close,
     "saveas":       forge_saveas,
     "print":        forge_print_fig,
+    "suptitle":     forge_suptitle,
     "drawnow":      forge_drawnow,
     "pause":        forge_pause,
     # View and display

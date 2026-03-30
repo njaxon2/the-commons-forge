@@ -1,2 +1,5 @@
 [console_scripts]
+forge-cli = forge.__main__:main
+
+[gui_scripts]
 forge = forge.__main__:main

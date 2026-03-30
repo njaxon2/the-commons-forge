@@ -31,37 +31,13 @@ class BookmarksPanel(QWidget):
         self._editor_widget = None  # set via set_editor_widget()
 
         self.setObjectName("BookmarksPanel")
+        self._build_ui()
         self.apply_theme()
 
     def apply_theme(self):
         """Apply current theme colors to the bookmarks panel."""
-        try:
-            from forge.gui.themes import get_theme_palette
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            qss = app.styleSheet() if app else ""
-            palette = None
-            # Check light/midnight first since dark's bg0 also appears as fg0 in light QSS
-            for name in ("light", "midnight", "dark"):
-                try:
-                    p = get_theme_palette(name)
-                    bg0 = p.get("bg0", "")
-                    bg1 = p.get("bg1", "")
-                    # Both bg0 and bg1 must appear to confirm this is the active theme
-                    if bg0 and bg1 and bg0 in qss and bg1 in qss:
-                        palette = p
-                        break
-                except Exception:
-                    pass
-            if palette is None:
-                palette = get_theme_palette("dark")
-        except Exception:
-            palette = {
-                "bg0": "#1e1e2e", "bg1": "#252536", "bg2": "#2a2a3c",
-                "fg0": "#cdd6f4", "fg3": "#6c7086", "border1": "#44445a",
-                "accent": "#00BCD4", "accent_p": "#0097A7", "alt_row": "#282840",
-                "selection": "#264f78", "bg5": "#44445a",
-            }
+        from forge.gui.theme_utils import detect_palette
+        palette = detect_palette()
 
         bg0 = palette.get("bg0", "#1e1e2e")
         bg1 = palette.get("bg1", "#252536")
@@ -123,9 +99,9 @@ class BookmarksPanel(QWidget):
             }}
         """)
 
-        self._build_ui()
-
     def _build_ui(self):
+        if self.layout() is not None:
+            return
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)

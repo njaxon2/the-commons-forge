@@ -188,10 +188,14 @@ class NotificationCenter(QFrame):
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._scroll.setStyleSheet("""
-            QScrollArea { border: none; background: transparent; }
-            QScrollBar:vertical { width: 6px; background: #1e1e1e; }
-            QScrollBar::handle:vertical { background: #555; border-radius: 3px; }
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
+        _bg1 = _p.get("bg1", "#252536")
+        _bg5 = _p.get("bg5", "#44445a")
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{ border: none; background: transparent; }}
+            QScrollBar:vertical {{ width: 6px; background: {_bg1}; }}
+            QScrollBar::handle:vertical {{ background: {_bg5}; border-radius: 3px; }}
         """)
         self._list_widget = QWidget()
         self._list_layout = QVBoxLayout(self._list_widget)
@@ -202,13 +206,19 @@ class NotificationCenter(QFrame):
         outer.addWidget(self._scroll, stretch=1)
         self._empty_label = QLabel("No notifications")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("color: #666; font-size: 12px; padding: 30px;")
+        from forge.gui.theme_utils import detect_palette as _dp2
+        self._empty_label.setStyleSheet(f"color: {_dp2().get('fg3', '#6c7086')}; font-size: 12px; padding: 30px;")
         self._list_layout.insertWidget(0, self._empty_label)
 
     def _apply_style(self):
-        self.setStyleSheet("""
-            #NotificationCenter { background: #1e1e1e; border-left: 1px solid #444; }
-            #NCHeader { background: #252525; border-bottom: 1px solid #444; }
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
+        _bg0 = _p.get("bg0", "#1e1e2e")
+        _bg1 = _p.get("bg1", "#252536")
+        _border1 = _p.get("border1", "#44445a")
+        self.setStyleSheet(f"""
+            #NotificationCenter {{ background: {_bg0}; border-left: 1px solid {_border1}; }}
+            #NCHeader {{ background: {_bg1}; border-bottom: 1px solid {_border1}; }}
         """)
     @property
     def unread_count(self) -> int:

@@ -45,4 +45,4 @@ def test_validation_framework():
 def test_forge_version():
     """Version is set."""
     import forge
-    assert forge.__version__ == '0.1.0'
+    assert forge.__version__ == '0.1.9'

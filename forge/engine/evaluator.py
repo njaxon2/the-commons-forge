@@ -417,11 +417,16 @@ class Session:
         b["ismatrix"] = lambda x: ForgeArray(np.float64(1.0 if isinstance(x, ForgeArray) and x.data.ndim == 2 else 0.0))
         b["issquare"] = lambda x: ForgeArray(np.float64(1.0 if isinstance(x, ForgeArray) and x.data.ndim == 2 and x.data.shape[0] == x.data.shape[1] else 0.0))
 
-        # Math
+        # Math — map Octave names to numpy (arcsin etc. for older numpy versions)
+        _np_name_map = {
+            'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan',
+            'asinh': 'arcsinh', 'acosh': 'arccosh', 'atanh': 'arctanh',
+        }
         for name in ['abs','sqrt','exp','log','log2','log10','sin','cos','tan',
                       'asin','acos','atan','sinh','cosh','tanh','ceil','floor',
                       'round','fix','sign','real','imag','conj','angle']:
-            fn = getattr(np, name)
+            np_name = _np_name_map.get(name, name)
+            fn = getattr(np, np_name, None) or getattr(np, name)
             b[name] = lambda *a, f=fn: ForgeArray(f(_unwrap(a[0])))
 
         # Add docstrings to math functions
@@ -1220,6 +1225,7 @@ class Session:
             args = [self._eval_expr(a, ws) for a in node.args]
             if len(args) == 1:
                 idx = int(_to_py(args[0]))
+                _check_1based_index(idx, len(target._data))
                 return target._data[idx - 1]  # 1-based
             raise TypeError("Cannot index ForgeCell with multiple indices via ()")
 
@@ -1273,8 +1279,12 @@ class Session:
                         return ForgeChar(''.join(chars))
                     else:
                         indices = raw_idx.astype(int).ravel() - 1
+                        if np.any(raw_idx.astype(int).ravel() <= 0):
+                            bad = int(raw_idx.astype(int).ravel()[raw_idx.astype(int).ravel() <= 0][0])
+                            _check_1based_index(bad, len(s))
                         chars = [s[i] for i in indices if 0 <= i < len(s)]
                         return ForgeChar(''.join(chars))
+                _check_1based_index(int(_to_py(idx)), len(s))
                 idx_int = int(_to_py(idx)) - 1
                 if 0 <= idx_int < len(s):
                     return ForgeChar(s[idx_int])
@@ -1297,6 +1307,9 @@ class Session:
                 else:
                     # Numeric indexing (1-based) - linear indexing into column-major
                     flat = data.ravel(order='F')
+                    if np.any(raw_idx.astype(int).ravel() <= 0):
+                        bad = int(raw_idx.astype(int).ravel()[raw_idx.astype(int).ravel() <= 0][0])
+                        _check_1based_index(bad, len(flat))
                     int_idx = raw_idx.astype(int).ravel() - 1  # Convert to 0-based
                     result = flat[int_idx]
                     # Preserve shape: if source is column vector, result is column
@@ -1308,6 +1321,7 @@ class Session:
                     return ForgeArray(result)
             # Single scalar index
             idx_int = int(_to_py(idx))
+            _check_1based_index(idx_int, len(data.ravel(order=F)))
             flat = data.ravel(order='F')
             return ForgeArray(np.array(flat[idx_int - 1]))  # 1-based
 
@@ -1322,9 +1336,13 @@ class Session:
                 if raw.dtype == np.bool_:
                     slices.append(raw.ravel())
                 else:
+                    if np.any(raw.astype(int).ravel() <= 0):
+                        bad = int(raw.astype(int).ravel()[raw.astype(int).ravel() <= 0][0])
+                        _check_1based_index(bad)
                     slices.append(raw.astype(int).ravel() - 1)  # 1-based to 0-based
             else:
                 idx_int = int(_to_py(arg))
+                _check_1based_index(idx_int, data.shape[dim] if dim < len(data.shape) else 1)
                 slices.append(idx_int - 1)  # 1-based to 0-based
 
         result = data[np.ix_(*[s if isinstance(s, np.ndarray) else (np.arange(data.shape[i]) if isinstance(s, slice) else np.array([s])) for i, s in enumerate(slices)])]
@@ -1407,7 +1425,15 @@ class Session:
 
         if isinstance(target, Index):
             target_name = target.target.name if isinstance(target.target, Identifier) else None
-            arr = self._eval_expr(target.target, ws)
+            try:
+                arr = self._eval_expr(target.target, ws)
+            except (NameError, KeyError):
+                # Octave auto-creates arrays on indexed assignment to undefined vars
+                if target_name is not None:
+                    arr = ForgeArray(np.zeros(0))
+                    ws.set(target_name, arr)
+                else:
+                    raise
             n_args = len(target.args)
             args = []
             for dim_idx, a in enumerate(target.args):
@@ -1430,6 +1456,37 @@ class Session:
                 data = arr.data
                 if len(args) == 1:
                     idx = args[0]
+                    # --- Auto-grow: expand array if index exceeds current size ---
+                    def _max_index(idx_val):
+                        """Get the maximum 1-based index from an index expression."""
+                        if isinstance(idx_val, ForgeArray):
+                            raw = _unwrap(idx_val)
+                            if raw.dtype == np.bool_:
+                                return None  # boolean indexing doesn't grow
+                            return int(np.max(raw))
+                        elif idx_val is None:
+                            return None  # colon indexing
+                        else:
+                            return int(_to_py(idx_val))
+                    max_idx = _max_index(idx)
+                    # Check for zero/negative indices before auto-grow
+                    if max_idx is not None and max_idx <= 0:
+                        _check_1based_index(max_idx, data.size)
+                    if isinstance(idx, ForgeArray):
+                        raw_check = _unwrap(idx)
+                        if raw_check.dtype != np.bool_ and raw_check.size > 0:
+                            min_val = int(np.min(raw_check))
+                            if min_val <= 0:
+                                _check_1based_index(min_val, data.size)
+                    if max_idx is not None and max_idx > data.size:
+                        # Octave auto-extends with zeros
+                        new_data = np.zeros(max_idx, dtype=data.dtype)
+                        new_data[:data.size] = data.ravel(order='F')
+                        data = new_data.reshape(1, -1) if data.ndim <= 1 or data.shape[0] <= 1 else new_data.reshape(-1, 1)
+                        arr._data = data
+                        if target_name:
+                            ws.set(target_name, arr)
+                    # --- end auto-grow ---
                     if idx is None:
                         data[:] = assign_val
                     elif isinstance(idx, ForgeArray):
@@ -1451,6 +1508,9 @@ class Session:
                                 data[mask_bc] = av
                         else:
                             flat = data.ravel(order='F')
+                            if np.any(raw_idx.astype(int).ravel() <= 0):
+                                bad = int(raw_idx.astype(int).ravel()[raw_idx.astype(int).ravel() <= 0][0])
+                                _check_1based_index(bad)
                             int_idx = raw_idx.astype(int).ravel() - 1
                             if np.isscalar(assign_val):
                                 flat[int_idx] = assign_val
@@ -1458,8 +1518,11 @@ class Session:
                                 flat[int_idx] = np.asarray(assign_val).ravel()
                             data[:] = flat.reshape(data.shape, order='F')
                     else:
+                        _check_1based_index(int(_to_py(idx)), len(data.ravel(order=F)))
                         idx_int = int(_to_py(idx)) - 1
-                        data.ravel(order='F')[idx_int] = assign_val
+                        flat = data.ravel(order='F')
+                        flat[idx_int] = assign_val
+                        data[:] = flat.reshape(data.shape, order='F')
                 elif len(args) >= 2:
                     slices = []
                     for dim, arg in enumerate(args):
@@ -1472,6 +1535,7 @@ class Session:
                             else:
                                 slices.append(raw.astype(int).ravel() - 1)
                         else:
+                            _check_1based_index(int(_to_py(arg)))
                             slices.append(int(_to_py(arg)) - 1)
                     idx_arrays = []
                     for i, s in enumerate(slices):
@@ -1922,6 +1986,19 @@ def _to_py(val):
     if isinstance(val, (np.integer, np.floating)):
         return val.item()
     return val
+
+
+
+def _check_1based_index(idx_val, dim_size=None):
+    """Validate that a 1-based index is positive (Octave/MATLAB convention)."""
+    if idx_val <= 0:
+        if dim_size is not None:
+            raise IndexError(
+                f"index ({idx_val}): out of bound 0; value must be in the range [1, {dim_size}]"
+            )
+        raise IndexError(
+            f"index ({idx_val}): out of bound 0; value must be positive"
+        )
 
 
 def _to_int(val):

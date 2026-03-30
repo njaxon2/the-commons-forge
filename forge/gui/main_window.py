@@ -24,8 +24,10 @@ from PySide6.QtWidgets import (
 )
 
 from forge.gui.notification_center import NotificationCenter
+from forge import __version__ as _forge_version
 from forge.gui.commons_integration import (
-    UpdateChecker, AMSConnector, FeatureRequestDialog,
+    UpdateChecker, UpdateWorker, ValidatedUpdateWorker,
+    AMSConnector, FeatureRequestDialog, FORGE_VERSION,
 )
 
 
@@ -47,29 +49,31 @@ class _DockTitleBar(QWidget):
         self._maximized_geo = None
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 4, 0)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 3, 6, 3)
+        layout.setSpacing(8)
 
         self._label = QLabel(title)
         self._label.setObjectName("DockTitleLabel")
-        layout.addWidget(self._label)
+        from PySide6.QtWidgets import QSizePolicy
+        self._label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        layout.addWidget(self._label, 1)
         layout.addStretch()
 
         # Float button
         self._btn_float = QPushButton()
         self._btn_float.setObjectName("DockFloatBtn")
-        self._btn_float.setFixedSize(20, 20)
+        self._btn_float.setFixedSize(18, 18)
         self._btn_float.setToolTip("Float / Dock")
-        self._btn_float.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
-        layout.addWidget(self._btn_float)
+        self._btn_float.clicked.connect(self._toggle_float)
+        layout.addWidget(self._btn_float, 0, Qt.AlignVCenter)
 
         # Close button
         self._btn_close = QPushButton()
         self._btn_close.setObjectName("DockCloseBtn")
-        self._btn_close.setFixedSize(20, 20)
+        self._btn_close.setFixedSize(18, 18)
         self._btn_close.setToolTip("Close")
         self._btn_close.clicked.connect(dock.close)
-        layout.addWidget(self._btn_close)
+        layout.addWidget(self._btn_close, 0, Qt.AlignVCenter)
 
         self.setFixedHeight(28)
         self.setObjectName("DockTitleBar")
@@ -77,45 +81,8 @@ class _DockTitleBar(QWidget):
 
     def _apply_theme(self):
         """Apply styling from the current theme palette."""
-        try:
-            from forge.gui.themes import get_theme_palette, get_available_themes
-            # Detect current theme from app stylesheet
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            current_qss = app.styleSheet() if app else ""
-
-            # Detect theme from main window or QSS
-            palette = None
-            # Check if main window stores current theme
-            for w in app.topLevelWidgets():
-                if hasattr(w, '_current_theme'):
-                    try:
-                        palette = get_theme_palette(w._current_theme)
-                    except Exception:
-                        pass
-                    break
-            if palette is None:
-                for name in ("light", "midnight", "dark"):
-                    try:
-                        p = get_theme_palette(name)
-                        bg0 = p.get("bg0", "")
-                        bg1 = p.get("bg1", "")
-                        if bg0 and bg1 and bg0 in current_qss and bg1 in current_qss:
-                            palette = p
-                            break
-                    except Exception:
-                        pass
-            if palette is None:
-                palette = get_theme_palette("dark")
-        except Exception:
-            # Fallback colors
-            palette = {
-                "bg1": "#252536", "bg3": "#313145", "bg4": "#3a3a50",
-                "fg0": "#cdd6f4", "fg2": "#a6adc8", "fg3": "#6c7086",
-                "border0": "#313145", "border1": "#44445a",
-                "accent": "#00BCD4", "error": "#f38ba8",
-                "bg5": "#44445a",
-            }
+        from forge.gui.theme_utils import detect_palette
+        palette = detect_palette()
 
         bg1 = palette.get("bg1", "#252536")
         bg3 = palette.get("bg3", "#313145")
@@ -142,9 +109,9 @@ class _DockTitleBar(QWidget):
             #DockTitleLabel {{
                 color: {fg0};
                 font-weight: bold;
-                font-size: 11px;
-                letter-spacing: 0.5px;
-                text-transform: uppercase;
+                font-size: 10px;
+                
+                
                 background: transparent;
                 border: none;
             }}
@@ -152,23 +119,31 @@ class _DockTitleBar(QWidget):
                 background: transparent;
                 border: 1px solid {fg3};
                 border-radius: 3px;
-                color: {fg2};
+                color: {fg0};
                 font-size: 11px;
-                font-family: monospace;
+                padding: 1px;
+                min-width: 16px;
+                min-height: 16px;
+                max-width: 18px;
+                max-height: 18px;
             }}
             #DockFloatBtn:hover {{
                 background: {accent};
-                color: {fg0};
+                color: #ffffff;
                 border-color: {accent};
             }}
             #DockCloseBtn {{
                 background: transparent;
                 border: 1px solid {fg3};
                 border-radius: 3px;
-                color: {fg2};
-                font-size: 13px;
+                color: {fg0};
+                font-size: 11px;
                 font-weight: bold;
-                font-family: monospace;
+                padding: 1px;
+                min-width: 16px;
+                min-height: 16px;
+                max-width: 18px;
+                max-height: 18px;
             }}
             #DockCloseBtn:hover {{
                 background: {error};
@@ -178,6 +153,11 @@ class _DockTitleBar(QWidget):
         """)
         self._btn_float.setText("□")  # □ square
         self._btn_close.setText("✕")  # ✕ cross
+
+    def _toggle_float(self):
+        """Toggle floating state. Floatable is always enabled."""
+        dock = self._dock
+        dock.setFloating(not dock.isFloating())
 
     def mouseDoubleClickEvent(self, event):
         if self._dock.isFloating():
@@ -221,6 +201,18 @@ class ForgeMainWindow(QMainWindow):
         # Enable tabbed docking — dragging one panel onto another
         # creates a tab group instead of hiding it.
         self.setDockNestingEnabled(True)
+        self.setDockOptions(
+            QMainWindow.AnimatedDocks
+            | QMainWindow.AllowTabbedDocks
+            | QMainWindow.AllowNestedDocks
+            | QMainWindow.GroupedDragging
+        )
+
+        # Minimal central widget so QMainWindow dock separators work
+        from PySide6.QtWidgets import QWidget
+        _cw = QWidget()
+        _cw.setMinimumSize(200, 100)
+        self.setCentralWidget(_cw)
 
         self._recent_files = self._load_recent_files()
         self._create_actions()
@@ -241,6 +233,7 @@ class ForgeMainWindow(QMainWindow):
             self._on_notification_navigate
         )
         self._set_default_layout()
+        self._apply_default_visibility()
         self._restore_state()
 
         # TheCommons integration
@@ -495,6 +488,9 @@ class ForgeMainWindow(QMainWindow):
             # Store for new tabs
             self.editor_widget._engine_func_names = func_names
 
+        # Populate Add-ons menus
+        self.populate_addons_menus()
+
     def _connect_signals(self):
         self.command_widget.command_executed.connect(self._update_workspace)
         self.command_widget.command_executed.connect(lambda _: self._refresh_problems())
@@ -509,6 +505,7 @@ class ForgeMainWindow(QMainWindow):
             self._inspect_variable
         )
         self.file_browser_widget.path_changed.connect(self._on_path_changed)
+        self.file_browser_widget.directory_changed.connect(self._on_directory_changed)
         # Breadcrumb directory clicks navigate file browser
         if hasattr(self.editor_widget, 'directory_open_requested'):
             self.editor_widget.directory_open_requested.connect(
@@ -588,6 +585,32 @@ class ForgeMainWindow(QMainWindow):
     def _run_file(self, path):
         if self.session is None:
             return
+
+        # 1. Save unsaved edits before running
+        try:
+            self.editor_widget.save_current()
+        except Exception:
+            pass
+
+        # 2. Change CWD to the file's directory
+        file_dir = os.path.dirname(os.path.abspath(path))
+        try:
+            os.chdir(file_dir)
+            if hasattr(self.session, 'path') and self.session.path:
+                self.session.path[0] = file_dir
+            elif hasattr(self.session, 'path'):
+                self.session.path.append(file_dir)
+            if hasattr(self.session, '_file_browser_dir'):
+                self.session._file_browser_dir = file_dir
+            if hasattr(self, 'file_browser_widget'):
+                self.file_browser_widget._set_root(file_dir)
+        except OSError:
+            pass
+
+        # 3. Show which file is being run in the command window
+        filename = os.path.basename(path)
+        self.command_widget.append_output(f">> Running: {filename}")
+
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 code = fh.read()
@@ -602,6 +625,30 @@ class ForgeMainWindow(QMainWindow):
         if self.session and hasattr(self.session, 'path'):
             self.session.path.clear()
             self.session.path.extend(new_paths)
+
+    def _on_directory_changed(self, new_dir):
+        """Sync engine CWD when user navigates the file browser."""
+        import os
+        # Always record the file-browser directory on the session so that
+        # load/save can find files even when os.chdir fails or the process
+        # CWD diverges (common on Windows).
+        if self.session:
+            self.session._file_browser_dir = new_dir
+        try:
+            os.chdir(new_dir)
+            if self.session and hasattr(self.session, 'path'):
+                if self.session.path:
+                    self.session.path[0] = os.getcwd()
+                else:
+                    self.session.path.append(os.getcwd())
+        except OSError:
+            # os.chdir failed but _file_browser_dir is already set,
+            # so load() will still find files via that fallback.
+            if self.session and hasattr(self.session, 'path'):
+                if self.session.path:
+                    self.session.path[0] = new_dir
+                else:
+                    self.session.path.append(new_dir)
 
     # ==================================================================
     # Actions
@@ -696,6 +743,13 @@ class ForgeMainWindow(QMainWindow):
         # TheCommons actions
         self.act_check_updates = QAction("Check for &Updates...", self)
         self.act_check_updates.triggered.connect(self._check_for_updates)
+        self.act_auto_update = QAction("Auto-Update (validated)", self)
+        self.act_auto_update.setCheckable(True)
+        self.act_auto_update.setToolTip(
+            "When enabled, updates are downloaded, tested locally, "
+            "and applied automatically if all tests pass."
+        )
+        self.act_auto_update.toggled.connect(self._toggle_auto_update)
         self.act_feature_request = QAction("Submit &Feature Request...", self)
         self.act_feature_request.triggered.connect(self._open_feature_request)
         self.act_ams_toggle = QAction("AMS &Telemetry...", self)
@@ -738,7 +792,7 @@ class ForgeMainWindow(QMainWindow):
         edit_menu.addSeparator()
         edit_menu.addAction(self.act_find)
         act_snippet = edit_menu.addAction("Insert Snippet...")
-        act_snippet.setShortcut("Ctrl+Shift+S")
+        act_snippet.setShortcut("Ctrl+Shift+I")
         act_snippet.triggered.connect(self._insert_snippet)
         edit_menu.addAction(self.act_search_files)
         edit_menu.addSeparator()
@@ -786,8 +840,7 @@ class ForgeMainWindow(QMainWindow):
         self.act_zoom_out.triggered.connect(lambda: self._zoom(-1))
         view_menu.addAction(self.act_zoom_out)
 
-        self.act_zoom_reset = QAction("Reset Zoom", self, shortcut="Ctrl+0")
-        # Don't add shortcut since Ctrl+0 is focus command — use menu only
+        self.act_zoom_reset = QAction("Reset Zoom", self)
         self.act_zoom_reset.triggered.connect(lambda: self._zoom(0))
         view_menu.addAction(self.act_zoom_reset)
 
@@ -813,6 +866,14 @@ class ForgeMainWindow(QMainWindow):
         debug_menu.addSeparator()
         debug_menu.addAction(self.act_profile)
 
+        # ── Add-ons ──
+        addons_menu = mb.addMenu("&Add-ons")
+        self._forge_addons_menu = addons_menu.addMenu("Forge Toolboxes")
+        self._octave_addons_menu = addons_menu.addMenu("Octave Packages")
+        addons_menu.addSeparator()
+        act_manage = addons_menu.addAction("Manage Add-ons...")
+        act_manage.triggered.connect(self._open_addons_dialog)
+
         # ── Window ──
         window_menu = mb.addMenu("&Window")
         window_menu.addAction(self.act_focus_cmd)
@@ -830,9 +891,14 @@ class ForgeMainWindow(QMainWindow):
         help_menu.addAction(act_shortcuts)
         help_menu.addSeparator()
         help_menu.addAction(self.act_check_updates)
+        help_menu.addAction(self.act_auto_update)
         help_menu.addAction(self.act_feature_request)
         help_menu.addSeparator()
         help_menu.addAction(self.act_ams_toggle)
+        help_menu.addSeparator()
+        self.act_cloud_burst = QAction("Cloud Computing (Coming Soon)...", self)
+        self.act_cloud_burst.triggered.connect(self._show_cloud_burst_interest)
+        help_menu.addAction(self.act_cloud_burst)
         help_menu.addSeparator()
         act_tiga = QAction("Load TIGA Demo Bookmarks", self)
         act_tiga.triggered.connect(self._load_tiga_demo)
@@ -955,10 +1021,10 @@ class ForgeMainWindow(QMainWindow):
         from forge.gui.workspace_browser import WorkspaceBrowserWidget
         from forge.gui.help_viewer import HelpViewerWidget
         from forge.gui.git_panel import GitPanel
+        from forge.gui.ai_panel import AIPanel
 
         # Command Window (bottom)
         self.command_widget = CommandWidget(self)
-        self.command_widget.setMinimumHeight(80)
         self.command_dock = self._make_dock(
             "Command Window", "CommandDock", self.command_widget
         )
@@ -999,6 +1065,10 @@ class ForgeMainWindow(QMainWindow):
         self._bookmarks_dock = self._make_dock("Bookmarks", "BookmarksDock", self._bookmarks_panel)
         self.addDockWidget(Qt.BottomDockWidgetArea, self._bookmarks_dock)
         self.tabifyDockWidget(self._terminal_dock, self._bookmarks_dock)
+        # Ensure bottom docks can shrink very small
+        for d in [self.command_dock, self._terminal_dock, self.profiler_dock,
+                  self.output_dock, self._bookmarks_dock]:
+            d.setMinimumHeight(0)
         self.command_dock.raise_()
 
         # File Browser (left)
@@ -1054,13 +1124,27 @@ class ForgeMainWindow(QMainWindow):
             | QDockWidget.DockWidgetMovable
             | QDockWidget.DockWidgetFloatable
         )
-        # Double-click floating title bar → maximize/restore (not re-dock)
+        # Allow panels to be resized very small
+        widget.setMinimumSize(0, 0)
+        from PySide6.QtWidgets import QSizePolicy
+        widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        # Custom title bar with theme-aware styling
         dock.setTitleBarWidget(_DockTitleBar(title, dock))
         return dock
 
     def _set_default_layout(self):
-        self.resizeDocks([self.command_dock], [150], Qt.Vertical)
-        self.resizeDocks([self.file_browser_dock], [280], Qt.Horizontal)
+        # Bottom panels get ~25% of height
+        self.resizeDocks(
+            [self.command_dock],
+            [200],
+            Qt.Vertical
+        )
+        # Left panels ~25% width
+        self.resizeDocks(
+            [self.file_browser_dock],
+            [280],
+            Qt.Horizontal
+        )
 
     # ==================================================================
     # Status bar
@@ -1148,6 +1232,28 @@ class ForgeMainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._bell_btn)
 
 
+    def _refresh_status_bar_styles(self):
+        """Re-apply status-bar label colours from the live palette."""
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        fg2 = p.get("fg2", "#a6adc8")
+        fg3 = p.get("fg3", "#6c7086")
+        bg1 = p.get("bg1", "#252526")
+        accent = p.get("accent", "#569cd6")
+        info_style = f"color: {fg2}; font-size: 11px; padding: 0 8px;"
+        for w in (self._sb_position, self._sb_lang, self._sb_encoding,
+                  self._sb_selection, self._sb_eol):
+            w.setStyleSheet(info_style)
+        self._sb_theme.setStyleSheet(f"color: {fg3}; font-size: 11px; padding: 0 8px;")
+        self._mode_indicator.setStyleSheet(
+            f"QLabel {{ color: {accent}; font-weight: bold; font-size: 11px; "
+            f"padding: 1px 8px; background: {bg1}; border-radius: 3px; }}"
+        )
+        self._bell_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; font-size: 14px; }"
+            f"QPushButton:hover {{ background: {bg1}; border-radius: 3px; }}"
+        )
+
     def set_status(self, msg: str):
         self._status_msg.setText(msg)
 
@@ -1158,6 +1264,35 @@ class ForgeMainWindow(QMainWindow):
     def _settings(self):
         return QSettings("Forge", "ForgeIDE")
 
+    def _apply_default_visibility(self):
+        """On first launch hide non-essential docks.
+
+        QMainWindow.restoreState() (called next) remembers which docks
+        were visible, so returning users keep their arrangement.
+
+        We check both QSettings and the JSON state file so that any
+        prior session (even from an older version) is respected.
+        """
+        s = self._settings()
+        has_qsettings = s.contains("windowState")
+        has_json_state = self._STATE_FILE.exists()
+        if has_qsettings or has_json_state:
+            return  # user already has a saved layout -- skip defaults
+
+        # Only show: File Browser, Editor, Workspace, Command Window
+        _keep_visible = {
+            self.file_browser_dock,
+            self.editor_dock,
+            self.workspace_dock,
+            self.command_dock,
+        }
+        for dock in self.findChildren(QDockWidget):
+            if dock not in _keep_visible:
+                dock.setVisible(False)
+        # Make sure the right tabs are raised in their groups
+        self.file_browser_dock.raise_()
+        self.command_dock.raise_()
+
     def _restore_state(self):
         s = self._settings()
         geom = s.value("geometry")
@@ -1166,11 +1301,109 @@ class ForgeMainWindow(QMainWindow):
         state = s.value("windowState")
         if state is not None:
             self.restoreState(state)
+        # restoreState may re-enable Floatable or leave docks floating
+        # from a saved state -- clamp them back.
+        self._enforce_dock_constraints()
+        # Ensure window is visible on current screen
+        self._ensure_on_screen()
+
+    def _enforce_dock_constraints(self):
+        """Re-dock any panel that was restored as floating from a stale
+        window state, but preserve all dock features (including Floatable)."""
+        for dock in self.findChildren(QDockWidget):
+            if dock.isFloating():
+                dock.setFloating(False)
+
+    def _ensure_on_screen(self):
+        """If the window is off-screen (e.g. saved geometry from a different
+        display), move it back to the primary screen centre."""
+        from PySide6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+        geo = self.frameGeometry()
+        # Check if the title bar (top 40px) is reachable
+        visible_top = max(geo.top(), avail.top())
+        visible_left = max(geo.left(), avail.left())
+        visible_right = min(geo.right(), avail.right())
+        title_bar_visible = (visible_right - visible_left > 100
+                             and visible_top < avail.top() + 60)
+        if (geo.top() < avail.top() - 10
+                or geo.left() > avail.right() - 50
+                or geo.right() < avail.left() + 50
+                or geo.bottom() < avail.top() + 50
+                or not title_bar_visible):
+            # Window is substantially off-screen -- reset
+            w = min(geo.width(), avail.width())
+            h = min(geo.height(), avail.height())
+            self.resize(w, h)
+            frame = self.frameGeometry()
+            frame.moveCenter(avail.center())
+            self.move(frame.topLeft())
 
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts overlay
     # ------------------------------------------------------------------
+
+    # ==================================================================
+    # Add-ons
+    # ==================================================================
+
+    def populate_addons_menus(self):
+        """Populate the Forge/Octave sub-menus with checkable actions."""
+        if not hasattr(self, "session") or self.session is None:
+            return
+        mgr = self.session.addon_manager
+
+        self._forge_addons_menu.clear()
+        for name, display, count, enabled in mgr.forge_toolboxes():
+            act = self._forge_addons_menu.addAction(f"{display}  ({count})")
+            act.setCheckable(True)
+            act.setChecked(enabled)
+            act.setData(("forge", name))
+            act.triggered.connect(
+                lambda checked, n=name: self._on_addon_toggled("forge", n, checked)
+            )
+
+        self._octave_addons_menu.clear()
+        if not mgr.octave_available:
+            act = self._octave_addons_menu.addAction("(octave-cli not found)")
+            act.setEnabled(False)
+        else:
+            for name, version, enabled in mgr.octave_packages():
+                act = self._octave_addons_menu.addAction(f"{name} (v{version})")
+                act.setCheckable(True)
+                act.setChecked(enabled)
+                act.setData(("octave", name))
+                act.triggered.connect(
+                    lambda checked, n=name: self._on_addon_toggled("octave", n, checked)
+                )
+
+    def _on_addon_toggled(self, backend, name, enabled):
+        """Handle checkbox toggle in the Add-ons sub-menus."""
+        if not hasattr(self, "session") or self.session is None:
+            return
+        mgr = self.session.addon_manager
+        if backend == "forge":
+            mgr.set_forge_enabled(name, enabled)
+        else:
+            mgr.set_octave_enabled(name, enabled)
+        self.session.reload_addons()
+        state = "enabled" if enabled else "disabled"
+        self.set_status(f"Add-on {name} {state}")
+
+    def _open_addons_dialog(self):
+        """Open the Add-ons management dialog."""
+        if not hasattr(self, "session") or self.session is None:
+            self.set_status("No session — start engine first")
+            return
+        from forge.gui.addons_dialog import AddonsDialog
+        dlg = AddonsDialog(self.session.addon_manager, parent=self)
+        dlg.addons_changed.connect(lambda: self.session.reload_addons())
+        dlg.addons_changed.connect(self.populate_addons_menus)
+        dlg.exec()
 
     def _show_shortcuts_overlay(self):
         """Show the keyboard shortcuts cheat-sheet overlay."""
@@ -1248,6 +1481,12 @@ class ForgeMainWindow(QMainWindow):
                 panel._apply_theme()
         if hasattr(self, '_bookmarks_panel') and hasattr(self._bookmarks_panel, 'apply_theme'):
             self._bookmarks_panel.apply_theme()
+        # Refresh command widget syntax-highlighter and prompt colour
+        if hasattr(self, 'command_widget') and self.command_widget:
+            if hasattr(self.command_widget, 'refresh_theme'):
+                self.command_widget.refresh_theme()
+        # Update status bar label styles from current palette
+        self._refresh_status_bar_styles()
 
     # ==================================================================
     # Helpers
@@ -1549,20 +1788,71 @@ class ForgeMainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _reset_layout(self):
-        """Clear saved state and reset docks."""
+        """Clear saved state and reset to 4-zone layout.
+
+        Zones:
+          Left   - File Browser + Workspace + Help + Git (tabbed)
+          Right  - Editor (main working area)
+          Bottom - Command Window + Terminal + Profiler + Output + Bookmarks (tabbed)
+        """
         s = self._settings()
         s.remove("geometry")
         s.remove("windowState")
-        # Re-dock all panels
-        for dock in [self.command_dock, self.editor_dock,
-                     self.file_browser_dock, self.workspace_dock]:
+
+        # Collect all dock widgets
+        all_docks = self.findChildren(QDockWidget)
+
+        # Un-float and show core panels, hide extras
+        core = {self.editor_dock, self.file_browser_dock,
+                self.workspace_dock, self.command_dock}
+        for dock in all_docks:
             dock.setFloating(False)
-            dock.setVisible(True)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)
+            dock.setVisible(dock in core)
+
+        # -- Right zone: Editor (primary) --
         self.addDockWidget(Qt.RightDockWidgetArea, self.editor_dock)
+
+        # -- Left zone: File Browser, Workspace, Help, Git (tabbed) --
         self.addDockWidget(Qt.LeftDockWidgetArea, self.file_browser_dock)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.workspace_dock)
-        self._set_default_layout()
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.workspace_dock)
+        self.tabifyDockWidget(self.file_browser_dock, self.workspace_dock)
+        if hasattr(self, "help_dock"):
+            self.help_dock.setVisible(False)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self.help_dock)
+            self.tabifyDockWidget(self.workspace_dock, self.help_dock)
+        if hasattr(self, "_git_dock"):
+            self._git_dock.setVisible(False)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self._git_dock)
+            self.tabifyDockWidget(self.workspace_dock, self._git_dock)
+        self.file_browser_dock.raise_()
+
+        # -- Bottom zone: Command Window + others (tabbed) --
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.command_dock)
+        if hasattr(self, "_terminal_dock"):
+            self._terminal_dock.setVisible(False)
+            self.addDockWidget(Qt.BottomDockWidgetArea, self._terminal_dock)
+            self.tabifyDockWidget(self.command_dock, self._terminal_dock)
+        if hasattr(self, "profiler_dock"):
+            self.profiler_dock.setVisible(False)
+            self.addDockWidget(Qt.BottomDockWidgetArea, self.profiler_dock)
+            self.tabifyDockWidget(self.command_dock, self.profiler_dock)
+        if hasattr(self, "output_dock"):
+            self.output_dock.setVisible(False)
+            self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)
+            self.tabifyDockWidget(self.command_dock, self.output_dock)
+        if hasattr(self, "_bookmarks_dock"):
+            self._bookmarks_dock.setVisible(False)
+            self.addDockWidget(Qt.BottomDockWidgetArea, self._bookmarks_dock)
+            self.tabifyDockWidget(self.command_dock, self._bookmarks_dock)
+        self.command_dock.raise_()
+
+        # Set initial sizes: Left ~250px, Bottom ~200px
+        self.resizeDocks(
+            [self.file_browser_dock], [250], Qt.Horizontal
+        )
+        self.resizeDocks(
+            [self.command_dock], [200], Qt.Vertical
+        )
         self.set_status("Layout reset")
 
     def _update_status_bar(self, _=None):
@@ -1682,29 +1972,182 @@ class ForgeMainWindow(QMainWindow):
     def _setup_commons(self):
         """Initialize TheCommons services (update checker, AMS)."""
         import logging
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.WARNING)
 
-        # Update checker
+        self._available_update_version = None
+        self._update_worker = None
+        # Load auto-update preference
+        s = self._settings()
+        auto_update_on = s.value("auto_update", False, type=bool)
+        if hasattr(self, 'act_auto_update'):
+            self.act_auto_update.setChecked(auto_update_on)
+
+        # Update checker -- auto-checks on startup + every 6 hours
         self._update_checker = UpdateChecker(self)
         self._update_checker.update_available.connect(self._on_update_available)
+        self._update_checker.update_not_available.connect(self._on_update_not_available)
+        self._update_checker.check_failed.connect(self._on_update_check_failed)
         self._update_checker.start()
 
         # AMS connector
         self._ams = AMSConnector(self)
 
-    def _on_update_available(self, version, url):
-        """Show non-intrusive update notification in status bar."""
+    def _toggle_auto_update(self, on):
+        """Toggle locally-validated automatic updates."""
+        s = self._settings()
+        s.setValue("auto_update", on)
+        if on:
+            self.set_status("Auto-update enabled (validated updates)")
+        else:
+            self.set_status("Auto-update disabled")
+
+    def _on_update_available(self, version):
+        # Close progress dialog if open
+        if hasattr(self, "_update_progress") and self._update_progress is not None:
+            self._update_progress.close()
+            self._update_progress = None
+        """Highlight the update action when a new version is found."""
+        self._available_update_version = version
+        self.act_check_updates.setText(f"Update Available  (v{version})")
+        # Apply eye-catching style via QSS on the action's parent menu
+        self.act_check_updates.setData("update_available")
         self.statusBar().showMessage(
-            f"Forge update available: v{version}  —  Visit thecommons.earth to download",
-            0,  # permanent until cleared
+            f"Forge v{version} is available — Help > Update Available to install",
+            0,
         )
 
+    def _on_update_not_available(self):
+        # Close progress dialog if open
+        if hasattr(self, "_update_progress") and self._update_progress is not None:
+            self._update_progress.close()
+            self._update_progress = None
+        """Reset menu text after a successful check with no update."""
+        self.act_check_updates.setText("Check for &Updates...")
+        self.act_check_updates.setData(None)
+        self._available_update_version = None
+
+    def _on_update_check_failed(self, error):
+        """Handle update check failure silently (log only)."""
+        pass  # logged in UpdateChecker already
+
     def _check_for_updates(self):
-        """Manual update check triggered from Help menu."""
+        """Handle click on the update menu item."""
+        if self._available_update_version:
+            self._perform_update(self._available_update_version)
+            return
+        # Manual check -- show immediate visual feedback
+        from PySide6.QtWidgets import QProgressDialog
+        from PySide6.QtCore import QTimer
+        self._update_progress = QProgressDialog(
+            "Checking for updates...", "Cancel", 0, 0, self)
+        self._update_progress.setWindowTitle("Forge Updates")
+        self._update_progress.setMinimumDuration(0)
+        self._update_progress.setWindowModality(Qt.WindowModal)
+        self._update_progress.show()
+        QApplication.processEvents()
         self.set_status("Checking for updates...")
         self._update_checker.check_now()
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(3000, lambda: self.set_status("Ready"))
+        QTimer.singleShot(8000, self._show_manual_check_result)
+
+    def _show_manual_check_result(self):
+        """Show result of manual update check if no update was found."""
+        # Close progress dialog if still open
+        if hasattr(self, "_update_progress") and self._update_progress is not None:
+            self._update_progress.close()
+            self._update_progress = None
+        if not self._available_update_version:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Forge Updates",
+                f"Forge is up to date (v{FORGE_VERSION})."
+            )
+            self.set_status("Ready")
+
+    def _perform_update(self, version):
+        """Start the update process."""
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Update Forge",
+            f"<b>Forge v{version}</b> is available (you have v{FORGE_VERSION}).<br><br>"
+            f"Do you want to update now?<br>"
+            f"<i>Forge will need to be restarted after the update.</i>",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.act_check_updates.setText("Updating...")
+        self.act_check_updates.setEnabled(False)
+        self.set_status(f"Updating to v{version}...")
+
+        self._update_worker = UpdateWorker(version, self)
+        self._update_worker.progress.connect(lambda msg: self.set_status(msg))
+        self._update_worker.finished_ok.connect(self._on_update_success)
+        self._update_worker.finished_err.connect(self._on_update_error)
+        self._update_worker.start()
+
+    def _on_update_success(self, message):
+        """Handle successful update."""
+        from PySide6.QtWidgets import QMessageBox
+        self.act_check_updates.setEnabled(True)
+        self.act_check_updates.setText("Check for &Updates...")
+        self._available_update_version = None
+        self.set_status("Update complete — restart Forge to apply")
+
+        reply = QMessageBox.information(
+            self, "Update Complete",
+            f"{message}\n\nWould you like to restart Forge now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._restart_forge()
+
+    def _on_update_error(self, message):
+        """Handle update failure."""
+        from PySide6.QtWidgets import QMessageBox
+        self.act_check_updates.setEnabled(True)
+        self.act_check_updates.setText(
+            f"Update Available  (v{self._available_update_version})"
+            if self._available_update_version else "Check for &Updates..."
+        )
+        self.set_status("Update failed")
+        QMessageBox.warning(self, "Update Failed", message)
+
+    def _restart_forge(self):
+        """Restart the Forge application."""
+        import sys, subprocess
+        python = sys.executable
+        args = [python, "-m", "forge"]
+        try:
+            subprocess.Popen(args)
+        except Exception:
+            pass
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()
+
+    def _perform_validated_update(self, version):
+        """Run a validated update: download, test, apply if passing."""
+        self.act_check_updates.setText("Validating update...")
+        self.act_check_updates.setEnabled(False)
+        self.set_status(f"Auto-updating to v{version} (downloading + testing)...")
+
+        self._update_worker = ValidatedUpdateWorker(version, self)
+        self._update_worker.progress.connect(lambda msg: self.set_status(msg))
+        self._update_worker.finished_ok.connect(self._on_update_success)
+        self._update_worker.finished_err.connect(self._on_update_error)
+        self._update_worker.tests_failed.connect(self._on_validated_update_deferred)
+        self._update_worker.start()
+
+    def _on_validated_update_deferred(self, message):
+        """Handle auto-update where tests failed — defer silently."""
+        self.act_check_updates.setEnabled(True)
+        self.act_check_updates.setText(
+            f"Update Available  (v{self._available_update_version})"
+            if self._available_update_version else "Check for &Updates..."
+        )
+        self.set_status("Update deferred (tests failed)")
+        import logging
+        logging.getLogger(__name__).warning("Auto-update deferred: %s", message)
 
     def _open_feature_request(self):
         """Open the feature request dialog."""
@@ -1732,6 +2175,141 @@ class ForgeMainWindow(QMainWindow):
                 self.set_status("AMS telemetry enabled")
             else:
                 self.set_status("AMS telemetry remains disabled")
+
+    def _show_cloud_burst_interest(self):
+        """Show Cloud Burst coming-soon dialog with interest voting."""
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+            QLabel, QRadioButton, QButtonGroup, QPushButton, QGroupBox,
+            QTextEdit, QMessageBox, QComboBox)
+        from PySide6.QtCore import Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Cloud Computing — Coming Soon")
+        dlg.setMinimumWidth(520)
+        layout = QVBoxLayout(dlg)
+
+        # Header
+        header = QLabel(
+            "<h2>Forge Cloud Computing</h2>"
+            "<p>Run computationally intensive Forge scripts on cloud GPUs "
+            "and high-memory VMs — directly from the IDE.</p>"
+            "<p><b>Example:</b></p>"
+            "<pre style='background:#1e1e2e; color:#cdd6f4; padding:8px; "
+            "border-radius:4px;'>"
+            "with forge.cloud(gpu='A100', ram='64GB'):\n"
+            "    result = heavy_computation(data)\n"
+            "    plot(result)</pre>"
+            "<p><i>Results stream back to your local Forge session.</i></p>"
+        )
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        # Interest vote
+        interest_group = QGroupBox("Would you use this feature?")
+        ig_layout = QVBoxLayout(interest_group)
+        interest_bg = QButtonGroup(dlg)
+        for i, label in enumerate([
+            "Yes — I'd use this regularly",
+            "Maybe — depends on pricing",
+            "No — I don't need cloud compute",
+        ]):
+            rb = QRadioButton(label)
+            interest_bg.addButton(rb, i)
+            ig_layout.addWidget(rb)
+            if i == 1:
+                rb.setChecked(True)
+        layout.addWidget(interest_group)
+
+        # Price point
+        price_group = QGroupBox("What price point would work for you?")
+        pg_layout = QVBoxLayout(price_group)
+        price_combo = QComboBox()
+        price_combo.addItems([
+            "$0.50/hour (CPU-only, 16GB RAM)",
+            "$1.50/hour (GPU T4, 32GB RAM)",
+            "$3.00/hour (GPU A100, 64GB RAM)",
+            "$5.00/hour (Multi-GPU, 128GB RAM)",
+            "Monthly subscription (unlimited hours)",
+            "I'd only use a free tier",
+        ])
+        pg_layout.addWidget(price_combo)
+        layout.addWidget(price_group)
+
+        # Comments
+        layout.addWidget(QLabel("Any comments or use cases? (optional)"))
+        comments = QTextEdit()
+        comments.setMaximumHeight(80)
+        comments.setPlaceholderText("e.g., I'd use this for large matrix operations...")
+        layout.addWidget(comments)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = QPushButton("Not Now")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_submit = QPushButton("Submit Vote")
+        btn_submit.setDefault(True)
+        btn_layout.addWidget(btn_submit)
+        layout.addLayout(btn_layout)
+
+        def _submit():
+            interest_btn = interest_bg.checkedButton()
+            interest_text = interest_btn.text() if interest_btn else "unknown"
+            payload = {
+                "category": "Cloud Burst",
+                "title": "Cloud Computing Interest Vote",
+                "description": (
+                    f"Interest: {interest_text}\n"
+                    f"Price: {price_combo.currentText()}\n"
+                    f"Comments: {comments.toPlainText().strip()}"
+                ),
+                "priority": "Medium",
+            }
+            # Submit as feature request
+            from forge.gui.commons_integration import (
+                FeatureRequestDialog, FORGE_VERSION, CONFIG_DIR,
+                _ensure_config_dir, FEATURE_REQUEST_URL,
+            )
+            import json, time
+            payload["version"] = FORGE_VERSION
+            payload["timestamp"] = int(time.time())
+            # Save locally
+            try:
+                _ensure_config_dir()
+                path = CONFIG_DIR / "feature_requests.json"
+                existing = []
+                if path.exists():
+                    try:
+                        with open(path, "r") as f:
+                            existing = json.load(f)
+                    except Exception:
+                        existing = []
+                existing.append(payload)
+                with open(path, "w") as fw:
+                    json.dump(existing, fw, indent=2)
+            except Exception:
+                pass
+            # Try remote submission
+            try:
+                import urllib.request
+                body = json.dumps(payload).encode()
+                req = urllib.request.Request(
+                    FEATURE_REQUEST_URL, data=body,
+                    headers={"Content-Type": "application/json",
+                             "User-Agent": f"Forge/{FORGE_VERSION}"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req, timeout=10)
+            except Exception:
+                pass
+            QMessageBox.information(dlg, "Thank You!",
+                "Your vote has been recorded. We'll notify you\n"
+                "when Cloud Computing becomes available.")
+            dlg.accept()
+
+        btn_submit.clicked.connect(_submit)
+        dlg.exec()
 
     def _show_command_palette(self):
         """Show a command palette with all available actions."""
@@ -2172,7 +2750,7 @@ class ForgeMainWindow(QMainWindow):
         subtitle.setAlignment(Qt.AlignCenter)
         layout.addWidget(subtitle)
 
-        version = QLabel("Version 0.1.0")
+        version = QLabel(f"Version {_forge_version}")
         version.setStyleSheet("color: #89b4fa; font-size: 13px;")
         version.setAlignment(Qt.AlignCenter)
         layout.addWidget(version)

@@ -83,11 +83,15 @@ class HelpViewerWidget(QWidget):
                 "warning": "#cba6f7" if not light else "#7c3aed",
             }
         except Exception:
+            from forge.gui.theme_utils import detect_palette as _dp
+            _fb = _dp()
             return {
-                "bg0": "#1e1e2e", "bg3": "#313145", "fg0": "#cdd6f4",
-                "fg2": "#a6adc8", "fg3": "#6c7086", "border1": "#44445a",
-                "accent": "#00BCD4", "info": "#89b4fa", "success": "#a6e3a1",
-                "error": "#f38ba8", "warning": "#cba6f7",
+                "bg0": _fb.get("bg0", "#1e1e2e"), "bg3": _fb.get("bg3", "#313145"),
+                "fg0": _fb.get("fg0", "#cdd6f4"), "fg2": _fb.get("fg2", "#a6adc8"),
+                "fg3": _fb.get("fg3", "#6c7086"), "border1": _fb.get("border1", "#44445a"),
+                "accent": _fb.get("accent", "#00BCD4"), "info": _fb.get("info", "#89b4fa"),
+                "success": _fb.get("success", "#a6e3a1"), "error": _fb.get("error", "#f38ba8"),
+                "warning": _fb.get("warning", "#cba6f7"),
             }
 
     def _build_ui(self):
@@ -129,7 +133,7 @@ class HelpViewerWidget(QWidget):
 
         btn_go = QPushButton("Help")
         btn_go.clicked.connect(self._on_search)
-        btn_go.setFixedWidth(50)
+        btn_go.setMinimumWidth(60)
         nav_layout.addWidget(btn_go)
 
         layout.addLayout(nav_layout)

@@ -11,6 +11,7 @@ the nesting depth back to zero, at which point the whole block is executed.
 The legacy "..." line-continuation syntax is also preserved.
 """
 
+from forge import __version__ as _forge_version
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import (
     QFont, QTextCursor, QColor, QTextCharFormat,
@@ -44,47 +45,53 @@ class _MCodeHighlighter(QSyntaxHighlighter):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._build_formats()
+
+    def _build_formats(self):
+        """Create syntax-highlighting formats based on current theme."""
+        from forge.gui.theme_utils import is_light_theme
+        light = is_light_theme()
 
         # --- formats --------------------------------------------------
         self._kw_fmt = QTextCharFormat()
-        self._kw_fmt.setForeground(QColor("#569cd6"))       # blue
+        self._kw_fmt.setForeground(QColor("#0000FF" if light else "#569cd6"))
         self._kw_fmt.setFontWeight(QFont.Bold)
 
         self._const_fmt = QTextCharFormat()
-        self._const_fmt.setForeground(QColor("#4ec9b0"))     # teal
+        self._const_fmt.setForeground(QColor("#007F7F" if light else "#4ec9b0"))
         self._const_fmt.setFontWeight(QFont.Bold)
 
         self._str_fmt = QTextCharFormat()
-        self._str_fmt.setForeground(QColor("#ce9178"))       # orange
+        self._str_fmt.setForeground(QColor("#A31515" if light else "#ce9178"))
 
         self._num_fmt = QTextCharFormat()
-        self._num_fmt.setForeground(QColor("#b5cea8"))       # green
+        self._num_fmt.setForeground(QColor("#098658" if light else "#b5cea8"))
 
         self._cmt_fmt = QTextCharFormat()
-        self._cmt_fmt.setForeground(QColor("#6a9955"))       # olive-green
+        self._cmt_fmt.setForeground(QColor("#008000" if light else "#6a9955"))
         self._cmt_fmt.setFontItalic(True)
 
         self._op_fmt = QTextCharFormat()
-        self._op_fmt.setForeground(QColor("#d4d4d4"))        # light gray
+        self._op_fmt.setForeground(QColor("#1e1e2e" if light else "#d4d4d4"))
 
         self._fn_fmt = QTextCharFormat()
-        self._fn_fmt.setForeground(QColor("#dcdcaa"))        # yellow
+        self._fn_fmt.setForeground(QColor("#795E26" if light else "#dcdcaa"))
 
         self._paren_fmt = QTextCharFormat()
-        self._paren_fmt.setForeground(QColor("#ffd700"))     # gold
+        self._paren_fmt.setForeground(QColor("#0431FA" if light else "#ffd700"))
 
         self._bracket_fmt = QTextCharFormat()
-        self._bracket_fmt.setForeground(QColor("#da70d6"))   # orchid
+        self._bracket_fmt.setForeground(QColor("#AF00DB" if light else "#da70d6"))
 
         self._semicolon_fmt = QTextCharFormat()
-        self._semicolon_fmt.setForeground(QColor("#808080")) # dim gray
+        self._semicolon_fmt.setForeground(QColor("#808080"))
 
         self._assign_fmt = QTextCharFormat()
-        self._assign_fmt.setForeground(QColor("#d4d4d4"))    # light gray
+        self._assign_fmt.setForeground(QColor("#1e1e2e" if light else "#d4d4d4"))
         self._assign_fmt.setFontWeight(QFont.Bold)
 
         self._comparison_fmt = QTextCharFormat()
-        self._comparison_fmt.setForeground(QColor("#c586c0")) # purple
+        self._comparison_fmt.setForeground(QColor("#AF00DB" if light else "#c586c0"))
 
         # --- rule list (applied in order; later wins on overlap) ------
         self._rules = [
@@ -265,11 +272,9 @@ class CommandWidget(QWidget):
         self.console = QPlainTextEdit(self)
         self.console.setFont(mono)
         self.console.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self.console.setStyleSheet(
-            "QPlainTextEdit { background-color: #1e1e1e; color: #d4d4d4; "
-            "selection-background-color: #264f78; border: none; padding: 4px; }"
-        )
+        self.console.setStyleSheet("QPlainTextEdit { border: none; padding: 4px; }")
         self.console.setUndoRedoEnabled(False)
+        self.console.setMinimumHeight(0)
         layout.addWidget(self.console)
 
         self._highlighter = _MCodeHighlighter(self.console.document())
@@ -289,7 +294,7 @@ class CommandWidget(QWidget):
             n = len(self.engine._engine.functions)
             func_count = f" | {n} built-in functions"
         banner = (
-            f"  Forge 0.1.0{func_count}\n"
+            f"  Forge {_forge_version}{func_count}\n"
             f"  Octave-Compatible Computing Environment\n"
             f"  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
             f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
@@ -327,14 +332,8 @@ class CommandWidget(QWidget):
 
     def _get_muted_color(self):
         """Return a muted text color appropriate for the current theme."""
-        try:
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app and ("#f8f9fc" in app.styleSheet() or "#eef0f5" in app.styleSheet()):
-                return '#9ca0b0'
-        except Exception:
-            pass
-        return '#6c7086'
+        from forge.gui.theme_utils import is_light_theme
+        return '#9ca0b0' if is_light_theme() else '#6c7086'
 
     def _write_prompt(self):
         """Append a prompt and record where editable text begins."""
@@ -342,7 +341,10 @@ class CommandWidget(QWidget):
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor("#569cd6"))
+        from forge.gui.theme_utils import is_light_theme
+        from forge.gui.theme_utils import detect_palette as _dp
+        _pal = _dp()
+        fmt.setForeground(QColor(_pal.get("accent", "#569cd6")))
         cursor.insertText(prompt, fmt)
         self._prompt_pos = cursor.position()
 
@@ -437,6 +439,11 @@ class CommandWidget(QWidget):
             self.console.setTextCursor(cursor)
             return
 
+        # --- Ctrl+L: clear console ---
+        if key == Qt.Key_L and modifiers & Qt.ControlModifier:
+            self._clear_output()
+            return
+
         # --- Ctrl+V: paste ---
         if key == Qt.Key_V and modifiers & Qt.ControlModifier:
             self._ensure_cursor_editable()
@@ -516,7 +523,12 @@ class CommandWidget(QWidget):
             suffix = completions[0][len(partial):]
             self._set_input_text(text + suffix)
         else:
-            common = os.path.commonprefix(completions)
+            common = completions[0]
+            for s in completions[1:]:
+                while not s.startswith(common):
+                    common = common[:-1]
+                    if not common:
+                        break
             if len(common) > len(partial):
                 suffix = common[len(partial):]
                 self._set_input_text(text + suffix)
@@ -554,14 +566,13 @@ class CommandWidget(QWidget):
         from PySide6.QtCore import Qt
         if event.modifiers() & Qt.ControlModifier:
             delta = event.angleDelta().y()
-            font = self._output.font()
+            font = self.console.font()
             size = font.pointSize()
             if delta > 0 and size < 24:
                 font.setPointSize(size + 1)
             elif delta < 0 and size > 8:
                 font.setPointSize(size - 1)
-            self._output.setFont(font)
-            self._input.setFont(font)
+            self.console.setFont(font)
             event.accept()
             return
         super().wheelEvent(event)
@@ -977,7 +988,9 @@ class CommandWidget(QWidget):
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor("#d4d4d4"))
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        fmt.setForeground(QColor(p.get("fg0", "#cdd6f4")))
         cursor.insertText(text, fmt)
         self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()
@@ -986,7 +999,9 @@ class CommandWidget(QWidget):
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor("#f44747"))
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        fmt.setForeground(QColor(p.get("error", "#f44747")))
         cursor.insertText(text, fmt)
         self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()
@@ -995,13 +1010,44 @@ class CommandWidget(QWidget):
         """Public method for external code to write output, coloring errors red and warnings yellow."""
         if not text:
             return
+        from forge.gui.theme_utils import is_light_theme
         lines = text.split('\n')
         for line in lines:
             stripped = line.strip().lower()
             if stripped.startswith('error') or stripped.startswith('err:') or ': error' in stripped:
-                self._append_text_colored(line + '\n', '#f38ba8')  # red
+                self._append_text_colored(line + '\n', '#d32f2f' if is_light_theme() else '#f38ba8')
             elif stripped.startswith('warning') or stripped.startswith('warn:') or ': warning' in stripped:
-                self._append_text_colored(line + '\n', '#f9e2af')  # yellow
+                self._append_text_colored(line + '\n', '#e65100' if is_light_theme() else '#f9e2af')
             else:
                 self._append_text(line + '\n')
+        self.console.ensureCursorVisible()
+
+    def refresh_theme(self):
+        """Rebuild syntax-highlighter formats and prompt colour after a theme switch."""
+        if hasattr(self, "_highlighter"):
+            self._highlighter._build_formats()
+            self._highlighter.rehighlight()
+
+    def _clear_output(self):
+        """Clear the console and re-show the prompt."""
+        self.console.clear()
+        self._write_prompt()
+
+    def _copy_all_output(self):
+        """Copy entire console text to clipboard."""
+        QApplication.clipboard().setText(self.console.toPlainText())
+
+    def _execute_command(self, cmd: str):
+        """Programmatically run a command as if typed at the prompt."""
+        self._set_input_text(cmd)
+        self._on_return()
+
+    def _append_text_colored(self, text: str, color: str):
+        """Append text in an arbitrary color."""
+        cursor = self.console.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(color))
+        cursor.insertText(text, fmt)
+        self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()

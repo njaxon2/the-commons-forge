@@ -484,7 +484,7 @@ class Parser:
                 self.pos = saved
 
         # Pre-check: path commands like "cd /path/to/dir" before expression parsing
-        _PRE_PATH_CMDS = {"cd", "edit", "type", "help", "doc"}
+        _PRE_PATH_CMDS = {"cd", "edit", "type", "help", "doc", "load", "save", "run", "source", "addpath", "rmpath", "diary", "which", "lookfor", "print"}
         if (self._at(TokenType.IDENT) and self._peek().value in _PRE_PATH_CMDS):
             _saved_pre = self.pos
             _cmd_name = self._peek().value
@@ -522,11 +522,11 @@ class Parser:
             "who", "whos", "clear", "clc", "close", "figure",
             "load", "save", "diary", "more", "pkg", "addpath",
             "rmpath", "which", "lookfor", "run", "source",
-            "exist", "methods", "properties",
+            "exist", "methods", "properties", "print",
         }
         _PATH_COMMANDS = {"cd", "edit", "type", "help", "doc", "load",
                           "save", "run", "source", "addpath", "rmpath",
-                          "diary", "which", "lookfor"}
+                          "diary", "which", "lookfor", "print"}
         _next_tt = self._peek().type
         _is_cmd_trigger = _next_tt == TokenType.IDENT
         # For path commands, also trigger on / ~ . (common path starts)

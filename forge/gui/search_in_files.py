@@ -99,7 +99,7 @@ class SearchInFilesPanel(QWidget):
         search_row.addWidget(self._search_input)
 
         self._btn_search = QPushButton("Search")
-        self._btn_search.setFixedWidth(60)
+        self._btn_search.setMinimumWidth(70)
         self._btn_search.clicked.connect(self._do_search)
         search_row.addWidget(self._btn_search)
         layout.addLayout(search_row)
@@ -111,7 +111,7 @@ class SearchInFilesPanel(QWidget):
         replace_row.addWidget(self._replace_input)
 
         self._btn_replace_all = QPushButton("Replace All")
-        self._btn_replace_all.setFixedWidth(80)
+        self._btn_replace_all.setMinimumWidth(100)
         self._btn_replace_all.clicked.connect(self._do_replace_all)
         self._btn_replace_all.setEnabled(False)
         replace_row.addWidget(self._btn_replace_all)
@@ -141,7 +141,9 @@ class SearchInFilesPanel(QWidget):
         opts_row.addStretch()
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("font-size: 11px; color: #6c7086;")
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
+        self._status_label.setStyleSheet(f"font-size: 11px; color: {_p.get('fg3', '#6c7086')};")
         opts_row.addWidget(self._status_label)
         layout.addLayout(opts_row)
 
