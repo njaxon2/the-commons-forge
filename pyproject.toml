@@ -49,3 +49,10 @@ include = ["forge*"]
 testpaths = ["tests"]
 qt_api = "pyside6"
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore:FigureCanvasAgg is non-interactive:UserWarning",
+    "ignore:The get_cmap function was deprecated:matplotlib.MatplotlibDeprecationWarning",
+    "ignore:Failed to disconnect:RuntimeWarning",
+    "ignore:Input has data type:FutureWarning",
+    "ignore:invalid value encountered:RuntimeWarning",
+]
