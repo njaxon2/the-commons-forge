@@ -105,10 +105,12 @@ class WorkspaceBrowserWidget(QWidget):
         self.table.setRowCount(0)
 
         # Filter out internal/constant variables if desired
-        hidden = {'ans'}  # optionally hide 'ans' from default view
+        hidden = {"ans", "pi", "e", "eps", "Inf", "inf", "NaN", "nan", "true", "false", "i", "j", "realmin", "realmax", "containers"}
 
         visible_count = 0
         for name, value in sorted(workspace_dict.items()):
+            if name in hidden:
+                continue
             if filter_text and filter_text not in name.lower():
                 continue
 
