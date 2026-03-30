@@ -3854,8 +3854,38 @@ class ForgeSession:
             return ForgeArray(np.float64(total / n))
 
         def forge_diary(*args):
-            """diary(filename) — log session to file (stub)."""
-            pass
+            """diary(filename) -- log session to file."""
+            from forge.engine.containers import ForgeChar
+            if not hasattr(session, '_diary_file'):
+                session._diary_file = None
+                session._diary_fh = None
+            if not args:
+                if session._diary_fh:
+                    session._diary_fh.close()
+                    session._diary_fh = None
+                    session._diary_file = None
+                    return ForgeChar("diary off")
+                else:
+                    session._diary_file = "diary"
+                    session._diary_fh = open("diary", "a")
+                    return ForgeChar("diary on")
+            arg = args[0]
+            if isinstance(arg, ForgeChar): arg = arg.to_str()
+            arg = str(arg).strip()
+            if arg.lower() == "off":
+                if session._diary_fh:
+                    session._diary_fh.close()
+                    session._diary_fh = None
+                    session._diary_file = None
+            elif arg.lower() == "on":
+                session._diary_file = session._diary_file or "diary"
+                if session._diary_fh is None:
+                    session._diary_fh = open(session._diary_file, "a")
+            else:
+                if session._diary_fh:
+                    session._diary_fh.close()
+                session._diary_file = arg
+                session._diary_fh = open(arg, "a")
 
         def forge_echo(*args):
             """echo on/off — control command echoing (stub)."""
@@ -6670,6 +6700,60 @@ class ForgeSession:
         session._engine.functions["movmean"] = forge_movmean2
         session._engine.functions["movstd"] = forge_movstd2
         session._engine.functions["accumarray"] = forge_accumarray2
+
+        def forge_bsxfun(func, a, b):
+            """Apply element-wise function with broadcasting."""
+            import numpy as np
+            from forge.engine.types import ForgeArray, _unwrap
+            a_arr = np.asarray(_unwrap(a), dtype=float)
+            b_arr = np.asarray(_unwrap(b), dtype=float)
+            if callable(func):
+                fn = func
+            elif hasattr(func, 'function_def') and callable(func.function_def):
+                fn = func.function_def
+            else:
+                op_map = {
+                    'plus': np.add, 'minus': np.subtract,
+                    'times': np.multiply, 'rdivide': np.divide,
+                    'power': np.power, 'max': np.maximum,
+                    'min': np.minimum, 'eq': np.equal,
+                    'ne': np.not_equal, 'lt': np.less,
+                    'gt': np.greater, 'ge': np.greater_equal,
+                }
+                fn = op_map.get(str(func), None)
+                if fn is None:
+                    raise ValueError('bsxfun: unknown function ' + str(func))
+            try:
+                result = fn(a_arr, b_arr)
+            except TypeError:
+                result = fn(ForgeArray(a_arr), ForgeArray(b_arr))
+                result = _unwrap(result)
+            if isinstance(result, ForgeArray):
+                return result
+            return ForgeArray(np.asarray(result, dtype=float))
+
+        session._engine.functions["bsxfun"] = forge_bsxfun
+
+        # Operator function handles (@plus, @minus, @times, etc.)
+        def _make_op(np_fn):
+            def _fn(a, b=None):
+                aa = np.asarray(_unwrap(a), dtype=float)
+                if b is None:
+                    return ForgeArray(np_fn(aa))
+                bb = np.asarray(_unwrap(b), dtype=float)
+                return ForgeArray(np_fn(aa, bb))
+            return _fn
+
+        _op_funcs = {
+            'plus': np.add, 'minus': np.subtract,
+            'times': np.multiply, 'rdivide': np.divide,
+            'power': np.power,
+            'eq': np.equal, 'ne': np.not_equal,
+            'lt': np.less, 'le': np.less_equal,
+            'gt': np.greater, 'ge': np.greater_equal,
+        }
+        for _opname, _opfn in _op_funcs.items():
+            session._engine.functions[_opname] = _make_op(_opfn)
         session._engine.functions["evalc"] = forge_evalc2
         session._engine.functions["genpath"] = forge_genpath2
         session._engine.functions["what"] = forge_what2
