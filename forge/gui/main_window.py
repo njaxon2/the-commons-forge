@@ -195,7 +195,7 @@ class ForgeMainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Forge")
+        self.setWindowTitle(f"Forge IDE v{_forge_version}")
         self.resize(1280, 800)
 
         self.session = None
@@ -2063,7 +2063,8 @@ class ForgeMainWindow(QMainWindow):
                 self, "Forge Updates",
                 f"Forge is up to date (v{FORGE_VERSION})."
             )
-            self.set_status("Ready")
+            fc = len(self.session._engine.functions) if self.session else 0
+            self.set_status(f"Ready \u2014 {fc:,} functions available")
 
     def _perform_update(self, version):
         """Start the update process."""

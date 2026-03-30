@@ -1386,6 +1386,25 @@ class ForgeSession:
             return ForgeArray(np.array(0.0))
         self._engine.functions['isfield'] = forge_isfield
 
+        def forge_cellstr(s):
+            """cellstr(s) -- convert char array or string to cell array of strings."""
+            from forge.engine.containers import ForgeChar, ForgeCell
+            if isinstance(s, ForgeChar):
+                text = s.to_str()
+                # Split by newlines
+                lines = text.split('\n')
+                return ForgeCell([ForgeChar(line.rstrip()) for line in lines])
+            if isinstance(s, str):
+                lines = s.split('\n')
+                return ForgeCell([ForgeChar(line.rstrip()) for line in lines])
+            if isinstance(s, ForgeCell):
+                return s  # already a cell
+            if isinstance(s, ForgeArray):
+                # Treat as char array
+                return ForgeCell([ForgeChar(str(s))])
+            return ForgeCell([ForgeChar(str(s))])
+        self._engine.functions['cellstr'] = forge_cellstr
+
         # R105: eval, feval, nargin, nargout, strjoin
         def forge_eval_str(code_str):
             """eval(str) - evaluate string as code."""
