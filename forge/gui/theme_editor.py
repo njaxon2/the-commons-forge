@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge Theme Editor -- visual theme customisation dialog (PySide6).
 
 Target location: forge/gui/theme_editor.py

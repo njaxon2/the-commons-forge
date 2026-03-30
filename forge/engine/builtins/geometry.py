@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Geometry Toolbox for Forge.
 
 Provides 15 computational geometry functions compatible with Octave/MATLAB

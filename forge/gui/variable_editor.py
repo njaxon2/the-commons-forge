@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge variable editor widget — view/edit workspace variables."""
 
 import numpy as np

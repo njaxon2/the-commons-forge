@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge main window — PySide6 GUI shell (forge/gui/main_window.py).
 
 Provides the top-level QMainWindow with dockable panels for:

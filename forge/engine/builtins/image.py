@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Image Processing Toolbox for Forge — Octave-compatible functions.
 
 Implements 58 Octave image functions: colormaps, image I/O, color conversion,
@@ -757,6 +759,35 @@ def dither(img, *args):
 # REGISTRY
 # ═══════════════════════════════════════════════════════════════════
 
+
+# ── Image binarization ───────────────────────────────────────────
+
+def im2bw(I, threshold=0.5):
+    """Convert grayscale image to binary.
+
+    BW = im2bw(I, THRESHOLD)
+
+    Returns a double array of 0s and 1s where pixels > THRESHOLD are 1.
+    """
+    data = _ensure_float(I)
+    t = float(threshold)
+    return _fa((data > t).astype(np.float64))
+
+
+# ── Gaussian filtering ───────────────────────────────────────────
+
+def imgaussfilt(I, sigma=0.5):
+    """2-D Gaussian filtering of images.
+
+    B = imgaussfilt(A, SIGMA)
+
+    Applies a Gaussian blur with standard deviation SIGMA.
+    """
+    from scipy.ndimage import gaussian_filter
+    data = _ensure_float(I)
+    return _fa(gaussian_filter(data, sigma=float(sigma)))
+
+
 IMAGE_REGISTRY = {
     # ── Colormaps ──────────────────────────────────────────────────
     'autumn':       autumn,
@@ -812,4 +843,7 @@ IMAGE_REGISTRY = {
     'imagesc':      imagesc,
     'contrast':     contrast,
     'dither':       dither,
+    'im2bw':        im2bw,
+    'imgaussfilt':  imgaussfilt,
 }
+

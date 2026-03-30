@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Fuzzy Logic Toolbox for Forge.
 
 Provides Mamdani and Sugeno fuzzy inference systems, membership functions,

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for sparse matrix toolbox."""
 import pytest
 import numpy as np

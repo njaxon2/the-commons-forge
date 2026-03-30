@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """V&V tests for special matrices toolbox (11 functions).
 
 SRS trace: SRS-FUNC-001, SRS-VAL-001

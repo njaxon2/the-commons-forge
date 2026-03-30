@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Optimization Toolbox for Forge.
 
 Provides 13 optimization and root-finding functions compatible with

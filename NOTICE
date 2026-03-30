@@ -1,0 +1,14 @@
+Forge IDE™
+Copyright 2026 The Commons™
+
+Forge IDE™ and The Commons™ are trademarks of their respective owner.
+Use of these names in derivative works requires written permission.
+
+This product includes software developed at The Commons (https://thecommons.cc/).
+
+Third-party licenses:
+- NumPy (BSD-3-Clause)
+- SciPy (BSD-3-Clause)
+- Matplotlib (PSF-based)
+- PySide6 (LGPL-3.0)
+- Python (PSF License)

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Bookmarks panel -- lists all bookmarks across open editor tabs
 (forge/gui/bookmarks_panel.py)."""
 

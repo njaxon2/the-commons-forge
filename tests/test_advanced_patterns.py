@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for advanced Octave patterns - realistic user scenarios."""
 import pytest
 import numpy as np

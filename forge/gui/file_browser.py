@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge file browser widget (forge/gui/file_browser.py).
 
 Shows the current directory tree. Folders on the Forge search path

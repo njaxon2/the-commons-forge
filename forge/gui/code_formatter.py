@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """M-code (Octave / MATLAB) formatter and beautifier
 (forge/gui/code_formatter.py)."""
 

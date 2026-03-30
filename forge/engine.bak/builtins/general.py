@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """General toolbox functions.
 
 SRS trace: SRS-FUNC-001

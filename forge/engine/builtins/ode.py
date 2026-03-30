@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """ODE Toolbox for Forge.
 
 Provides 9 ODE solver and utility functions compatible with Octave/MATLAB

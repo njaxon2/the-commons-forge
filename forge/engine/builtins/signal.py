@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Signal Processing Toolbox for Forge — Octave-compatible functions.
 
 Implements the 39 Octave signal functions plus ~30 additional common

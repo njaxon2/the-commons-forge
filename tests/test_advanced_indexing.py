@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for improved indexing, colon handling, and format."""
 import pytest
 import numpy as np

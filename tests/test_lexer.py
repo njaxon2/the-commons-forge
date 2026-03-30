@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for M-language lexer. Stage 2.1 from V&V plan."""
 import pytest
 from forge.engine.lexer import tokenize, TokenType, LexerError, KEYWORDS

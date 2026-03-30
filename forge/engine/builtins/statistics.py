@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Statistics Toolbox for Forge — Octave-compatible functions.
 
 Implements 49 Octave statistics functions: descriptive statistics,
@@ -824,6 +826,32 @@ def movvar(x, k, *args):
 # REGISTRY
 # ═══════════════════════════════════════════════════════════════════
 
+
+# ── Poisson distribution ──────────────────────────────────────────
+
+def poisspdf(x, lambda_param):
+    """Poisson probability mass function.
+
+    Y = poisspdf(X, LAMBDA)
+    """
+    xd = _ensure_float(x)
+    lam = _ensure_float(lambda_param)
+    return _fa(sp_stats.poisson.pmf(xd, lam))
+
+
+# ── Binomial distribution ────────────────────────────────────────
+
+def binopdf(x, n, p):
+    """Binomial probability mass function.
+
+    Y = binopdf(X, N, P)
+    """
+    xd = _ensure_float(x)
+    nd = _ensure_float(n)
+    pd = _ensure_float(p)
+    return _fa(sp_stats.binom.pmf(xd, nd, pd))
+
+
 STATISTICS_REGISTRY = {
     # ── Descriptive statistics ────────────────────────────────────
     'bounds':           bounds,
@@ -880,4 +908,9 @@ STATISTICS_REGISTRY = {
     'movstd':           movstd,
     'movsum':           movsum,
     'movvar':           movvar,
+    # ── Poisson distribution ───────────────────────────────────────
+    'poisspdf':         poisspdf,
+    # ── Binomial distribution ─────────────────────────────────────
+    'binopdf':          binopdf,
 }
+

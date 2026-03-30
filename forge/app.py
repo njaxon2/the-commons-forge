@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge application entry point."""
 import logging
 logging.basicConfig(level=logging.WARNING)

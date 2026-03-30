@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for ForgeArray data types, 1-based indexing, type conversion, and matrix construction.
 Covers Stages 1.1, 1.2, 1.3 from the V&V plan."""
 import numpy as np

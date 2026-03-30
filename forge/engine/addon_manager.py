@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Add-on manager for Forge.
 
 Tracks which Forge toolboxes and Octave packages are enabled,

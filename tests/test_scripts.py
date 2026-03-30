@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for complex multi-function scripts and realistic workflows."""
 import pytest
 import numpy as np

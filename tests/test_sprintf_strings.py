@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for sprintf/fprintf with string arguments and other format fixes."""
 import pytest
 import sys

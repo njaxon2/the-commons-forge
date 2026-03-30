@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Regression tests for critical engine fixes."""
 import pytest
 import numpy as np

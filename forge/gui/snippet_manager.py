@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Snippet / template manager for the Forge editor
 (forge/gui/snippet_manager.py).
 

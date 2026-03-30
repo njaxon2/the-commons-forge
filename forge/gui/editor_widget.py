@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge code editor widget — enhanced with theme-aware highlighting,
 bracket matching, improved gutter, and prompt stripping.
 (forge/gui/editor_widget.py)

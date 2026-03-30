@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Keyboard shortcuts cheat-sheet overlay for Forge IDE."""
 
 from PySide6.QtCore import Qt

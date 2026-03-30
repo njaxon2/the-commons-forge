@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for classdef OOP and unwind_protect."""
 import pytest
 import numpy as np

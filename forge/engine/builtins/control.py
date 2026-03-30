@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """
 Forge Control Systems Toolbox
 MATLAB/Octave-compatible control systems functions using scipy.signal as backend.

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Structured Output panel -- displays program output with filtering
 (forge/gui/output_panel.py)."""
 

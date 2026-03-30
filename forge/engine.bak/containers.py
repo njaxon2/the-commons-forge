@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge container types: char arrays, cell arrays, structs, and containers.Map."""
 import numpy as np
 from collections import OrderedDict

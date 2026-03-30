@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Enhanced Forge documentation viewer with navigation and cross-references."""
 
 import re

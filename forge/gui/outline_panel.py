@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Enhanced code outline panel with icons and better M-code parsing."""
 
 import re

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """M-language evaluator: AST → execution.
 
 Walks the AST produced by the parser, evaluating expressions and executing statements

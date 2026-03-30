@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Statistics Toolbox for Forge — Octave-compatible functions.
 
 Implements 49 Octave statistics functions: descriptive statistics,

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge Find & Replace widget (forge/gui/find_replace.py).
 
 Inline search bar that appears at the top of the editor.

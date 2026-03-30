@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Comprehensive tests for Octave-compatible patterns verified manually."""
 import pytest
 import sys

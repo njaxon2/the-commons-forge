@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Code Profiler / Timer panel -- shows execution timing information
 (forge/gui/profiler_panel.py)."""
 

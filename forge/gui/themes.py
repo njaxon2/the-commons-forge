@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge GUI Theme System – Premium Edition.
 
 Target location: forge/gui/themes.py

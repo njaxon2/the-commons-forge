@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for Forge Sensor Simulation Framework (20 tests).
 
 Uses SENSOR_REGISTRY dict to access sensor classes and functions.

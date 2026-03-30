@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge data types: ForgeArray with 1-based indexing, type conversion, and MATLAB/Octave semantics."""
 import numpy as np
 from enum import Enum

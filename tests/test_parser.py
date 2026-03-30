@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for M-language parser (Stages 2.2-2.4)."""
 import pytest
 from forge.engine.parser import (

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """File I/O toolbox for Forge.
 
 Implements CSV I/O, file read/write, file system operations, archive

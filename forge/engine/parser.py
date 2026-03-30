@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """M-language parser: tokens → AST.
 
 Implements a Pratt (top-down operator precedence) parser for Octave/MATLAB expressions,

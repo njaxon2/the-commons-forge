@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for Forge Communications Toolbox (15 tests).
 
 Uses COMMS_REGISTRY dict to call functions by their registry name.

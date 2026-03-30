@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Elementary functions (elfun toolbox).
 
 Implements: acosd, acot, acotd, acoth, acsc, acscd, acsch, asec, asecd, asech,

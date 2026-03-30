@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Octave subprocess bridge for Forge.
 
 Manages a persistent octave-cli process and marshals data between

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge engine session — wraps the evaluator with builtins and session management."""
 import os
 import sys
@@ -426,6 +428,51 @@ class ForgeSession:
         self._engine.functions["cell2mat"] = _cell2mat_builtin
         self._engine.functions["rmfield"] = _rmfield_builtin
         self._engine.functions["cat"] = _cat_builtin
+
+        # containers.Map standalone builtins: keys, values, isKey, remove
+        from forge.engine.containers import ForgeMap, ForgeStruct, ForgeCell
+
+        def forge_keys(m):
+            if isinstance(m, ForgeMap):
+                return m.keys()
+            if isinstance(m, ForgeStruct):
+                return ForgeCell(list(m._fields.keys()))
+            raise TypeError("keys: argument must be a containers.Map or struct")
+
+        def forge_values(m):
+            if isinstance(m, ForgeMap):
+                return m.values()
+            if isinstance(m, ForgeStruct):
+                return ForgeCell(list(m._fields.values()))
+            raise TypeError("values: argument must be a containers.Map or struct")
+
+        def forge_isKey(m, key):
+            k = key.to_str() if hasattr(key, "to_str") else str(key)
+            if isinstance(m, ForgeMap):
+                return m.isKey(k)
+            if isinstance(m, ForgeStruct):
+                return k in m._fields
+            raise TypeError("isKey: first argument must be a containers.Map or struct")
+
+        def forge_remove(m, key):
+            k = key.to_str() if hasattr(key, "to_str") else str(key)
+            if isinstance(m, ForgeMap):
+                m.remove(k)
+                return m
+            if isinstance(m, ForgeStruct):
+                from forge.engine.containers import forge_rmfield
+                return forge_rmfield(m, k)
+            raise TypeError("remove: first argument must be a containers.Map or struct")
+
+        self._engine.functions["keys"] = forge_keys
+        self._engine.functions["values"] = forge_values
+        self._engine.functions["isKey"] = forge_isKey
+        self._engine.functions["remove"] = forge_remove
+
+        # Register 'containers' namespace so containers.Map() works
+        _containers_ns = ForgeStruct()
+        _containers_ns._fields["Map"] = ForgeMap
+        self._engine.workspace.set("containers", _containers_ns)
 
         # File I/O system (R94)
         session._file_handles = {}  # fid -> file object

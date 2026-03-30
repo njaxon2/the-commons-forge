@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for M-language evaluator (Stages 2.5-2.11)."""
 import numpy as np
 import pytest

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Side-by-side diff viewer for comparing file versions."""
 
 import difflib

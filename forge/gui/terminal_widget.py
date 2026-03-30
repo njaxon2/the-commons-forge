@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Simple terminal widget for running shell commands within Forge."""
 import os
 import subprocess

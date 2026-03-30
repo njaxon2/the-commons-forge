@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Instrument Control Toolbox for Forge.
 
 Simulated instrument communication using the sensor simulation framework.

@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Forge engine session — wraps the evaluator with builtins and session management."""
 import os
 import sys

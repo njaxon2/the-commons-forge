@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Audio Toolbox for Forge — Octave-compatible functions.
 
 Implements 8 Octave audio functions: mu-law encoding/decoding, sound playback

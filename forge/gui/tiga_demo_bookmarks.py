@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """TIGA demo bookmarks — opens key files and places bookmarks for a guided tour."""
 
 import os

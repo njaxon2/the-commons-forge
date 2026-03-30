@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Sensor Simulation Framework for Forge.
 
 Accurate simulated sensors for validating instrument control functions.

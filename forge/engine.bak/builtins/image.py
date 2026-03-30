@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Image Processing Toolbox for Forge — Octave-compatible functions.
 
 Implements 58 Octave image functions: colormaps, image I/O, color conversion,

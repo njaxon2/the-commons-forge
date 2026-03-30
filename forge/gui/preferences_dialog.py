@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Comprehensive Preferences dialog for Forge IDE."""
 import json
 import os

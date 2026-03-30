@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """GUI Integration Tests — Traceable to Requirements R01–R16.
 
 These tests run on the LIVE VNC display (DISPLAY=:99), creating a visible

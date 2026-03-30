@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """V&V test framework with tolerance comparison and reference testing."""
 import numpy as np
 

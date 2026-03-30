@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """M-language evaluator: AST → execution.
 
 Walks the AST produced by the parser, evaluating expressions and executing statements
@@ -1229,6 +1231,18 @@ class Session:
                 return target._data[idx - 1]  # 1-based
             raise TypeError("Cannot index ForgeCell with multiple indices via ()")
 
+        # Step 3.6: If it's a Map, do key-based indexing
+        if isinstance(target, ForgeMap):
+            args = [self._eval_expr(a, ws) for a in node.args]
+            if len(args) == 1:
+                key = args[0]
+                if isinstance(key, ForgeChar):
+                    key = key.to_str()
+                elif isinstance(key, ForgeArray):
+                    key = str(_to_py(key))
+                return target[key]
+            raise TypeError("containers.Map supports single-key indexing only")
+
         # Step 4: If it's an array, do indexing (with end support)
         if isinstance(target, ForgeArray):
             n_args = len(node.args)
@@ -1547,6 +1561,22 @@ class Session:
                             idx_arrays.append(np.array([s]))
                     ix = np.ix_(*idx_arrays)
                     data[ix] = assign_val
+            elif isinstance(arr, ForgeMap):
+                # containers.Map indexed assignment: m("key") = value
+                if len(args) == 1:
+                    key = args[0]
+                    if isinstance(key, ForgeChar):
+                        key = key.to_str()
+                    elif isinstance(key, ForgeArray):
+                        key = str(_to_py(key))
+                    arr[key] = value
+                else:
+                    raise TypeError("containers.Map supports single-key indexing only")
+            elif isinstance(arr, ForgeCell):
+                # Cell () assignment: c(i) = value (wraps in cell)
+                if len(args) == 1:
+                    idx = int(_to_py(args[0]))
+                    arr.content_set(value, idx)
             return value
 
         if isinstance(target, FieldAccess):

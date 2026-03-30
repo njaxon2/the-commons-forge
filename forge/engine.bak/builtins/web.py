@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Web / Network Toolbox for Forge — Octave-compatible functions.
 
 Implements 10 Octave web/network functions: HTTP (web, webread, webwrite,

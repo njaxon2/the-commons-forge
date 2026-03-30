@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Polynomial toolbox.
 
 Implements: compan, conv, deconv, mkpp, mpoles, pchip, poly, polyaffine,

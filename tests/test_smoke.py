@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Smoke tests: verify basic app startup and framework."""
 import pytest
 from PySide6.QtCore import Qt

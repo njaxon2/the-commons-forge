@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Time Toolbox for Forge.
 
 Provides 14 date/time functions compatible with Octave/MATLAB

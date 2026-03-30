@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Builtin function registries for Forge engine.
 
 Aggregates all toolbox registries into a single BUILTIN_REGISTRY dict

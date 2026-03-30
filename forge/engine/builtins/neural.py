@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Neural Network (Lite) Toolbox for Forge.
 
 Simple feedforward neural networks using only NumPy for training and

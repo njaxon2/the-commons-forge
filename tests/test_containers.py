@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for char arrays, cell arrays, structs, Map, and sparse matrices.
 Covers Stages 1.5-1.9 from V&V plan."""
 import numpy as np

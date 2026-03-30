@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Final integration tests -- end-to-end session workflows."""
 import pytest
 import numpy as np

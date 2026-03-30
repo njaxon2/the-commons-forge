@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Git integration panel – shows status, staged files, diff preview,
 visual commit history, repo init, remote management, pull/push."""
 

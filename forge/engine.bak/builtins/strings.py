@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """String Toolbox for Forge.
 
 Provides 34 string manipulation functions compatible with Octave/MATLAB

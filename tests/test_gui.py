@@ -1,3 +1,5 @@
+# Copyright 2026 The Commons™
+# SPDX-License-Identifier: Apache-2.0
 """Tests for PySide6 GUI widgets."""
 import pytest
 from PySide6.QtCore import Qt
