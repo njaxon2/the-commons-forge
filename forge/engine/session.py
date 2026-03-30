@@ -85,8 +85,8 @@ class ForgeSession:
         except ForgeError as e:
             self.last_error = e
             return f'error: {e.identifier}: {e.message}'
-        except UndefinedFunctionError:
-            raise
+        except UndefinedFunctionError as e:
+            self.last_error = e; return f"error: {e}"
         except Exception as e:
             self.last_error = e
             return f'error: {type(e).__name__}: {e}'

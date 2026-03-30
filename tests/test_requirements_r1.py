@@ -284,8 +284,8 @@ class TestR13_MFileDiscovery:
         assert "10" in r
 
     def test_function_not_found(self, s):
-        with pytest.raises(Exception):
-            s.eval("nonexistent_function_xyz(1)")
+        r = s.eval("nonexistent_function_xyz(1)")
+        assert "error" in r and "Undefined" in r
 
 
 # ============================================================
