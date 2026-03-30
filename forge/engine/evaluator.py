@@ -100,9 +100,76 @@ class Workspace:
 import numpy as np
 
 def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
-    """Apply function to each element of a cell array."""
+    """Apply function to each element of a cell array.
+
+    Supports:
+      cellfun(@func, C)
+      cellfun(@func, C1, C2, ...)           -- multiple cell inputs
+      cellfun(@func, C, 'UniformOutput', false)
+      cellfun('isclass', C, 'char')         -- string-form builtins
+    """
     from forge.engine.containers import ForgeCell, ForgeChar
     from forge.engine.types import ForgeArray
+
+    # --- Handle string-form func names ---
+    uniform_output = True
+    positional_extras = list(extra_args)
+
+    if isinstance(func, (str, ForgeChar)):
+        func_name = func.to_str() if isinstance(func, ForgeChar) else func
+        if func_name == 'isclass':
+            if positional_extras:
+                class_name = positional_extras.pop(0)
+                if isinstance(class_name, ForgeChar):
+                    class_name = class_name.to_str()
+                elif isinstance(class_name, str):
+                    pass
+                else:
+                    class_name = str(class_name)
+                type_map = {
+                    'char': (str, ForgeChar),
+                    'double': (float, int, np.floating, np.integer, ForgeArray),
+                    'cell': (ForgeCell, list),
+                    'logical': (bool, np.bool_),
+                }
+                target = type_map.get(class_name, ())
+                func = lambda item, _t=target: bool(isinstance(item, _t))
+            else:
+                func = lambda item: False
+        elif func_name in ('ischar', 'isstring'):
+            func = lambda item: bool(isinstance(item, (str, ForgeChar)))
+        elif func_name == 'isnumeric':
+            func = lambda item: bool(isinstance(item, (int, float, np.number, ForgeArray)))
+        elif func_name == 'isempty':
+            func = lambda item: bool(
+                (isinstance(item, ForgeArray) and item.data.size == 0) or
+                (isinstance(item, (str, ForgeChar)) and len(item.to_str() if isinstance(item, ForgeChar) else item) == 0)
+            )
+        else:
+            raise ValueError(f"Unknown cellfun string function: {func_name}")
+
+    # --- Parse name-value pairs from positional_extras ---
+    clean_extras = []
+    i = 0
+    while i < len(positional_extras):
+        arg = positional_extras[i]
+        arg_str = arg.to_str() if isinstance(arg, ForgeChar) else (arg if isinstance(arg, str) else None)
+        if arg_str and arg_str.lower() == 'uniformoutput' and i + 1 < len(positional_extras):
+            val = positional_extras[i + 1]
+            if isinstance(val, ForgeArray):
+                uniform_output = bool(val.data.flat[0])
+            elif isinstance(val, (bool, np.bool_)):
+                uniform_output = bool(val)
+            elif isinstance(val, (int, float)):
+                uniform_output = bool(val)
+            else:
+                uniform_output = bool(val)
+            i += 2
+            continue
+        clean_extras.append(arg)
+        i += 1
+
+    # --- Resolve cell items ---
     if isinstance(cell_arg, ForgeCell):
         items = cell_arg._data
     elif isinstance(cell_arg, (list, tuple)):
@@ -110,14 +177,31 @@ def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
     else:
         items = [cell_arg]
 
+    # --- Extra cell arrays for multi-input ---
+    extra_cells = []
+    for ea in clean_extras:
+        if isinstance(ea, ForgeCell):
+            extra_cells.append(ea._data)
+        elif isinstance(ea, (list, tuple)):
+            extra_cells.append(list(ea))
+        else:
+            extra_cells.append([ea])
+
     results = []
-    for item in items:
-        r = func(item)
+    for idx, item in enumerate(items):
+        if extra_cells:
+            call_args = [item] + [ec[idx] if idx < len(ec) else ec[-1] for ec in extra_cells]
+            r = func(*call_args)
+        else:
+            r = func(item)
         results.append(r)
+
+    if not uniform_output:
+        return ForgeCell(results)
 
     # Check if all results are scalars -> return array
     all_scalar = all(
-        isinstance(r, (int, float, np.integer, np.floating)) or
+        isinstance(r, (int, float, bool, np.integer, np.floating, np.bool_)) or
         (isinstance(r, ForgeArray) and r.data.size == 1) or
         (isinstance(r, np.ndarray) and r.size == 1)
         for r in results
@@ -129,6 +213,8 @@ def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
                 vals.append(float(r.data.flat[0]))
             elif isinstance(r, np.ndarray):
                 vals.append(float(r.flat[0]))
+            elif isinstance(r, bool):
+                vals.append(1.0 if r else 0.0)
             else:
                 vals.append(float(r))
         return ForgeArray(np.array(vals, dtype=np.float64))
@@ -136,8 +222,39 @@ def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
 
 
 def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
-    """Apply function element-wise to array(s)."""
+    """Apply function element-wise to array(s).
+
+    Supports:
+      arrayfun(@func, A)
+      arrayfun(@func, A, B, ...)            -- multiple array inputs
+      arrayfun(@func, A, 'UniformOutput', false)
+    """
     from forge.engine.types import ForgeArray
+    from forge.engine.containers import ForgeCell, ForgeChar
+
+    # --- Parse name-value pairs from extra_arrs ---
+    uniform_output = True
+    clean_extras = []
+    args_list = list(extra_arrs)
+    i = 0
+    while i < len(args_list):
+        arg = args_list[i]
+        arg_str = arg.to_str() if isinstance(arg, ForgeChar) else (arg if isinstance(arg, str) else None)
+        if arg_str and arg_str.lower() == 'uniformoutput' and i + 1 < len(args_list):
+            val = args_list[i + 1]
+            if isinstance(val, ForgeArray):
+                uniform_output = bool(val.data.flat[0])
+            elif isinstance(val, (bool, np.bool_)):
+                uniform_output = bool(val)
+            elif isinstance(val, (int, float)):
+                uniform_output = bool(val)
+            else:
+                uniform_output = bool(val)
+            i += 2
+            continue
+        clean_extras.append(arg)
+        i += 1
+
     if isinstance(arr, ForgeArray):
         data = arr.data
     elif isinstance(arr, np.ndarray):
@@ -146,7 +263,7 @@ def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
         data = np.atleast_1d(np.asarray(arr, dtype=np.float64))
 
     extra_data = []
-    for ea in extra_arrs:
+    for ea in clean_extras:
         if isinstance(ea, ForgeArray):
             extra_data.append(ea.data)
         elif isinstance(ea, np.ndarray):
@@ -160,14 +277,22 @@ def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
     for i in range(len(flat)):
         call_args = [flat[i]] + [ef[i] if i < len(ef) else ef[-1] for ef in extra_flat]
         r = func(*call_args)
-        if isinstance(r, ForgeArray):
-            results.append(float(r.data.flat[0]))
-        elif isinstance(r, np.ndarray):
-            results.append(float(r.flat[0]))
-        else:
-            results.append(float(r))
+        results.append(r)
 
-    result = np.array(results, dtype=np.float64).reshape(data.shape)
+    if not uniform_output:
+        return ForgeCell(results)
+
+    # Uniform output: convert to numeric array
+    vals = []
+    for r in results:
+        if isinstance(r, ForgeArray):
+            vals.append(float(r.data.flat[0]))
+        elif isinstance(r, np.ndarray):
+            vals.append(float(r.flat[0]))
+        else:
+            vals.append(float(r))
+
+    result = np.array(vals, dtype=np.float64).reshape(data.shape)
     return ForgeArray(result)
 
 
@@ -280,17 +405,46 @@ def _deal_builtin(*args):
     return args
 
 
-def _structfun_builtin(func, s):
-    """Apply function to each field of a struct."""
+def _structfun_builtin(func, s, *extra_args):
+    """Apply function to each field of a struct.
+
+    Supports:
+      structfun(@func, S)
+      structfun(@func, S, 'UniformOutput', false)
+    """
     from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
     from forge.engine.types import ForgeArray
     import numpy as np
     if not isinstance(s, ForgeStruct):
         raise ValueError("Second argument must be a struct")
+
+    # Parse name-value pairs
+    uniform_output = True
+    args_list = list(extra_args)
+    i = 0
+    while i < len(args_list):
+        arg = args_list[i]
+        arg_str = arg.to_str() if isinstance(arg, ForgeChar) else (arg if isinstance(arg, str) else None)
+        if arg_str and arg_str.lower() == 'uniformoutput' and i + 1 < len(args_list):
+            val = args_list[i + 1]
+            if isinstance(val, ForgeArray):
+                uniform_output = bool(val.data.flat[0])
+            elif isinstance(val, (bool, np.bool_)):
+                uniform_output = bool(val)
+            else:
+                uniform_output = bool(val)
+            i += 2
+            continue
+        i += 1
+
     results = []
     for name, val in s._fields.items():
         r = func(val)
         results.append(r)
+
+    if not uniform_output:
+        return ForgeCell(results)
+
     # Check if all scalar
     all_scalar = all(
         isinstance(r, (int, float, np.integer, np.floating)) or
@@ -2014,6 +2168,11 @@ class Session:
             base = os.path.basename(fname)
             name_only, ext = os.path.splitext(base)
             return (ForgeChar(d), ForgeChar(name_only), ForgeChar(ext))
+        if name == 'deal':
+            if len(args) == 1:
+                return tuple(args[0] for _ in range(nargout))
+            else:
+                return tuple(args[:nargout])
         # Generic: if function returns a tuple, use it directly
         if name in self.functions:
             func = self.functions[name]

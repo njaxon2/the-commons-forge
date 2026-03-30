@@ -355,6 +355,8 @@ class Parser:
                 return self._parse_classdef()
             elif kw == 'unwind_protect':
                 return self._parse_unwind_protect()
+            elif kw == 'arguments':
+                return self._parse_arguments_block()
 
         # Expression or assignment
         return self._parse_expr_or_assign()
@@ -466,6 +468,27 @@ class Parser:
         if self._is_end_keyword():
             self._advance()
         return UnwindProtect(try_body, cleanup_body)
+
+
+    def _parse_arguments_block(self):
+        """Parse and skip MATLAB-style arguments...end validation blocks."""
+        self._expect(TokenType.KEYWORD, 'arguments')
+        self._consume_terminator()
+        # Skip everything until we hit 'end'
+        depth = 1
+        while depth > 0:
+            tok = self._peek()
+            if tok.type == TokenType.EOF:
+                break
+            if tok.type == TokenType.KEYWORD and tok.value == 'end':
+                depth -= 1
+                if depth == 0:
+                    self._advance()
+                    self._consume_terminator()
+                    break
+            self._advance()
+        # Return a no-op node — arguments blocks are just validation hints
+        return None
 
     def _parse_expr_or_assign(self) -> Any:
         """Parse expression, checking for assignment."""

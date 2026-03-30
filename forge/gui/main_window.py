@@ -831,6 +831,7 @@ class ForgeMainWindow(QMainWindow):
         # Editor display
         self.act_word_wrap = QAction("Word Wrap", self, checkable=True)
         self.act_word_wrap.setChecked(False)
+        self.act_word_wrap.setShortcut("Alt+Z")
         self.act_word_wrap.triggered.connect(self._toggle_word_wrap)
         view_menu.addAction(self.act_word_wrap)
 

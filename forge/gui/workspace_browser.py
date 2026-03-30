@@ -130,7 +130,11 @@ class WorkspaceBrowserWidget(QWidget):
             cls_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 2, cls_item)
 
-            val_item = QTableWidgetItem(self._preview(value))
+            preview_text = self._preview(value)
+            full_text = self._full_preview(value)
+            val_item = QTableWidgetItem(preview_text)
+            if full_text != preview_text:
+                val_item.setToolTip(full_text)
             self.table.setItem(row, 3, val_item)
 
             # Subtle type-based row colouring
@@ -198,12 +202,19 @@ class WorkspaceBrowserWidget(QWidget):
         return type(val).__name__
 
     @staticmethod
-    def _preview(val) -> str:
+    def _preview(val, max_len: int = 40) -> str:
+        """Return a compact human-readable preview of *val*.
+
+        For matrices larger than ~6 elements the preview shows dimensions
+        and dtype (e.g. ``3x4 double``) rather than dumping raw data.
+        """
         from forge.engine.types import ForgeArray
         from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
         if isinstance(val, ForgeChar):
             s = val.to_str()
-            return repr(s) if len(s) <= 60 else repr(s[:57]) + "..."
+            if len(s) <= max_len:
+                return repr(s)
+            return repr(s[:max_len - 3]) + "\u2026'"
         if isinstance(val, ForgeArray):
             d = val.data
             if d.size == 0:
@@ -213,17 +224,77 @@ class WorkspaceBrowserWidget(QWidget):
                 if isinstance(v, (bool, np.bool_)):
                     return "true" if v else "false"
                 return str(v)
-            if d.size <= 10:
-                return "[" + " ".join(f"{x:g}" if isinstance(x, float) else str(x) for x in d.flat) + "]"
-            return f"[{d.shape[0]}\u00d7{d.shape[1] if d.ndim > 1 else 1} {str(d.dtype)}]"
+            # Small arrays: show inline values
+            if d.size <= 6:
+                return "[" + " ".join(
+                    f"{x:g}" if isinstance(x, (float, np.floating)) else str(x)
+                    for x in d.flat
+                ) + "]"
+            # Larger arrays: dimension summary with class name
+            cls = WorkspaceBrowserWidget._DTYPE_MAP.get(str(d.dtype), str(d.dtype))
+            dims = "\u00d7".join(str(s) for s in d.shape)
+            return f"[{dims} {cls}]"
         if isinstance(val, ForgeCell):
-            n = len(val._data)
-            return f"{{{n} elements}}"
+            dims = "\u00d7".join(str(s) for s in val.shape) if hasattr(val, "shape") else str(len(val._data))
+            return f"{{{dims} cell}}"
         if isinstance(val, ForgeStruct):
-            fields = list(val._fields.keys()) if hasattr(val, '_fields') else []
-            return "{" + ", ".join(fields[:5]) + "}"
+            fields = list(val._fields.keys()) if hasattr(val, "_fields") else []
+            n = len(fields)
+            shown = ", ".join(fields[:4])
+            suffix = ", \u2026" if n > 4 else ""
+            return f"struct ({n} fields: {shown}{suffix})"
+        # Fallback: plain str truncation
         s = str(val)
-        return s if len(s) <= 60 else s[:57] + "..."
+        if len(s) <= max_len:
+            return s
+        return s[:max_len - 1] + "\u2026"
+
+    @staticmethod
+    def _full_preview(val, max_len: int = 300) -> str:
+        """Longer preview used for tooltips -- shows more data."""
+        from forge.engine.types import ForgeArray
+        from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+        if isinstance(val, ForgeChar):
+            s = val.to_str()
+            if len(s) <= max_len:
+                return repr(s)
+            return repr(s[:max_len - 3]) + "\u2026'"
+        if isinstance(val, ForgeArray):
+            d = val.data
+            if d.size == 0:
+                return "[]"
+            if d.size == 1:
+                return str(d.flat[0])
+            if d.size <= 50:
+                if d.ndim == 1:
+                    rows = " ".join(
+                        f"{x:g}" if isinstance(x, (float, np.floating)) else str(x)
+                        for x in d.flat
+                    )
+                    return f"[{rows}]"
+                # 2-D: show row-by-row
+                lines = []
+                for r in range(min(d.shape[0], 10)):
+                    row_vals = " ".join(
+                        f"{x:g}" if isinstance(x, (float, np.floating)) else str(x)
+                        for x in d[r].flat
+                    )
+                    lines.append(row_vals)
+                if d.shape[0] > 10:
+                    lines.append("\u2026")
+                return "[" + "\n ".join(lines) + "]"
+            cls = WorkspaceBrowserWidget._DTYPE_MAP.get(str(d.dtype), str(d.dtype))
+            dims = "\u00d7".join(str(s) for s in d.shape)
+            return f"[{dims} {cls}]"
+        if isinstance(val, ForgeCell):
+            return WorkspaceBrowserWidget._preview(val)
+        if isinstance(val, ForgeStruct):
+            fields = list(val._fields.keys()) if hasattr(val, "_fields") else []
+            return "struct with fields: " + ", ".join(fields)
+        s = str(val)
+        if len(s) <= max_len:
+            return s
+        return s[:max_len - 1] + "\u2026"
 
     # ------------------------------------------------------------------
     # Interaction

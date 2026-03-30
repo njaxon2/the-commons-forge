@@ -1,23 +1,23 @@
 # Forge IDE™
 
-**A professional-grade computational platform built in Python.** Forge is an Octave-compatible computing environment with a modern PySide6 desktop GUI, 1,326+ built-in functions, and 29 integrated toolboxes — all open source under the Apache 2.0 license.
+**A professional-grade computational platform built in Python.** Forge is an Octave-compatible computing environment with a modern PySide6 desktop GUI, 1,340+ built-in functions, and 29 integrated toolboxes — all open source under the Apache 2.0 license.
 
 Forge aims to provide a free, fully-featured alternative to expensive proprietary numerical computing environments, with particular focus on students, educators, and researchers.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-1%2C194_passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C246_passing-brightgreen.svg)](#testing)
 
 ---
 
 ## Features
 
 - **Octave-compatible language engine** — M-language parser and evaluator with 1-based indexing, matrix literals, cell arrays, structs, classdef OOP, and command-style syntax
-- **1,326+ built-in functions** across 29 toolboxes (signal processing, linear algebra, statistics, image processing, control systems, and more)
+- **1,340+ built-in functions** across 29 toolboxes (signal processing, linear algebra, statistics, image processing, control systems, and more)
 - **PySide6 desktop GUI** with dockable panels: command window (REPL), code editor with syntax highlighting, file browser, workspace browser, plot figures, documentation viewer, and more
 - **Matplotlib-powered plotting** — 2D/3D plots, subplots, figure management, zoom, pan, and export
 - **MATLAB `.mat` file compatibility** via `scipy.io` for load/save interop
-- **1,194 validated tests** — every function numerically verified against established reference implementations
+- **1,246 validated tests** — every function numerically verified against established reference implementations
 - **Cross-platform** — runs on Windows, Linux, and macOS
 
 ## Quick Start
@@ -96,7 +96,7 @@ forge/
 │   ├── session.py         # Workspace, path, state management
 │   ├── types.py           # ForgeArray, ForgeChar, ForgeMap
 │   └── builtins/          # 29 toolbox modules
-└── tests/                 # 1,153 pytest tests
+└── tests/                 # 1,246 pytest tests
 ```
 
 ## Development

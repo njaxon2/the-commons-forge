@@ -141,6 +141,14 @@ class ForgeCell:
     def shape(self):
         return self._shape
 
+    @property
+    def rows(self):
+        return self._shape[0]
+
+    @property
+    def cols(self):
+        return self._shape[1]
+
     def numel(self):
         return len(self._data)
 

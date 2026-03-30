@@ -2101,6 +2101,9 @@ class EditorWidget(QWidget):
         self.status = EditorStatusWidget(self)
         layout.addWidget(self.status)
 
+        # Word wrap mode (shared across all tabs)
+        self._word_wrap_mode = None  # None = NoWrap (default)
+
         # Start with one empty tab
         self.new_file()
 
@@ -2603,6 +2606,14 @@ class EditorWidget(QWidget):
             line = cursor.blockNumber() + 1
             col = cursor.columnNumber() + 1
             self.status.update_position(line, col)
+
+    def set_word_wrap_mode(self, mode):
+        """Store and apply word wrap mode to all open editor tabs."""
+        self._word_wrap_mode = mode
+        for i in range(self.tabs.count()):
+            editor = self.tabs.widget(i)
+            if hasattr(editor, setLineWrapMode):
+                editor.setLineWrapMode(mode)
 
     def show_find(self):
         """Show the find/replace bar for the current editor."""

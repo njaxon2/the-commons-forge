@@ -3023,8 +3023,8 @@ class ForgeSession:
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeCell
             xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
-            rd = r.data.flatten().astype(int) if isinstance(r, ForgeArray) else [int(r)]
-            cd = c.data.flatten().astype(int) if isinstance(c, ForgeArray) else [int(c)]
+            rd = np.asarray(r.data if isinstance(r, ForgeArray) else r, dtype=float).flatten().astype(int)
+            cd = np.asarray(c.data if isinstance(c, ForgeArray) else c, dtype=float).flatten().astype(int)
             rows = np.cumsum([0] + list(rd))
             cols = np.cumsum([0] + list(cd))
             result = ForgeCell(len(rd), len(cd))
@@ -5603,42 +5603,79 @@ class ForgeSession:
             """num2str(n, fmt) — convert number to string."""
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
+
+            def _fmt_scalar(v, fmt=None):
+                if fmt:
+                    return fmt % v
+                if v == int(v) and abs(v) < 1e15:
+                    return str(int(v))
+                # Use %g-style: strip trailing zeros like Octave
+                return f'{v:.6g}'
+
             if isinstance(n, ForgeArray):
                 data = n.data
+                fmt = None
+                if args:
+                    fmt_arg = args[0]
+                    if isinstance(fmt_arg, ForgeChar):
+                        fmt = fmt_arg.to_str()
+                    elif isinstance(fmt_arg, ForgeArray):
+                        fmt = f'%.{int(fmt_arg.data.flat[0])}f'
                 if data.size == 1:
                     v = float(data.flat[0])
-                    if args:
-                        fmt = args[0]
-                        if isinstance(fmt, ForgeChar):
-                            fmt = fmt.to_str()
-                        elif isinstance(fmt, ForgeArray):
-                            fmt = f'%.{int(fmt.data.flat[0])}f'
-                        try:
-                            return ForgeChar(fmt % v)
-                        except Exception:
-                            return ForgeChar(str(v))
-                    if v == int(v) and abs(v) < 1e15:
-                        return ForgeChar(str(int(v)))
-                    return ForgeChar(f'{v:.4f}')
+                    try:
+                        return ForgeChar(_fmt_scalar(v, fmt))
+                    except Exception:
+                        return ForgeChar(str(v))
                 parts = []
                 for v in data.flat:
                     fv = float(v)
-                    if fv == int(fv):
-                        parts.append(str(int(fv)))
-                    else:
-                        parts.append(f'{fv:.4f}')
+                    parts.append(_fmt_scalar(fv, fmt))
                 return ForgeChar('  '.join(parts))
+            # Plain Python number
+            fmt = None
+            if args:
+                fmt_arg = args[0]
+                if isinstance(fmt_arg, ForgeChar):
+                    fmt = fmt_arg.to_str()
+            if isinstance(n, (int, float)):
+                return ForgeChar(_fmt_scalar(float(n), fmt))
             return ForgeChar(str(n))
 
         def forge_str2num2(s):
-            """str2num(s) — convert string to number."""
+            """str2num(s) — convert string to number.
+
+            Handles scalars, vectors [1 2 3], and matrices [1 2; 3 4].
+            """
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
             if isinstance(s, ForgeChar): s = s.to_str()
+            s = str(s).strip()
+            # Try scalar first
             try:
                 return ForgeArray(np.float64(float(s)))
-            except Exception:
-                return ForgeArray(np.array([[]]))
+            except (ValueError, TypeError):
+                pass
+            # Try vector/matrix notation: [1 2; 3 4]
+            if s.startswith('[') and s.endswith(']'):
+                inner = s[1:-1].strip()
+                if not inner:
+                    return ForgeArray(np.array([]).reshape(0, 0))
+                try:
+                    rows = inner.split(';')
+                    matrix = []
+                    for row in rows:
+                        row = row.strip()
+                        if ',' in row:
+                            parts = [float(x.strip()) for x in row.split(',')]
+                        else:
+                            parts = [float(x) for x in row.split()]
+                        matrix.append(parts)
+                    arr = np.array(matrix, dtype=np.float64)
+                    return ForgeArray(arr)
+                except (ValueError, TypeError):
+                    pass
+            return ForgeArray(np.array([]).reshape(0, 0))
 
         def forge_dec2hex(n):
             """dec2hex(n) — decimal to hexadecimal string."""
@@ -9264,6 +9301,22 @@ class ForgeSession:
         session._engine.functions["parcorr"] = forge_parcorr2
         session._engine.functions["arima"] = forge_arima2
         session._engine.functions["forecast"] = forge_forecast2
+
+        def forge_namedarg2cell(*args):
+            """namedarg2cell(name1, val1, ...) -- convert name-value pairs to cell."""
+            from forge.engine.containers import ForgeCell, ForgeChar
+            result = []
+            for a in args:
+                if isinstance(a, ForgeChar):
+                    result.append(a)
+                elif isinstance(a, str):
+                    result.append(ForgeChar(a))
+                else:
+                    result.append(a)
+            return ForgeCell(result)
+
+        session._engine.functions["namedarg2cell"] = forge_namedarg2cell
+
         session._engine.functions["substruct"] = forge_substruct2
 
         # R152: Deep learning stubs, financial, optimization extras
@@ -9799,17 +9852,66 @@ class ForgeSession:
             return ForgeArray(np.float64(0.0))
 
         def forge_exist(name, typ=None):
-            """exist(name) - check if variable/function exists."""
+            """exist(name [, type]) - check if variable/function/builtin exists.
+
+            Returns:
+              0 - does not exist
+              1 - variable in workspace
+              2 - file on path (.m file)
+              3 - MEX/built-in function
+              5 - built-in function (Forge engine)
+              7 - directory
+            type can be: 'var', 'builtin', 'file', 'dir', 'class'
+            """
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
+            import os as _os
             if isinstance(name, ForgeChar):
                 name = name.to_str()
-            # Check functions
-            if name in session._engine.functions:
-                return ForgeArray(np.float64(5.0))  # 5 = built-in function
-            # Check workspace
-            if name in session._engine.workspace._vars:
-                return ForgeArray(np.float64(1.0))  # 1 = variable
+            if isinstance(typ, ForgeChar):
+                typ = typ.to_str()
+
+            is_var = name in session._engine.workspace._vars
+            is_func = name in session._engine.functions
+            is_dir = _os.path.isdir(name)
+            # Check for .m file on path
+            is_file = False
+            search_name = name if name.endswith('.m') else name + '.m'
+            if _os.path.isfile(search_name):
+                is_file = True
+            else:
+                for p in getattr(session, '_path', []):
+                    if _os.path.isfile(_os.path.join(p, search_name)):
+                        is_file = True
+                        break
+
+            if typ is not None:
+                if isinstance(typ, str):
+                    typ = typ.lower()
+                else:
+                    typ = str(typ).lower()
+                if typ == 'var':
+                    return ForgeArray(np.float64(1.0 if is_var else 0.0))
+                elif typ == 'builtin':
+                    return ForgeArray(np.float64(3.0 if is_func else 0.0))
+                elif typ == 'file':
+                    return ForgeArray(np.float64(2.0 if is_file else 0.0))
+                elif typ == 'dir':
+                    return ForgeArray(np.float64(7.0 if is_dir else 0.0))
+                elif typ == 'class':
+                    return ForgeArray(np.float64(0.0))
+                else:
+                    return ForgeArray(np.float64(0.0))
+
+            # No type specified: return highest-priority match
+            if is_var:
+                return ForgeArray(np.float64(1.0))
+            if is_func:
+                return ForgeArray(np.float64(5.0))
+            if is_file:
+                return ForgeArray(np.float64(2.0))
+            if is_dir:
+                return ForgeArray(np.float64(7.0))
             return ForgeArray(np.float64(0.0))
 
         def forge_which(name):
@@ -10324,11 +10426,13 @@ class ForgeSession:
             """validateattributes(A, classes, attributes) — validate input."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar, ForgeCell
-            # Basic validation — just pass for now, raise on obvious failures
+            # Validate input against classes and attributes
             if isinstance(A, ForgeArray):
                 data = A.data
                 if isinstance(attrs, ForgeCell):
-                    for i in range(attrs.numel()):
+                    i = 0
+                    n = attrs.numel()
+                    while i < n:
                         attr = attrs.content_get(i + 1)
                         if isinstance(attr, ForgeChar):
                             a = attr.to_str()
@@ -10338,17 +10442,57 @@ class ForgeSession:
                                 raise ValueError("Expected scalar input")
                             elif a == 'vector' and data.ndim > 1 and min(data.shape) > 1:
                                 raise ValueError("Expected vector input")
+                            elif a == 'square':
+                                if data.ndim < 2 or data.shape[0] != data.shape[1]:
+                                    raise ValueError("Expected square matrix")
                             elif a == 'positive' and np.any(data <= 0):
                                 raise ValueError("Expected positive values")
                             elif a == 'nonnegative' and np.any(data < 0):
                                 raise ValueError("Expected nonnegative values")
+                            elif a == 'integer':
+                                real_data = np.real(data) if np.iscomplexobj(data) else data
+                                if not np.all(real_data == np.floor(real_data)):
+                                    raise ValueError("Expected integer values")
+                            elif a == 'real' and np.iscomplexobj(data) and np.any(np.imag(data) != 0):
+                                raise ValueError("Expected real values")
                             elif a == 'finite' and not np.all(np.isfinite(data)):
                                 raise ValueError("Expected finite values")
                             elif a == 'nonnan' and np.any(np.isnan(data)):
                                 raise ValueError("Expected non-NaN values")
-                            elif a == 'integer' and not np.all(data == np.floor(data)):
-                                raise ValueError("Expected integer values")
-            return None  # format command produces no output
+                            elif a == 'binary':
+                                if not np.all((data == 0) | (data == 1)):
+                                    raise ValueError("Expected binary (0 or 1) values")
+                            elif a == 'increasing':
+                                flat = data.flatten()
+                                if len(flat) > 1 and not np.all(np.diff(flat) > 0):
+                                    raise ValueError("Expected strictly increasing values")
+                            elif a == 'decreasing':
+                                flat = data.flatten()
+                                if len(flat) > 1 and not np.all(np.diff(flat) < 0):
+                                    raise ValueError("Expected strictly decreasing values")
+                            elif a == 'nondecreasing':
+                                flat = data.flatten()
+                                if len(flat) > 1 and not np.all(np.diff(flat) >= 0):
+                                    raise ValueError("Expected nondecreasing values")
+                            elif a == 'nonincreasing':
+                                flat = data.flatten()
+                                if len(flat) > 1 and not np.all(np.diff(flat) <= 0):
+                                    raise ValueError("Expected nonincreasing values")
+                            elif a == 'size':
+                                # Next element is the expected size vector
+                                if i + 1 < n:
+                                    i += 1
+                                    sz_attr = attrs.content_get(i + 1)
+                                    if isinstance(sz_attr, ForgeArray):
+                                        expected = tuple(int(x) for x in sz_attr.data.flatten())
+                                        actual = data.shape
+                                        # Pad actual shape with 1s if needed
+                                        while len(actual) < len(expected):
+                                            actual = actual + (1,)
+                                        if actual[:len(expected)] != expected:
+                                            raise ValueError(f"Expected size {list(expected)}, got {list(actual[:len(expected)])}")
+                        i += 1
+            return None  # validateattributes produces no output
 
         class ForgeInputParser:
             """inputParser — parse and validate function inputs."""
