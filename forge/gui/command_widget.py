@@ -974,6 +974,7 @@ class CommandWidget(QWidget):
         if self.engine is not None and full_text.strip():
             # Disable input while running
             self.console.setReadOnly(True)
+            self._last_eval_code = full_text
             self._worker = _EngineWorker(self.engine, full_text)
             self._worker.result_ready.connect(self._on_result)
             self._worker.error_ready.connect(self._on_error)
@@ -988,9 +989,29 @@ class CommandWidget(QWidget):
         self.command_executed.emit(full_text)
 
     def _on_result(self, result):
-        """Handle engine result on main thread."""
+        """Handle engine result on main thread with Octave-style prefix."""
         if result is not None and str(result).strip():
-            self._append_text(str(result) + "\n")
+            text = str(result)
+            code = getattr(self, "_last_eval_code", "").strip()
+            if text and not text.startswith("error:") and not text.startswith("warning:"):
+                import re as _re
+                code_lines = code.split("\n")
+                last_line = code_lines[-1].rstrip().rstrip(";").strip() if code_lines else ""
+                m = _re.match(r"^([a-zA-Z_]\w*)\s*=(?!=)", last_line)
+                skip = ("disp", "fprintf", "printf", "format", "help", "doc",
+                        "type", "clear", "who", "whos", "load", "save", "ver")
+                if m and not last_line.startswith("["):
+                    vname = m.group(1)
+                    if "\n" in text:
+                        text = vname + " =\n" + text
+                    else:
+                        text = vname + " = " + text.lstrip()
+                elif not any(last_line.startswith(k) for k in skip):
+                    if "\n" in text:
+                        text = "ans =\n" + text
+                    else:
+                        text = "ans = " + text.lstrip()
+            self._append_text(text + "\n")
 
     def _on_error(self, msg: str):
         """Handle engine error on main thread."""
