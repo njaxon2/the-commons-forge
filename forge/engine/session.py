@@ -1337,6 +1337,55 @@ class ForgeSession:
         self._engine.functions["rcond"] = forge_rcond
         self._engine.functions["blkdiag"] = forge_blkdiag
 
+        # --- Additional Octave-compatible builtins ---
+
+        def forge_deal(*args):
+            """deal(x1, x2, ...) -- distribute inputs to outputs."""
+            if len(args) == 1:
+                return args[0]
+            return args
+        self._engine.functions['deal'] = forge_deal
+
+        def forge_display(x):
+            """display(x) -- display a variable."""
+            return x
+        self._engine.functions['display'] = forge_display
+
+        def forge_fieldnames(s):
+            """fieldnames(s) -- return cell array of field names."""
+            from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+            if isinstance(s, ForgeStruct):
+                names = list(s._fields.keys())
+                return ForgeCell([ForgeChar(n) for n in names])
+            raise TypeError("fieldnames: argument must be a struct")
+        self._engine.functions['fieldnames'] = forge_fieldnames
+
+        def forge_rmfield(s, field):
+            """rmfield(s, field) -- remove a field from struct."""
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            if isinstance(field, ForgeChar):
+                field = field.to_str()
+            field = str(field)
+            if isinstance(s, ForgeStruct) and field in s._fields:
+                new_s = ForgeStruct()
+                for k, v in s._fields.items():
+                    if k != field:
+                        new_s._fields[k] = v
+                return new_s
+            return s
+        self._engine.functions['rmfield'] = forge_rmfield
+
+        def forge_isfield(s, field):
+            """isfield(s, field) -- check if struct has field."""
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            if isinstance(field, ForgeChar):
+                field = field.to_str()
+            field = str(field)
+            if isinstance(s, ForgeStruct):
+                return ForgeArray(np.array(1.0 if field in s._fields else 0.0))
+            return ForgeArray(np.array(0.0))
+        self._engine.functions['isfield'] = forge_isfield
+
         # R105: eval, feval, nargin, nargout, strjoin
         def forge_eval_str(code_str):
             """eval(str) - evaluate string as code."""

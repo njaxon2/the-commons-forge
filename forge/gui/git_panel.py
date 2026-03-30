@@ -448,11 +448,11 @@ class GitPanel(QWidget):
         self._tree.blockSignals(False)
 
     def _refresh_history(self):
-        """Refresh the History tab with visual branch graph."""
+        """Refresh the History tab with color-coded visual branch graph."""
         self._history_view.clear()
 
         ok, log_text = _run_git(
-            ["log", "--oneline", "--graph", "--all", "--decorate", "-50"],
+            ["log", "--oneline", "--graph", "--all", "--decorate", "-80"],
             self._cwd,
         )
         if not ok or not log_text:
@@ -464,7 +464,90 @@ class GitPanel(QWidget):
                 self._history_view.setPlainText(log_text)
             return
 
-        self._history_view.setPlainText(log_text)
+        # Apply color-coded formatting
+        import re
+        from PySide6.QtGui import QTextCharFormat, QTextCursor
+
+        cursor = self._history_view.textCursor()
+        cursor.beginEditBlock()
+
+        graph_color = QColor("#6c7086")     # gray for graph lines
+        hash_color = QColor("#f9e2af")      # yellow for commit hash
+        branch_color = QColor("#a6e3a1")    # green for branch names
+        head_color = QColor("#f38ba8")      # red for HEAD
+        tag_color = QColor("#fab387")       # orange for tags
+        msg_color = QColor("#cdd6f4")       # light for message text
+
+        for line in log_text.split("\n"):
+            # Split into graph part and content part
+            # Graph chars: * | / \ _ space
+            graph_end = 0
+            for i, ch in enumerate(line):
+                if ch in ("*", "|", "/", "\\", "_", " "):
+                    graph_end = i + 1
+                else:
+                    break
+
+            graph_part = line[:graph_end]
+            content_part = line[graph_end:]
+
+            # Write graph part in gray
+            fmt = QTextCharFormat()
+            fmt.setForeground(graph_color)
+            # Star (*) in accent color
+            for ch in graph_part:
+                if ch == "*":
+                    star_fmt = QTextCharFormat()
+                    star_fmt.setForeground(QColor("#cba6f7"))  # purple
+                    star_fmt.setFontWeight(QFont.Bold)
+                    cursor.insertText(ch, star_fmt)
+                else:
+                    cursor.insertText(ch, fmt)
+
+            # Parse content: hash, decorations, message
+            # Pattern: <hash> (decorations) message
+            m = re.match(r"([0-9a-f]{7,12})\s*(\(.*?\))?\s*(.*)", content_part)
+            if m:
+                commit_hash, decorations, message = m.groups()
+
+                # Hash in yellow
+                hash_fmt = QTextCharFormat()
+                hash_fmt.setForeground(hash_color)
+                cursor.insertText(commit_hash + " ", hash_fmt)
+
+                # Decorations
+                if decorations:
+                    # Parse individual decorations
+                    dec_text = decorations[1:-1]  # strip parens
+                    cursor.insertText("(", fmt)
+                    parts = dec_text.split(", ")
+                    for pi, part in enumerate(parts):
+                        dec_fmt = QTextCharFormat()
+                        if "HEAD" in part:
+                            dec_fmt.setForeground(head_color)
+                            dec_fmt.setFontWeight(QFont.Bold)
+                        elif "tag:" in part:
+                            dec_fmt.setForeground(tag_color)
+                        else:
+                            dec_fmt.setForeground(branch_color)
+                        cursor.insertText(part, dec_fmt)
+                        if pi < len(parts) - 1:
+                            cursor.insertText(", ", fmt)
+                    cursor.insertText(") ", fmt)
+
+                # Message
+                msg_fmt = QTextCharFormat()
+                msg_fmt.setForeground(msg_color)
+                cursor.insertText(message, msg_fmt)
+            else:
+                # No match — just write as-is
+                msg_fmt = QTextCharFormat()
+                msg_fmt.setForeground(msg_color)
+                cursor.insertText(content_part, msg_fmt)
+
+            cursor.insertText("\n", fmt)
+
+        cursor.endEditBlock()
 
     # ------------------------------------------------- Action slots
     def _do_init(self):

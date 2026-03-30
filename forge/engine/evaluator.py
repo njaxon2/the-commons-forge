@@ -1620,6 +1620,16 @@ class Session:
                 new_struct._fields[target.field] = value
                 ws.set(target.target.name, new_struct)
                 return value
+            # Octave compat: s.x = 1 when s is a non-struct replaces s with a struct
+            if isinstance(target.target, Identifier) and ws.has(target.target.name):
+                existing = ws.get(target.target.name)
+                if not isinstance(existing, ForgeStruct):
+                    from forge.engine.classdef import ForgeObject
+                    if not isinstance(existing, ForgeObject):
+                        new_struct = ForgeStruct()
+                        new_struct._fields[target.field] = value
+                        ws.set(target.target.name, new_struct)
+                        return value
             # Auto-create nested structs: s.a.b.c = val
             if isinstance(target.target, FieldAccess):
                 self._ensure_nested_struct(target.target, ws)
