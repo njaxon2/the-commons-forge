@@ -902,6 +902,10 @@ class ForgeMainWindow(QMainWindow):
         self.act_cloud_burst.triggered.connect(self._show_cloud_burst_interest)
         help_menu.addAction(self.act_cloud_burst)
         help_menu.addSeparator()
+        act_git_demo = QAction("Git Features Demo...", self)
+        act_git_demo.triggered.connect(self._launch_git_demo)
+        help_menu.addAction(act_git_demo)
+
         act_tiga = QAction("Load TIGA Demo Bookmarks", self)
         act_tiga.triggered.connect(self._load_tiga_demo)
         help_menu.addAction(act_tiga)
@@ -1203,12 +1207,12 @@ class ForgeMainWindow(QMainWindow):
         self._mode_indicator.setToolTip("Current editor mode")
         self.statusBar().addPermanentWidget(self._mode_indicator)
 
-        # ---- LSP / Engine Connection Status ----
-        self._connection_status = QLabel("● Disconnected")
+        # ---- TheCommons Connection Status ----
+        self._connection_status = QLabel("● Checking...")
         self._connection_status.setStyleSheet(
-            "QLabel { color: #e74c3c; font-size: 11px; padding: 1px 6px; }"
+            "QLabel { color: #a6adc8; font-size: 11px; padding: 1px 6px; }"
         )
-        self._connection_status.setToolTip("LSP / Engine connection status")
+        self._connection_status.setToolTip("TheCommons service connection (updates + telemetry)")
         self.statusBar().addPermanentWidget(self._connection_status)
 
         # ---- Notification Bell ----
@@ -1977,6 +1981,10 @@ class ForgeMainWindow(QMainWindow):
         logging.basicConfig(level=logging.WARNING)
 
         self._available_update_version = None
+        self._connection_status.setText("● Connected")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #a6e3a1; font-size: 11px; padding: 1px 6px; }")
+        self._connection_status.setToolTip("TheCommons: connected, up to date")
         self._update_worker = None
         # Load auto-update preference
         s = self._settings()
@@ -2017,6 +2025,10 @@ class ForgeMainWindow(QMainWindow):
             f"Forge v{version} is available — Help > Update Available to install",
             0,
         )
+        self._connection_status.setText("● Connected")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #a6e3a1; font-size: 11px; padding: 1px 6px; }")
+        self._connection_status.setToolTip("TheCommons: update available")
 
     def _on_update_not_available(self):
         # Close progress dialog if open
@@ -2027,10 +2039,17 @@ class ForgeMainWindow(QMainWindow):
         self.act_check_updates.setText("Check for &Updates...")
         self.act_check_updates.setData(None)
         self._available_update_version = None
+        self._connection_status.setText("● Connected")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #a6e3a1; font-size: 11px; padding: 1px 6px; }")
+        self._connection_status.setToolTip("TheCommons: connected, up to date")
 
     def _on_update_check_failed(self, error):
         """Handle update check failure silently (log only)."""
-        pass  # logged in UpdateChecker already
+        self._connection_status.setText("● Offline")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #fab387; font-size: 11px; padding: 1px 6px; }")
+        self._connection_status.setToolTip("TheCommons: unable to connect")
 
     def _check_for_updates(self):
         """Handle click on the update menu item."""
@@ -2095,6 +2114,10 @@ class ForgeMainWindow(QMainWindow):
         self.act_check_updates.setEnabled(True)
         self.act_check_updates.setText("Check for &Updates...")
         self._available_update_version = None
+        self._connection_status.setText("● Connected")
+        self._connection_status.setStyleSheet(
+            "QLabel { color: #a6e3a1; font-size: 11px; padding: 1px 6px; }")
+        self._connection_status.setToolTip("TheCommons: connected, up to date")
         self.set_status("Update complete — restart Forge to apply")
 
         reply = QMessageBox.information(
@@ -2598,6 +2621,119 @@ class ForgeMainWindow(QMainWindow):
             tb = dock.titleBarWidget()
             if isinstance(tb, _DockTitleBar):
                 tb._apply_theme()
+
+
+    def _launch_git_demo(self):
+        import tempfile, subprocess, shutil
+        from PySide6.QtWidgets import QMessageBox, QDockWidget
+
+        demo_dir = os.path.join(tempfile.gettempdir(), "forge_git_demo")
+        try:
+            if os.path.exists(demo_dir):
+                shutil.rmtree(demo_dir, ignore_errors=True)
+            os.makedirs(demo_dir, exist_ok=True)
+
+            def _git(*args):
+                subprocess.run(
+                    ["git"] + list(args),
+                    cwd=demo_dir, capture_output=True, text=True, timeout=10
+                )
+
+            _git("init")
+            _git("config", "user.name", "Demo")
+            _git("config", "user.email", "demo@forge")
+
+            with open(os.path.join(demo_dir, "signal_demo.m"), "w") as f:
+                f.write("% Signal Processing Demo" + chr(10)
+                        + "t = 0:0.001:1;" + chr(10)
+                        + "x = sin(2*pi*50*t) + 0.5*sin(2*pi*120*t);" + chr(10)
+                        + "plot(t, x);" + chr(10)
+                        + "title('Mixed Signal');" + chr(10))
+
+            with open(os.path.join(demo_dir, "matrix_ops.m"), "w") as f:
+                f.write("% Matrix Operations" + chr(10)
+                        + "A = [1 2; 3 4];" + chr(10)
+                        + "[V, D] = eig(A);" + chr(10)
+                        + "disp(V); disp(D);" + chr(10))
+
+            with open(os.path.join(demo_dir, "README.md"), "w") as f:
+                f.write("# Forge Git Demo" + chr(10) + chr(10)
+                        + "This repository demonstrates the Git panel features "
+                        + "in Forge IDE." + chr(10))
+
+            _git("add", "-A")
+            _git("commit", "-m", "Initial commit: add signal and matrix demos")
+
+            _git("checkout", "-b", "feature/filter-design")
+
+            with open(os.path.join(demo_dir, "filter_design.m"), "w") as f:
+                f.write("% Butterworth Filter Design" + chr(10)
+                        + "[b, a] = butter(4, 0.3);" + chr(10)
+                        + "freqz(b, a);" + chr(10)
+                        + "title('Butterworth Response');" + chr(10))
+
+            with open(os.path.join(demo_dir, "signal_demo.m"), "a") as f:
+                f.write("xlabel('Time (s)');" + chr(10)
+                        + "ylabel('Amplitude');" + chr(10))
+
+            _git("add", "-A")
+            _git("commit", "-m", "Add Butterworth filter design")
+
+            _git("checkout", "master")
+            _git("checkout", "-b", "feature/statistics")
+
+            with open(os.path.join(demo_dir, "stats_demo.m"), "w") as f:
+                f.write("% Statistics Demo" + chr(10)
+                        + "data = randn(1000, 1);" + chr(10)
+                        + "mu = mean(data);" + chr(10)
+                        + "sigma = std(data);" + chr(10)
+                        + "histogram(data, 30);" + chr(10))
+
+            _git("add", "-A")
+            _git("commit", "-m", "Add statistics demo")
+
+            _git("checkout", "master")
+            _git("merge", "feature/filter-design", "--no-edit")
+
+            with open(os.path.join(demo_dir, "new_file.m"), "w") as f:
+                f.write("% Uncommitted new file" + chr(10)
+                        + "disp('hello');" + chr(10))
+            with open(os.path.join(demo_dir, "README.md"), "a") as f:
+                f.write(chr(10) + "## Explore the Git Panel" + chr(10)
+                        + "- Changes tab: See modified, added, untracked files" + chr(10)
+                        + "- History tab: Visual branch graph" + chr(10)
+                        + "- Commit bar: Stage and commit changes" + chr(10)
+                        + "- Remote button: Configure remotes" + chr(10))
+
+            if hasattr(self, 'file_browser_widget'):
+                self.file_browser_widget._set_root(demo_dir)
+
+            for dock in self.findChildren(QDockWidget):
+                if "Git" in dock.windowTitle():
+                    dock.setVisible(True)
+                    dock.raise_()
+                    break
+
+            if hasattr(self, 'git_panel'):
+                self.git_panel.set_cwd(demo_dir)
+
+            self.set_status("Git demo loaded -- explore Changes and History tabs")
+            QMessageBox.information(
+                self, "Git Demo Ready",
+                "A sample repository has been created with:" + chr(10) + chr(10)
+                + chr(8226) + " 3 commits across 2 feature branches" + chr(10)
+                + chr(8226) + " Merged branch history visible in History tab" + chr(10)
+                + chr(8226) + " Uncommitted changes to explore in Changes tab"
+                + chr(10) + chr(10)
+                + "Open the Git panel to see the visual branch graph, "
+                + "file diffs, and staging area.",
+            )
+
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Git Demo Error",
+                "Could not create demo repository:" + chr(10) + str(e)
+            )
 
     def _load_tiga_demo(self):
         """Load the TIGA IGA codebase with guided bookmarks."""
