@@ -429,7 +429,12 @@ class Session:
                       'round','fix','sign','real','imag','conj','angle']:
             np_name = _np_name_map.get(name, name)
             fn = getattr(np, np_name, None) or getattr(np, name)
-            b[name] = lambda *a, f=fn: ForgeArray(f(_unwrap(a[0])))
+            def _make_math(f, nm):
+                def _fn(*a):
+                    if not a: raise ValueError(f"{nm} requires at least 1 argument")
+                    return ForgeArray(f(_unwrap(a[0])))
+                return _fn
+            b[name] = _make_math(fn, name)
 
         # Add docstrings to math functions
         _docs = {'abs': 'Absolute value. Usage: abs(X)', 'sqrt': 'Square root. Usage: sqrt(X)',
