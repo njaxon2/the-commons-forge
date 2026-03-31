@@ -3779,7 +3779,7 @@ class ForgeSession:
                 if isinstance(result, ForgeArray):
                     return result.data
                 return np.atleast_2d(result)
-            return ForgeArray(_funm(Ad, lambda x: np.vectorize(lambda v: float(fun(ForgeArray(np.float64(v))).data.flat[0]))(x)))
+            return ForgeArray(_funm(Ad, lambda x: np.vectorize(lambda v: complex(fun(ForgeArray(np.atleast_1d(v))).data.flat[0]))(x)))
 
         def forge_lsqminnorm(A, b):
             """lsqminnorm(A, b) — minimum norm least squares."""
@@ -10277,8 +10277,8 @@ class ForgeSession:
             from forge.engine.types import ForgeArray
             from scipy.linalg import schur as _schur
             data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
-            T, U = _schur(data)
-            return ForgeArray(T), ForgeArray(U)
+            T, Z = _schur(data)
+            return ForgeArray(Z), ForgeArray(T)
 
         def forge_hess(A):
             """[P, H] = hess(A) - Hessenberg decomposition."""
@@ -10355,16 +10355,6 @@ class ForgeSession:
                 result = result.real
             return ForgeArray(result)
 
-        def forge_funm(A, func):
-            """funm(A, @f) - general matrix function."""
-            from forge.engine.types import ForgeArray
-            from scipy.linalg import funm as _funm
-            data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
-            if callable(func):
-                result = _funm(data, func)
-                return ForgeArray(result)
-            return ForgeArray(data)
-
         def forge_condest(A):
             """condest(A) - 1-norm condition number estimate."""
             from forge.engine.types import ForgeArray
@@ -10378,7 +10368,6 @@ class ForgeSession:
         session._engine.functions["eigs"] = forge_eigs_fixed
         session._engine.functions["expm"] = forge_expm
         session._engine.functions["logm"] = forge_logm
-        session._engine.functions["funm"] = forge_funm
         session._engine.functions["condest"] = forge_condest
 
         # R118: format, help, doc, lookfor, version, date functions

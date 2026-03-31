@@ -335,8 +335,12 @@ def _forge_eig_full(A, B=None):
     return ForgeArray(vecs), ForgeArray(np.diag(vals))
 
 def _forge_svd(A):
-    U, s, Vt = np.linalg.svd(_unwrap(A), full_matrices=True)
-    return ForgeArray(U), ForgeArray(np.diag(s)), ForgeArray(Vt)
+    Ad = _unwrap(A)
+    U, s, Vt = np.linalg.svd(Ad, full_matrices=True)
+    m, n = Ad.shape
+    S = np.zeros((m, n))
+    S[:len(s), :len(s)] = np.diag(s)
+    return ForgeArray(U), ForgeArray(S), ForgeArray(Vt.T)
 
 def _forge_lu(A):
     from scipy.linalg import lu as scipy_lu
@@ -348,7 +352,8 @@ def _forge_qr(A):
     return ForgeArray(Q), ForgeArray(R)
 
 def _forge_chol(A):
-    return ForgeArray(np.linalg.cholesky(_unwrap(A)))
+    L = np.linalg.cholesky(_unwrap(A))
+    return ForgeArray(L.T)
 
 def _forge_fft(x, *args):
     n = int(args[0]) if args else None
