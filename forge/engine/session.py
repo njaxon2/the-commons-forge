@@ -536,6 +536,8 @@ class ForgeSession:
             fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
             if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
             fmt = str(fmt)
+            # Process C escape sequences like Octave fprintf
+            fmt = fmt.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r").replace("\\\\", "\\")
             # Convert args with vectorization support
             max_len = 1
             expanded = []
@@ -856,6 +858,35 @@ class ForgeSession:
         self._engine.functions["ode45"] = forge_ode45
         self._engine.functions["ode23"] = forge_ode23
         self._engine.functions["ode15s"] = forge_ode15s
+
+        def forge_ode113(func, tspan, y0, *args):
+            """Solve ODE using high-order DOP853 method (variable-order Adams equivalent)."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeCell
+            import numpy as np
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray):
+                tspan_arr = tspan.data.ravel()
+            else:
+                tspan_arr = np.atleast_1d(np.asarray(tspan, dtype=np.float64))
+            if isinstance(y0, ForgeArray):
+                y0_arr = y0.data.ravel()
+            else:
+                y0_arr = np.atleast_1d(np.asarray(y0, dtype=np.float64))
+            t_eval = tspan_arr if len(tspan_arr) > 2 else None
+            t_span = (float(tspan_arr[0]), float(tspan_arr[-1]))
+            def rhs(t, y):
+                t_fa = ForgeArray(np.float64(t))
+                y_fa = ForgeArray(np.array(y, dtype=np.float64).reshape(-1, 1))
+                result = func(t_fa, y_fa)
+                if isinstance(result, ForgeArray):
+                    return result.data.ravel()
+                return np.asarray(result, dtype=np.float64).ravel()
+            sol = solve_ivp(rhs, t_span, y0_arr.astype(np.float64),
+                           method='DOP853', t_eval=t_eval, rtol=1e-10, atol=1e-12)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
+        self._engine.functions["ode113"] = forge_ode113
         self._engine.functions["odeset"] = forge_odeset
 
         # Optimization functions (R98)
@@ -3211,6 +3242,28 @@ class ForgeSession:
                           t_eval=t_eval, rtol=1e-3, atol=1e-6)
             return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
 
+
+        def forge_ode113(odefun, tspan, y0, *args):
+            """[t, y] = ode113(odefun, tspan, y0) -- solve ODE with DOP853 (high-order)."""
+            from forge.engine.types import ForgeArray
+            from scipy.integrate import solve_ivp
+            if isinstance(tspan, ForgeArray): tspan = tspan.data.flatten()
+            if isinstance(y0, ForgeArray): y0 = y0.data.flatten()
+            t0, tf = float(tspan[0]), float(tspan[-1])
+            t_eval = None
+            if len(tspan) > 2:
+                t_eval = tspan.astype(float)
+            def rhs(t, y):
+                yt = ForgeArray(y.reshape(-1, 1))
+                tt = ForgeArray(np.float64(t))
+                result = odefun(tt, yt)
+                if isinstance(result, ForgeArray):
+                    return result.data.flatten()
+                return np.array(result).flatten()
+            sol = solve_ivp(rhs, [t0, tf], y0.astype(float), method="DOP853",
+                          t_eval=t_eval, rtol=1e-10, atol=1e-12)
+            return ForgeArray(sol.t.reshape(-1, 1)), ForgeArray(sol.y.T)
+
         def forge_odeset(*args):
             """opts = odeset('Name', Value, ...) — ODE options (stub)."""
             from forge.engine.containers import ForgeStruct, ForgeChar
@@ -3485,6 +3538,7 @@ class ForgeSession:
         session._engine.functions["ode23"] = forge_ode23
         session._engine.functions["ode15s"] = forge_ode15s
         session._engine.functions["ode23s"] = forge_ode23s
+        session._engine.functions["ode113"] = forge_ode113
         session._engine.functions["odeset"] = forge_odeset
         session._engine.functions["odeget"] = forge_odeget
         session._engine.functions["fzero"] = forge_fzero
@@ -3525,7 +3579,7 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             if isinstance(fname, ForgeChar): fname = fname.to_str()
             data = M.data if isinstance(M, ForgeArray) else np.atleast_2d(M)
-            np.savetxt(fname, data, delimiter=',')
+            np.savetxt(fname, data, delimiter=',', fmt='%.6g')
 
         def forge_dlmread(fname, *args):
             """dlmread(fname, delim) — read delimited file."""
@@ -3547,7 +3601,7 @@ class ForgeSession:
             delim = ','
             if args and isinstance(args[0], ForgeChar):
                 delim = args[0].to_str()
-            np.savetxt(fname, data, delimiter=delim)
+            np.savetxt(fname, data, delimiter=delim, fmt='%.6g')
 
         def forge_fileread(fname):
             """fileread(fname) — read entire file as string."""
@@ -5574,6 +5628,8 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
             if isinstance(fmt, ForgeChar): fmt = fmt.to_str()
+            # Process C escape sequences (like Octave sprintf)
+            fmt = fmt.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r").replace("\\\\", "\\")
             # Check if any arg is a multi-element array (vectorized sprintf)
             max_len = 1
             expanded = []
@@ -6759,7 +6815,7 @@ class ForgeSession:
             if isinstance(tbl, ForgeStruct) and "data" in tbl._fields:
                 data = tbl._fields["data"]
                 if isinstance(data, ForgeArray):
-                    np.savetxt(fname, data.data, delimiter=',')
+                    np.savetxt(fname, data.data, delimiter=',', fmt='%.6g')
 
         def forge_height2(x):
             """height(x) — number of rows."""

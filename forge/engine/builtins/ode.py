@@ -65,6 +65,9 @@ def _solve_ode_common(odefun, tspan, y0, method, options=None):
     """
     from scipy.integrate import solve_ivp
 
+    # Unwrap ForgeArray to raw numpy before np.asarray
+    if hasattr(tspan, 'data'): tspan = tspan.data
+    if hasattr(y0, 'data'): y0 = y0.data
     tspan = np.asarray(tspan, dtype=np.float64).ravel()
     t0, tf = float(tspan[0]), float(tspan[-1])
     y0_arr = np.asarray(y0, dtype=np.float64).ravel()
@@ -163,6 +166,20 @@ def forge_ode23s(fun, tspan, y0, options=None):
     """
     return _solve_ode_common(fun, tspan, y0, method='Radau', options=options)
 
+
+
+@_tb("ode113")
+def forge_ode113(fun, tspan, y0, options=None):
+    """Solve non-stiff ODE using variable-order method.
+
+    [t, y] = ode113(fun, tspan, y0)
+    [t, y] = ode113(fun, tspan, y0, options)
+
+    Uses DOP853 (8th-order Dormand-Prince) as the SciPy equivalent of
+    MATLAB variable-order Adams-Bashforth-Moulton method.
+    Best when function evaluations are expensive.
+    """
+    return _solve_ode_common(fun, tspan, y0, method="DOP853", options=options)
 
 @_tb("ode15i")
 def forge_ode15i(odefun, tspan, y0, yp0, options=None):

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forge-ide"
-version = "0.2.2"
+version = "0.2.3"
 description = "Octave-compatible numerical computing environment with PySide6 GUI"
 readme = "README.md"
 license = {text = "Apache-2.0"}
