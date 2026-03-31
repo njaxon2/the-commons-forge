@@ -940,6 +940,9 @@ def forge_regexp(s, pat, *args):
         pat = pat.to_str()
     s, pat = str(s), str(pat)
 
+    # Convert Octave/PCRE named groups (?<name>...) to Python (?P<name>...)
+    pat = re.sub(r'\(\?<(?!P)', '(?P<', pat)
+
     # Parse output options
     out_types = []
     for a in args:
@@ -971,15 +974,20 @@ def forge_regexp(s, pat, *args):
         return ForgeCell(result) if result else ForgeCell([])
     elif "names" in out_types:
         from forge.engine.containers import ForgeStruct
-        result = []
-        for m in matches:
-            d = m.groupdict()
-            if d:
-                st = ForgeStruct()
-                for k, v in d.items():
-                    st._fields[k] = ForgeChar(v if v else "")
-                result.append(st)
-        return ForgeCell(result) if result else ForgeCell([])
+        if not matches:
+            # Return empty struct with named group keys from pattern
+            st = ForgeStruct()
+            import re as _re
+            for gname in _re.compile(pat).groupindex:
+                st._fields[gname] = ForgeChar("")
+            return st
+        # Return struct from first match (Octave returns scalar struct)
+        m = matches[0]
+        d = m.groupdict()
+        st = ForgeStruct()
+        for k, v in d.items():
+            st._fields[k] = ForgeChar(v if v else "")
+        return st
     else:
         if not matches:
             return ForgeArray(np.array([], dtype=np.float64))

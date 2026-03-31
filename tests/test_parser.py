@@ -141,10 +141,10 @@ class TestPrecedence:
         assert isinstance(e, BinaryOp) and e.op == "*"
         assert isinstance(e.left, BinaryOp) and e.left.op == "+"
 
-    def test_power_right_associative(self):
+    def test_power_left_associative(self):
         e = expr("a ^ b ^ c")
         assert isinstance(e, BinaryOp) and e.op == "^"
-        assert isinstance(e.right, BinaryOp) and e.right.op == "^"
+        assert isinstance(e.left, BinaryOp) and e.left.op == "^"
 
     def test_comparison_lower_than_arithmetic(self):
         e = expr("a + b == c * d")

@@ -151,8 +151,8 @@ class TestEdgeCases:
 
     def test_power_precedence(self, s):
         r = s.eval("2^3^2")
-        # In Octave, ^ is right-associative: 2^(3^2) = 2^9 = 512
-        assert "512" in str(r)
+        # In Octave, ^ is left-associative: (2^3)^2 = 8^2 = 64
+        assert "64" in str(r)
 
     def test_unary_minus_power(self, s):
         r = s.eval("-2^2")

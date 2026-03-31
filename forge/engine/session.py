@@ -663,13 +663,23 @@ class ForgeSession:
 
         def forge_fseek(fid, offset, origin=None):
             from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
             import numpy as np
             fid_val = int(float(fid.data.flat[0]) if isinstance(fid, ForgeArray) else float(fid))
             offset = int(float(offset.data.flat[0]) if isinstance(offset, ForgeArray) else float(offset))
             whence = 0
             if origin is not None:
-                ov = int(float(origin.data.flat[0]) if isinstance(origin, ForgeArray) else float(origin))
-                whence = {-1: 0, 0: 1, 1: 2}.get(ov, ov)
+                if isinstance(origin, ForgeChar):
+                    origin_str = origin.to_str().strip().lower()
+                elif isinstance(origin, str):
+                    origin_str = origin.strip().lower()
+                else:
+                    origin_str = None
+                if origin_str is not None:
+                    whence = {"bof": 0, "cof": 1, "eof": 2}.get(origin_str, 0)
+                else:
+                    ov = int(float(origin.data.flat[0]) if isinstance(origin, ForgeArray) else float(origin))
+                    whence = {-1: 0, 0: 1, 1: 2}.get(ov, ov)
             if fid_val in session._file_handles:
                 session._file_handles[fid_val].seek(offset, whence)
                 return ForgeArray(np.float64(0))
@@ -6245,30 +6255,62 @@ class ForgeSession:
 
         # --- File I/O ---
         def forge_fwrite(fid, data, *args):
-            """fwrite(fid, data) — write binary data."""
+            """fwrite(fid, data, precision) — write binary data to file handle."""
             from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
             fd = int(fid.data.flat[0]) if isinstance(fid, ForgeArray) else int(fid)
             d = data.data if isinstance(data, ForgeArray) else np.atleast_2d(data)
-            with open(os.path.join(tempfile.gettempdir(), f'forge_fid_{fd}'), 'ab') as f:
-                d.tofile(f)
-            return ForgeArray(np.float64(d.size))
+            # Parse precision
+            dtype = np.float64
+            if args:
+                prec = args[0]
+                if isinstance(prec, ForgeChar): prec = prec.to_str()
+                prec = str(prec).strip()
+                dtype_map = {"double": np.float64, "single": np.float32, "float": np.float32,
+                             "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
+                             "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
+                             "char": np.uint8, "uchar": np.uint8}
+                dtype = dtype_map.get(prec, np.float64)
+            if fd in session._file_handles:
+                fh = session._file_handles[fd]
+                d.astype(dtype).tofile(fh)
+                fh.flush()
+                return ForgeArray(np.float64(d.size))
+            return ForgeArray(np.float64(0))
 
         def forge_fread(fid, *args):
-            """fread(fid, size) — read binary data."""
+            """fread(fid, size, precision) — read binary data from file handle."""
             from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            import numpy as np
             fd = int(fid.data.flat[0]) if isinstance(fid, ForgeArray) else int(fid)
             count = -1
-            if args and isinstance(args[0], ForgeArray):
-                count = int(args[0].data.flat[0])
-            try:
-                with open(os.path.join(tempfile.gettempdir(), f'forge_fid_{fd}'), 'rb') as f:
+            dtype = np.float64
+            if args:
+                a0 = args[0]
+                if isinstance(a0, ForgeArray):
+                    count = int(a0.data.flat[0])
+                if len(args) > 1:
+                    prec = args[1]
+                    if isinstance(prec, ForgeChar): prec = prec.to_str()
+                    prec = str(prec).strip()
+                    dtype_map = {"double": np.float64, "single": np.float32, "float": np.float32,
+                                 "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
+                                 "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
+                                 "char": np.uint8, "uchar": np.uint8}
+                    dtype = dtype_map.get(prec, np.float64)
+            if fd in session._file_handles:
+                fh = session._file_handles[fd]
+                try:
                     if count > 0:
-                        data = np.fromfile(f, dtype=np.float64, count=count)
+                        data = np.fromfile(fh, dtype=dtype, count=count)
                     else:
-                        data = np.fromfile(f, dtype=np.float64)
-                return ForgeArray(data.reshape(-1, 1))
-            except Exception:
-                return ForgeArray(np.array([[]]))
+                        data = np.fromfile(fh, dtype=dtype)
+                    return ForgeArray(data.astype(np.float64).reshape(-1, 1))
+                except Exception:
+                    return ForgeArray(np.array([[]]))
+            return ForgeArray(np.array([[]]))
 
         # Register all R146b functions
         session._engine.functions["chirp"] = forge_chirp

@@ -1327,7 +1327,11 @@ class Session:
         if isinstance(node, CellIndex):
             target = self._eval_expr(node.target, ws)
             if isinstance(target, ForgeCell):
-                args = [_to_int(self._eval_expr(a, ws)) for a in node.args]
+                self._index_sizes.append(target.numel())
+                try:
+                    args = [_to_int(self._eval_expr(a, ws)) for a in node.args]
+                finally:
+                    self._index_sizes.pop()
                 return target.content_get(*args)
             raise TypeError("Cell indexing on non-cell")
 
@@ -1809,6 +1813,9 @@ class Session:
             return value
 
         if isinstance(target, Identifier):
+            # Value semantics: copy ForgeArray to prevent aliasing (B = A)
+            if isinstance(value, ForgeArray) and not isinstance(value, ForgeChar):
+                value = value.copy()
             ws.set(target.name, value)
             return value
 
@@ -1842,6 +1849,55 @@ class Session:
                         self._index_sizes.pop()
             assign_val = _unwrap(value) if isinstance(value, ForgeArray) else value
             if isinstance(arr, ForgeArray):
+                # --- Deletion: A(idx) = [] or A(row,:) = [] ---
+                _is_empty_rhs = (isinstance(assign_val, np.ndarray) and assign_val.size == 0)
+                if _is_empty_rhs:
+                    data = arr.data
+                    if len(args) == 1:
+                        # A([2 4]) = [] -> delete elements, result is row vector
+                        idx = args[0]
+                        if isinstance(idx, ForgeArray):
+                            raw_idx = _unwrap(idx).astype(int).ravel() - 1
+                        elif idx is None:
+                            # A(:) = [] -> delete all
+                            raw_idx = np.arange(data.size)
+                        else:
+                            raw_idx = np.array([int(_to_py(idx)) - 1])
+                        flat = data.ravel(order='F')
+                        new_flat = np.delete(flat, raw_idx)
+                        if new_flat.size == 0:
+                            arr._data = np.zeros((0, 0))
+                        else:
+                            arr._data = new_flat.reshape(1, -1)
+                        if target_name:
+                            ws.set(target_name, arr)
+                        return value
+                    elif len(args) == 2:
+                        # A(2,:) = [] -> delete row(s); A(:,2) = [] -> delete col(s)
+                        row_arg, col_arg = args
+                        if col_arg is None and row_arg is not None:
+                            # A(idx,:) = [] -> delete rows
+                            if isinstance(row_arg, ForgeArray):
+                                rows_to_del = _unwrap(row_arg).astype(int).ravel() - 1
+                            else:
+                                rows_to_del = np.array([int(_to_py(row_arg)) - 1])
+                            arr._data = np.delete(data, rows_to_del, axis=0)
+                            if target_name:
+                                ws.set(target_name, arr)
+                            return value
+                        elif row_arg is None and col_arg is not None:
+                            # A(:,idx) = [] -> delete columns
+                            if isinstance(col_arg, ForgeArray):
+                                cols_to_del = _unwrap(col_arg).astype(int).ravel() - 1
+                            else:
+                                cols_to_del = np.array([int(_to_py(col_arg)) - 1])
+                            arr._data = np.delete(data, cols_to_del, axis=1)
+                            if target_name:
+                                ws.set(target_name, arr)
+                            return value
+                        else:
+                            raise ValueError("A null assignment can have only one non-colon index")
+                # --- End deletion ---
                 data = arr.data
                 if len(args) == 1:
                     idx = args[0]
@@ -2027,7 +2083,11 @@ class Session:
         if isinstance(target, CellIndex):
             obj = self._eval_expr(target.target, ws)
             if isinstance(obj, ForgeCell):
-                args = [_to_py(self._eval_expr(a, ws)) for a in target.args]
+                self._index_sizes.append(obj.numel())
+                try:
+                    args = [_to_py(self._eval_expr(a, ws)) for a in target.args]
+                finally:
+                    self._index_sizes.pop()
                 obj.content_set(value, *args)
             return value
 

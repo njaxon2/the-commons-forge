@@ -776,8 +776,8 @@ class Parser:
         tok = self._advance()
         tt = tok.type
 
-        # Right-associative for power
-        right_prec = prec if tt not in (TokenType.POWER, TokenType.DOT_POWER) else prec - 1
+        # Left-associative for power (matches Octave: 2^3^2 = (2^3)^2 = 64)
+        right_prec = prec
 
         # Colon is special: a:b or a:b:c
         if tt == TokenType.COLON:
