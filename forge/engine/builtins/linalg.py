@@ -117,9 +117,17 @@ def forge_subspace(A, B):
     return _wrap(np.arccos(min(s.min(), 1.0)))
 
 def forge_vecnorm(x, *args):
-    xd = _unwrap(x).ravel()
+    xd = _unwrap(x)
     p = float(_scalar(args[0])) if args else 2
-    return _wrap(la.norm(xd, p))
+    dim = int(_scalar(args[1])) if len(args) > 1 else None
+    is_vec = (xd.ndim < 2) or (xd.ndim == 2 and min(xd.shape) == 1)
+    if is_vec:
+        return _wrap(la.norm(xd.ravel(), p))
+    # Default: column-wise norms (dim=1 in Octave)
+    if dim is None or dim == 1:
+        return ForgeArray(np.array([la.norm(xd[:, j], p) for j in range(xd.shape[1])]))
+    else:
+        return ForgeArray(np.array([la.norm(xd[i, :], p) for i in range(xd.shape[0])]))
 
 def forge_vech(A):
     Ad = _unwrap(A)
@@ -359,6 +367,64 @@ def _forge_ifft2(x):
     return ForgeArray(np.fft.ifft2(_unwrap(x)))
 
 
+def _forge_dot(a, b):
+    """Dot product. For vectors: scalar. For matrices: column-wise dot products."""
+    ad, bd = _unwrap(a), _unwrap(b)
+    a_is_vec = (ad.ndim < 2) or (ad.ndim == 2 and min(ad.shape) == 1)
+    b_is_vec = (bd.ndim < 2) or (bd.ndim == 2 and min(bd.shape) == 1)
+    if a_is_vec and b_is_vec:
+        return ForgeArray(np.array(np.dot(ad.ravel(), bd.ravel())))
+    # Column-wise dot product for true matrices
+    result = np.sum(ad * bd, axis=0)
+    return ForgeArray(result.ravel())
+
+def _forge_normalize(x, *args):
+    """normalize(A) -- normalize columns to unit norm. normalize(A, 'range') for [0,1]."""
+    xd = _unwrap(x).astype(float)
+    method = "norm"
+    if args:
+        a0 = args[0]
+        if hasattr(a0, "to_str"):
+            method = a0.to_str().strip()
+        elif isinstance(a0, str):
+            method = a0
+    is_vec = (xd.ndim < 2) or (xd.ndim == 2 and min(xd.shape) == 1)
+    if is_vec:
+        xd = xd.ravel()
+    if method == "range":
+        if is_vec:
+            mn, mx = xd.min(), xd.max()
+            if mx - mn == 0:
+                return ForgeArray(np.zeros_like(xd))
+            return ForgeArray((xd - mn) / (mx - mn))
+        mn = xd.min(axis=0)
+        mx = xd.max(axis=0)
+        rng = mx - mn
+        rng[rng == 0] = 1
+        return ForgeArray((xd - mn) / rng)
+    elif method == "center":
+        if is_vec:
+            return ForgeArray(xd - np.mean(xd))
+        return ForgeArray(xd - np.mean(xd, axis=0))
+    elif method == "zscore":
+        if is_vec:
+            mu, s = np.mean(xd), np.std(xd, ddof=1)
+            if s == 0: s = 1
+            return ForgeArray((xd - mu) / s)
+        mu = np.mean(xd, axis=0)
+        s = np.std(xd, axis=0, ddof=1)
+        s[s == 0] = 1
+        return ForgeArray((xd - mu) / s)
+    else:
+        if is_vec:
+            n = la.norm(xd)
+            if n == 0:
+                return ForgeArray(xd)
+            return ForgeArray(xd / n)
+        norms = la.norm(xd, axis=0)
+        norms[norms == 0] = 1
+        return ForgeArray(xd / norms)
+
 
 LINALG_REGISTRY = {
     "cond": forge_cond, "rank": forge_rank, "trace": forge_trace,
@@ -378,4 +444,5 @@ LINALG_REGISTRY = {
     "svd": _forge_svd, "lu": _forge_lu, "qr": _forge_qr,
     "chol": _forge_chol, "fft": _forge_fft, "ifft": _forge_ifft,
     "fft2": _forge_fft2, "ifft2": _forge_ifft2,
+    "dot": _forge_dot, "normalize": _forge_normalize,
 }

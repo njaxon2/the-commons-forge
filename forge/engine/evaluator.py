@@ -1840,6 +1840,17 @@ class Session:
 
     def _exec_for(self, node: ForStatement, ws: Workspace) -> Any:
         iter_val = self._eval_expr(node.iter_expr, ws)
+        # R09: Handle cell array iteration: for i = {1,2,3}, each element
+        if isinstance(iter_val, ForgeCell):
+            for idx in range(iter_val.numel()):
+                ws.set(node.var, iter_val._data[idx])
+                try:
+                    self._exec_stmts(node.body, ws)
+                except BreakSignal:
+                    break
+                except ContinueSignal:
+                    continue
+            return None
         data = _unwrap(iter_val)
         if data.ndim >= 2:
             # Iterate over columns

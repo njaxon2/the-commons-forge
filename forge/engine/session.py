@@ -1602,25 +1602,39 @@ class ForgeSession:
             raise ForgeError(identifier, msg)
 
         def forge_warning(msg, *args):
-            """warning(msg) - print warning."""
+            """warning(id, fmt, ...) or warning(fmt, ...) or warning(msg)."""
             from forge.engine.containers import ForgeChar
             from forge.engine.types import ForgeArray
-            import warnings
             if isinstance(msg, ForgeChar):
                 msg = msg.to_str()
+            # Detect warning ID: if first arg contains ':' and there are more args,
+            # treat it as warning(id, fmt, ...) per Octave convention
+            warn_id = ''
+            if args and ':' in str(msg):
+                warn_id = msg
+                fmt_arg = args[0]
+                if isinstance(fmt_arg, ForgeChar):
+                    msg = fmt_arg.to_str()
+                elif isinstance(fmt_arg, ForgeArray):
+                    msg = str(fmt_arg.data.flat[0])
+                else:
+                    msg = str(fmt_arg)
+                args = args[1:]
             if args:
                 conv_args = []
                 for a in args:
-                    if isinstance(a, ForgeArray):
-                        conv_args.append(a.data.flat[0])
-                    elif isinstance(a, ForgeChar):
+                    if isinstance(a, ForgeChar):
                         conv_args.append(a.to_str())
+                    elif isinstance(a, ForgeArray):
+                        conv_args.append(a.data.flat[0])
                     else:
                         conv_args.append(a)
-                msg = msg % tuple(conv_args)
-            import sys
-            print(f"warning: {msg}", file=sys.stderr)
-            return None  # format command produces no output
+                try:
+                    msg = msg % tuple(conv_args)
+                except (TypeError, ValueError):
+                    pass  # if formatting fails, use raw message
+            session._engine.output_buffer.write("warning: " + msg + chr(10))
+            return None
 
         def forge_assert(*args):
             """assert(cond) or assert(obs, exp) or assert(obs, exp, tol)."""
