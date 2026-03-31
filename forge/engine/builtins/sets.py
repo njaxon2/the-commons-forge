@@ -46,10 +46,24 @@ def forge_setxor(a, b):
     return _wrap(np.setxor1d(va, vb).ravel())
 
 
-def forge_unique(x):
-    """Unique elements of array, sorted."""
-    v = np.asarray(_unwrap(x)).ravel()
-    return _wrap(np.unique(v).ravel())
+def forge_unique(x, *args):
+    """Unique elements of array, sorted.  unique(x, 'rows') for row-unique."""
+    from forge.engine.containers import ForgeChar
+    opts = []
+    for a in args:
+        if isinstance(a, ForgeChar):
+            opts.append(str(a).lower())
+        elif isinstance(a, str):
+            opts.append(a.lower())
+    data = np.asarray(_unwrap(x))
+    if 'rows' in opts:
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        u = np.unique(data, axis=0)
+        return _wrap(u)
+    v = data.ravel()
+    C = np.unique(v)
+    return _wrap(C.ravel())
 
 
 def forge_ismember(a, b):

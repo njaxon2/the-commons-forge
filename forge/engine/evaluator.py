@@ -401,7 +401,13 @@ def _cat_builtin(dim, *arrays):
                 processed.append(a)
         result = np.hstack(processed)
     else:
-        result = np.concatenate(np_arrays, axis=dim)
+        # Expand arrays to have enough dimensions for the target axis
+        expanded = []
+        for a in np_arrays:
+            while a.ndim <= dim:
+                a = np.expand_dims(a, axis=-1)
+            expanded.append(a)
+        result = np.concatenate(expanded, axis=dim)
 
     return ForgeArray(result)
 

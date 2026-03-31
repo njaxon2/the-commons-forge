@@ -58,6 +58,9 @@ def _ensure_float(x):
 
 
 def _scalar(x):
+    from forge.engine.containers import ForgeChar
+    if isinstance(x, ForgeChar):
+        return str(x)
     if isinstance(x, ForgeArray):
         d = x.data if hasattr(x, 'data') else np.asarray(x)
         return d.flat[0].item() if d.size == 1 else d
@@ -231,7 +234,7 @@ def imread(filename, *args):
     return _fa(arr)
 
 
-def imwrite(filename, img, *args):
+def imwrite(img_or_fname, fname_or_img, *args):
     """Write image to file.
 
     imwrite(IMG, FILENAME)
@@ -239,12 +242,21 @@ def imwrite(filename, img, *args):
 
     Parameters
     ----------
-    filename : str — Output file path.
-    img : array — Image data (uint8 or float64 in [0,1]).
+    img_or_fname : array or str — Image data or filename (auto-detected).
+    fname_or_img : str or array — Filename or image data.
     """
     _require_pil()
-    fname = str(_scalar(filename)) if not isinstance(filename, str) else filename
-    data = _unwrap(img)
+    from forge.engine.containers import ForgeChar
+    # Auto-detect argument order: Octave uses imwrite(img, filename)
+    a, b = img_or_fname, fname_or_img
+    if isinstance(a, (str, ForgeChar)):
+        fname, data = str(a) if isinstance(a, ForgeChar) else a, _unwrap(b)
+    elif isinstance(b, (str, ForgeChar)):
+        data, fname = _unwrap(a), str(b) if isinstance(b, ForgeChar) else b
+    else:
+        # Fallback: first arg is filename
+        fname = str(_scalar(a))
+        data = _unwrap(b)
 
     # If float in [0,1], convert to uint8
     if data.dtype.kind == 'f':
@@ -787,6 +799,28 @@ def imgaussfilt(I, sigma=0.5):
     return _fa(gaussian_filter(data, sigma=float(sigma)))
 
 
+
+def imresize(img, scale):
+    """Resize an image matrix.
+
+    B = imresize(A, SCALE) resizes by scalar factor.
+    B = imresize(A, [ROWS COLS]) resizes to specific dimensions.
+    """
+    data = _ensure_float(img)
+    sc = np.asarray(_unwrap(scale) if hasattr(scale, 'data') else scale).ravel()
+    if len(sc) == 1:
+        new_h = int(round(data.shape[0] * float(sc[0])))
+        new_w = int(round(data.shape[1] * float(sc[0])))
+    else:
+        new_h, new_w = int(sc[0]), int(sc[1])
+    from scipy.ndimage import zoom as _zoom
+    if data.ndim == 3:
+        factors = (new_h / data.shape[0], new_w / data.shape[1], 1)
+    else:
+        factors = (new_h / data.shape[0], new_w / data.shape[1])
+    return _fa(_zoom(data, factors))
+
+
 IMAGE_REGISTRY = {
     # ── Colormaps ──────────────────────────────────────────────────
     'autumn':       autumn,
@@ -844,5 +878,6 @@ IMAGE_REGISTRY = {
     'dither':       dither,
     'im2bw':        im2bw,
     'imgaussfilt':  imgaussfilt,
+    'imresize':     imresize,
 }
 

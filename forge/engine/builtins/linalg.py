@@ -431,6 +431,30 @@ def _forge_normalize(x, *args):
         return ForgeArray(xd / norms)
 
 
+
+def _forge_blkdiag(*args):
+    """Block diagonal matrix from input matrices.
+
+    blkdiag(A, B, ...) creates a block diagonal matrix.
+    """
+    from forge.engine.types import ForgeArray, _unwrap
+    mats = []
+    for a in args:
+        d = np.atleast_2d(np.asarray(_unwrap(a) if isinstance(a, ForgeArray) else a, dtype=float))
+        mats.append(d)
+    if not mats:
+        return ForgeArray(np.array([[]]))
+    rows = sum(m.shape[0] for m in mats)
+    cols = sum(m.shape[1] for m in mats)
+    result = np.zeros((rows, cols))
+    r, c = 0, 0
+    for m in mats:
+        result[r:r+m.shape[0], c:c+m.shape[1]] = m
+        r += m.shape[0]
+        c += m.shape[1]
+    return ForgeArray(result)
+
+
 LINALG_REGISTRY = {
     "cond": forge_cond, "rank": forge_rank, "trace": forge_trace,
     "cross": forge_cross, "null": forge_null, "orth": forge_orth,
@@ -450,4 +474,5 @@ LINALG_REGISTRY = {
     "chol": _forge_chol, "fft": _forge_fft, "ifft": _forge_ifft,
     "fft2": _forge_fft2, "ifft2": _forge_ifft2,
     "dot": _forge_dot, "normalize": _forge_normalize,
+    "blkdiag": _forge_blkdiag,
 }
