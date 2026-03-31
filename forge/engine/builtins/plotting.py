@@ -483,6 +483,9 @@ def _prepare_surf_args(*args):
     props = {}
     i = 0
     raw = list(args)
+    # Unpack tuple/list first arg (e.g. surf(peaks(30)) passes a tuple)
+    if len(raw) == 1 and isinstance(raw[0], (tuple, list)):
+        raw = list(raw[0])
     while i < len(raw):
         a = raw[i]
         if isinstance(a, ForgeChar):
@@ -609,9 +612,25 @@ def forge_meshz(*args, **kwargs):
     _enhance_current()
 
 
-def forge_contour(X, Y, Z, *args, **kwargs):
+def forge_contour(*args, **kwargs):
+    """contour(Z), contour(X, Y, Z), contour(..., N), contour(..., levels)"""
+    from forge.engine.types import ForgeArray
     _maybe_clear()
-    _cur_ax().contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
+    # Unpack tuple/list first arg (e.g. contour(peaks(30)) passes a tuple)
+    flat_args = list(args)
+    if len(flat_args) == 1 and isinstance(flat_args[0], (tuple, list)):
+        flat_args = list(flat_args[0])
+    arrays = [_to_np(a) for a in flat_args if hasattr(a, "__array__") or isinstance(a, ForgeArray)]
+    extra = [a for a in flat_args if not (hasattr(a, "__array__") or isinstance(a, ForgeArray))]
+    if len(arrays) == 1:
+        Z = arrays[0]
+        cs = _cur_ax().contour(Z, *extra, **kwargs)
+    elif len(arrays) >= 3:
+        X, Y, Z = arrays[0], arrays[1], arrays[2]
+        cs = _cur_ax().contour(_to_np(X), _to_np(Y), _to_np(Z), *extra, **kwargs)
+    else:
+        raise ValueError("contour requires 1 or 3 array arguments")
+    _cur_fig()._forge_last_mappable = cs
     plt.draw()
     plt.pause(0.01)
     _enhance_current()
@@ -1033,9 +1052,20 @@ def forge_hold(state=None):
 
 def forge_colorbar(**kwargs):
     fig = _cur_fig()
+    ax = _cur_ax()
     mappable = getattr(fig, '_forge_last_mappable', None)
+    if mappable is None:
+        # Try to find a mappable from the current axes images/collections
+        images = ax.get_images()
+        if images:
+            mappable = images[-1]
+        else:
+            for c in ax.collections:
+                if hasattr(c, 'get_array') and c.get_array() is not None:
+                    mappable = c
+                    break
     if mappable is not None:
-        plt.colorbar(mappable, ax=_cur_ax(), **kwargs)
+        plt.colorbar(mappable, ax=ax, **kwargs)
     else:
         plt.colorbar(**kwargs)
     plt.draw()
@@ -1568,6 +1598,7 @@ PLOTTING_REGISTRY = {
     "histogram":    forge_histogram,
     "pie":          forge_pie,
     "polar":        forge_polar,
+    "polarplot":    forge_polar,
     "fill":         forge_fill,
     "line":         forge_line,
     "rectangle":    forge_rectangle,

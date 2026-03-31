@@ -4185,14 +4185,8 @@ class ForgeSession:
 
         def forge_regexp(s, pat, *args):
             """regexp(s, pat) — regular expression matching."""
-            from forge.engine.types import ForgeArray
-            from forge.engine.containers import ForgeChar, ForgeCell
-            import re
-            if isinstance(s, ForgeChar): s = s.to_str()
-            if isinstance(pat, ForgeChar): pat = pat.to_str()
-            matches = list(re.finditer(pat, s))
-            starts = [m.start() + 1 for m in matches]  # 1-based
-            return ForgeArray(np.array(starts).reshape(1, -1) if starts else np.array([[]]))
+            from forge.engine.builtins.strings import forge_regexp as _builtin_regexp
+            return _builtin_regexp(s, pat, *args)
 
         def forge_regexprep(s, pat, rep):
             """regexprep(s, pat, rep) — regex replace."""
@@ -6835,8 +6829,7 @@ class ForgeSession:
         session._engine.functions["quiver"] = forge_quiver_func
         session._engine.functions["patch"] = forge_patch_func
         session._engine.functions["annotation"] = forge_annotation_func
-        session._engine.functions["imshow"] = forge_imshow_func
-        session._engine.functions["image"] = forge_image_func
+        # imshow/image: use builtins (plotting/image modules), not stubs
         session._engine.functions["imread"] = forge_imread_func
         session._engine.functions["imwrite"] = forge_imwrite_func
         session._engine.functions["audioread"] = forge_audioread_func
@@ -8284,15 +8277,8 @@ class ForgeSession:
 
         def forge_regexpi2(s, pat, *args):
             """regexpi(s, pattern) — case-insensitive regexp."""
-            import re
-            from forge.engine.types import ForgeArray
-            from forge.engine.containers import ForgeChar
-            if isinstance(s, ForgeChar): s = s.to_str()
-            if isinstance(pat, ForgeChar): pat = pat.to_str()
-            matches = [m.start() + 1 for m in re.finditer(pat, s, re.IGNORECASE)]
-            if not matches:
-                return ForgeArray(np.array([[]]))
-            return ForgeArray(np.array(matches, dtype=float).reshape(1, -1))
+            from forge.engine.builtins.strings import forge_regexpi as _builtin_regexpi
+            return _builtin_regexpi(s, pat, *args)
 
         def forge_regexptranslate2(op, pat):
             """regexptranslate(op, pattern) — translate pattern."""

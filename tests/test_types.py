@@ -191,9 +191,9 @@ class TestTypeConversion:
 
     def test_int8_overflow(self):
         a = forge_int8([200])
-        # int8 range is -128..127, 200 overflows/wraps
+        # int8 range is -128..127, Octave saturates to 127
         assert a.dtype == np.int8
-        assert a.data.ravel()[0] == np.array(200).astype(np.int8)  # Wraps
+        assert a.data.ravel()[0] == 127  # Saturates (Octave semantics)
 
     def test_uint8_range(self):
         a = forge_uint8([0, 128, 255])

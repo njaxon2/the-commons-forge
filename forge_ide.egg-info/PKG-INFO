@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: forge-ide
-Version: 0.2.2
+Version: 0.2.3
 Summary: Octave-compatible numerical computing environment with PySide6 GUI
 License: Apache-2.0
 Project-URL: Homepage, https://github.com/forge-ide/forge
@@ -42,7 +42,7 @@ Forge aims to provide a free, fully-featured alternative to expensive proprietar
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-1%2C246_passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-1%2C404_passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -53,7 +53,7 @@ Forge aims to provide a free, fully-featured alternative to expensive proprietar
 - **PySide6 desktop GUI** with dockable panels: command window (REPL), code editor with syntax highlighting, file browser, workspace browser, plot figures, documentation viewer, and more
 - **Matplotlib-powered plotting** — 2D/3D plots, subplots, figure management, zoom, pan, and export
 - **MATLAB `.mat` file compatibility** via `scipy.io` for load/save interop
-- **1,246 validated tests** — every function numerically verified against established reference implementations
+- **1,404 validated tests** — every function numerically verified against established reference implementations
 - **Cross-platform** — runs on Windows, Linux, and macOS
 
 ## Quick Start
@@ -132,7 +132,7 @@ forge/
 │   ├── session.py         # Workspace, path, state management
 │   ├── types.py           # ForgeArray, ForgeChar, ForgeMap
 │   └── builtins/          # 29 toolbox modules
-└── tests/                 # 1,246 pytest tests
+└── tests/                 # 1,404 pytest tests
 ```
 
 ## Development

@@ -682,17 +682,16 @@ def image(img, *args):
 
 
 def imagesc(img, *args):
-    """Display image with scaled colors (stub).
+    """Display image with scaled colors.
 
     imagesc(C)
     imagesc(X, Y, C)
     imagesc(..., [CMIN CMAX])
 
-    In non-GUI mode, prints range info.
+    Delegates to the plotting imagesc for actual display.
     """
-    data = _ensure_float(img)
-    print(f"imagesc: shape {data.shape}, "
-          f"range [{data.min():.4f}, {data.max():.4f}]")
+    from forge.engine.builtins.plotting import forge_imagesc
+    return forge_imagesc(img, *args)
 
 
 def contrast(img, *args):

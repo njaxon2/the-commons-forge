@@ -319,29 +319,41 @@ def forge_single(x):
     """Convert to single (float32)."""
     return ForgeArray(x, dtype="single")
 
+def _octave_int_cast(x, dtype_name):
+    """Octave-compatible integer cast: round then saturate."""
+    target_dtype = DTYPE_MAP[dtype_name]
+    info = np.iinfo(target_dtype)
+    arr = _unwrap(x) if isinstance(x, ForgeArray) else np.asarray(x, dtype=np.float64)
+    arr = np.asarray(arr, dtype=np.float64)
+    # Round to nearest (Octave rounds, not truncates)
+    arr = np.round(arr)
+    # Saturate to type range (Octave saturates, not wraps)
+    arr = np.clip(arr, info.min, info.max)
+    return ForgeArray(arr.astype(target_dtype))
+
 def forge_int8(x):
-    return ForgeArray(x, dtype="int8")
+    return _octave_int_cast(x, "int8")
 
 def forge_int16(x):
-    return ForgeArray(x, dtype="int16")
+    return _octave_int_cast(x, "int16")
 
 def forge_int32(x):
-    return ForgeArray(x, dtype="int32")
+    return _octave_int_cast(x, "int32")
 
 def forge_int64(x):
-    return ForgeArray(x, dtype="int64")
+    return _octave_int_cast(x, "int64")
 
 def forge_uint8(x):
-    return ForgeArray(x, dtype="uint8")
+    return _octave_int_cast(x, "uint8")
 
 def forge_uint16(x):
-    return ForgeArray(x, dtype="uint16")
+    return _octave_int_cast(x, "uint16")
 
 def forge_uint32(x):
-    return ForgeArray(x, dtype="uint32")
+    return _octave_int_cast(x, "uint32")
 
 def forge_uint64(x):
-    return ForgeArray(x, dtype="uint64")
+    return _octave_int_cast(x, "uint64")
 
 def forge_logical(x):
     """Convert to logical (boolean)."""
