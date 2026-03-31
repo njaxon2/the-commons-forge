@@ -940,13 +940,47 @@ class Session:
             return ForgeArray(np.array(0.0))
         b["exist"] = _exist
 
-        # feval(funcname, args...) - call function by name
+        # feval(funcname, args...) - call function by name or handle
         def _feval(name, *args):
+            # If name is already a callable (function handle), call it directly
+            if callable(name) and not isinstance(name, (ForgeChar, ForgeArray)):
+                return name(*args)
             name = name.to_str() if isinstance(name, ForgeChar) else str(name)
-            if name in self.builtins:
-                return self.builtins[name](*args)
+            if name in self.functions:
+                return self.functions[name](*args)
             raise NameError(f"undefined function '{name}'")
         b["feval"] = _feval
+
+        # str2func(name) - convert string to function handle
+        def _str2func(name):
+            name = name.to_str() if isinstance(name, ForgeChar) else str(name)
+            # Handle anonymous function strings like '@(x) x^2'
+            if name.startswith('@'):
+                return self.eval(name)
+            if name in self.functions:
+                fn = self.functions[name]
+                if isinstance(fn, FunctionDef):
+                    result = lambda *a: self._call_function(fn, list(a), self.workspace)
+                    result._forge_name = name
+                    return result
+                if not hasattr(fn, '_forge_name'):
+                    fn._forge_name = name
+                return fn
+            raise NameError(f"undefined function '{name}'")
+        b["str2func"] = _str2func
+
+        # func2str(handle) - convert function handle to string
+        def _func2str(handle):
+            if hasattr(handle, '_forge_name'):
+                return ForgeChar(handle._forge_name)
+            if hasattr(handle, '__name__'):
+                name = handle.__name__
+                # Strip lambda wrapper prefixes
+                if name != '<lambda>':
+                    return ForgeChar(name)
+            # For anonymous functions, return generic representation
+            return ForgeChar('@<anonymous>')
+        b["func2str"] = _func2str
 
         # mfilename - returns empty (we're not in an m-file in REPL)
         b["mfilename"] = lambda *a: ForgeChar("")
@@ -1352,7 +1386,11 @@ class Session:
             if node.name in self.functions:
                 fn = self.functions[node.name]
                 if isinstance(fn, FunctionDef):
-                    return lambda *a: self._call_function(fn, list(a), ws)
+                    result = lambda *a: self._call_function(fn, list(a), ws)
+                    result._forge_name = node.name
+                    return result
+                if not hasattr(fn, '_forge_name'):
+                    fn._forge_name = node.name
                 return fn
             raise NameError(f"Undefined function: {node.name}")
 
