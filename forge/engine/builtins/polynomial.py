@@ -65,12 +65,10 @@ def forge_polyder(p, *args):
     return ForgeArray(result)
 
 def forge_polyint(p, *args):
+    """polyint(p) or polyint(p, k) -- integrate polynomial with constant k."""
     pd = _unwrap(p).ravel()
-    m = int(_scalar(args[0])) if args else 1
-    k = float(_scalar(args[1])) if len(args) > 1 else 0
-    result = pd
-    for _ in range(m):
-        result = np.polyint(result, k=k)
+    k = float(_scalar(args[0])) if args else 0.0
+    result = np.polyint(pd, k=k)
     return ForgeArray(result)
 
 def forge_conv(a, b):

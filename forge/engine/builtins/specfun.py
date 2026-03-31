@@ -157,3 +157,78 @@ SPECFUN_REGISTRY = {
     "realsqrt": forge_realsqrt,
     "gammainc": forge_gammainc, "gammaincinv": forge_gammaincinv,
 }
+
+
+# --- Functions migrated from session.py for direct import ---
+
+def forge_gamma(x):
+    """gamma(x) -- gamma function."""
+    return _wrap(special.gamma(_unwrap(x)))
+
+
+def forge_gammaln(x):
+    """gammaln(x) -- log of gamma function."""
+    return _wrap(special.gammaln(_unwrap(x)))
+
+
+def forge_erf(x):
+    """erf(x) -- error function."""
+    return _wrap(special.erf(_unwrap(x)))
+
+
+def forge_erfc(x):
+    """erfc(x) -- complementary error function."""
+    return _wrap(special.erfc(_unwrap(x)))
+
+
+def forge_erfinv(x):
+    """erfinv(x) -- inverse error function."""
+    return _wrap(special.erfinv(_unwrap(x)))
+
+
+def forge_erfcinv(x):
+    """erfcinv(x) -- inverse complementary error function."""
+    return _wrap(special.erfcinv(_unwrap(x)))
+
+
+def forge_besselj(nu, x):
+    """besselj(nu, x) -- Bessel function of first kind."""
+    n = float(_scalar(nu))
+    return _wrap(special.jv(n, _unwrap(x)))
+
+
+def forge_bessely(nu, x):
+    """bessely(nu, x) -- Bessel function of second kind."""
+    n = float(_scalar(nu))
+    return _wrap(special.yv(n, _unwrap(x)))
+
+
+def forge_besseli(nu, x):
+    """besseli(nu, x) -- modified Bessel function first kind."""
+    n = float(_scalar(nu))
+    return _wrap(special.iv(n, _unwrap(x)))
+
+
+def forge_besselk(nu, x):
+    """besselk(nu, x) -- modified Bessel function second kind."""
+    n = float(_scalar(nu))
+    return _wrap(special.kv(n, _unwrap(x)))
+
+
+def forge_gcd(a, b):
+    """gcd(a, b) -- greatest common divisor."""
+    import math
+    ad = int(_scalar(a))
+    bd = int(_scalar(b))
+    return ForgeArray(np.float64(math.gcd(ad, bd)))
+
+
+# Update registry with new functions
+SPECFUN_REGISTRY.update({
+    "gamma": forge_gamma, "gammaln": forge_gammaln,
+    "erf": forge_erf, "erfc": forge_erfc,
+    "erfinv": forge_erfinv, "erfcinv": forge_erfcinv,
+    "besselj": forge_besselj, "bessely": forge_bessely,
+    "besseli": forge_besseli, "besselk": forge_besselk,
+    "gcd": forge_gcd,
+})
