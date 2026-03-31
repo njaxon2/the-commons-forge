@@ -1940,7 +1940,16 @@ class Session:
         val = self._eval_expr(node.expr, ws)
         for case_expr, body in node.cases:
             case_val = self._eval_expr(case_expr, ws)
-            if _values_equal(val, case_val):
+            # Cell array case: match if ANY element equals the switch value
+            if isinstance(case_val, ForgeCell):
+                matched = False
+                for elem in case_val._data:
+                    if _values_equal(val, elem):
+                        matched = True
+                        break
+                if matched:
+                    return self._exec_stmts(body, ws)
+            elif _values_equal(val, case_val):
                 return self._exec_stmts(body, ws)
         if node.otherwise_body:
             return self._exec_stmts(node.otherwise_body, ws)
