@@ -766,6 +766,41 @@ class Session:
         b["struct"] = lambda *a: forge_struct(*a)
         b["fieldnames"] = forge_fieldnames
         b["cell"] = lambda *a: forge_cell(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
+        b["cellfun"] = _cellfun_builtin
+        b["arrayfun"] = _arrayfun_builtin
+        b["num2cell"] = _num2cell_builtin
+        b["cell2mat"] = _cell2mat_builtin
+        b["rmfield"] = _rmfield_builtin
+        b["cat"] = _cat_builtin
+
+        def _getfield_builtin(s, *fields):
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            cur = s
+            for f in fields:
+                fname = f.to_str() if isinstance(f, ForgeChar) else str(f)
+                if isinstance(cur, ForgeStruct):
+                    cur = cur._fields[fname]
+                else:
+                    raise ValueError(f"Cannot get field '{fname}' from non-struct")
+            return cur
+
+        def _setfield_builtin(s, *args):
+            from forge.engine.containers import ForgeStruct, ForgeChar
+            if len(args) < 2:
+                raise ValueError("setfield requires at least 3 arguments")
+            *fields, value = args
+            if not isinstance(s, ForgeStruct):
+                raise ValueError("First argument must be a struct")
+            new_s = ForgeStruct()
+            for k, v in s._fields.items():
+                new_s._fields[k] = v
+            fname = fields[0].to_str() if isinstance(fields[0], ForgeChar) else str(fields[0])
+            new_s._fields[fname] = value
+            return new_s
+
+        b["getfield"] = _getfield_builtin
+        b["setfield"] = _setfield_builtin
+        b["orderfields"] = lambda s: __import__('forge.engine.containers', fromlist=['forge_orderfields']).forge_orderfields(s)
 
         # R15: dot product
         b["dot"] = lambda a, b: ForgeArray(np.dot(_unwrap(a).flatten(), _unwrap(b).flatten()))
@@ -1563,7 +1598,13 @@ class Session:
         for row in node.rows:
             for e in row:
                 elements.append(self._eval_expr(e, ws))
-        return ForgeCell(elements)
+        cell = ForgeCell(elements)
+        # Preserve 2-D shape from parsed rows
+        nrows = len(node.rows)
+        if nrows > 1:
+            ncols = len(node.rows[0])
+            cell._shape = (nrows, ncols)
+        return cell
 
     # ============================================================
     # Statement execution
