@@ -1747,6 +1747,44 @@ class ForgeSession:
                 return ForgeArray(data.astype(type_map[typename]))
             return ForgeArray(data)
 
+
+        def forge_rethrow(err):
+            """rethrow(err) - re-throw a caught MException/error struct."""
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            if isinstance(err, ForgeStruct):
+                ident = err._fields.get("identifier", ForgeChar(""))
+                msg = err._fields.get("message", ForgeChar(""))
+                if isinstance(ident, ForgeChar):
+                    ident = ident.to_str()
+                if isinstance(msg, ForgeChar):
+                    msg = msg.to_str()
+                raise ForgeError(str(ident), str(msg))
+            raise ForgeError("", str(err))
+
+        def forge_MException(identifier, msg, *args):
+            """MException(id, msg, ...) - create an MException object."""
+            from forge.engine.containers import ForgeChar, ForgeStruct
+            from forge.engine.types import ForgeArray
+            if isinstance(identifier, ForgeChar):
+                identifier = identifier.to_str()
+            if isinstance(msg, ForgeChar):
+                msg = msg.to_str()
+            if args:
+                conv_args = []
+                for a in args:
+                    if isinstance(a, ForgeArray):
+                        conv_args.append(a.data.flat[0])
+                    elif isinstance(a, ForgeChar):
+                        conv_args.append(a.to_str())
+                    else:
+                        conv_args.append(a)
+                msg = msg % tuple(conv_args)
+            exc = ForgeStruct()
+            exc._fields["identifier"] = ForgeChar(str(identifier))
+            exc._fields["message"] = ForgeChar(str(msg))
+            exc._fields["stack"] = ForgeStruct()
+            return exc
+
         session._engine.functions["sprintf"] = forge_sprintf
         session._engine.functions["error"] = forge_error
         session._engine.functions["warning"] = forge_warning
@@ -1754,6 +1792,8 @@ class ForgeSession:
         session._engine.functions["inputname"] = forge_inputname
         session._engine.functions["class"] = forge_class
         session._engine.functions["typecast"] = forge_typecast_val
+        session._engine.functions["rethrow"] = forge_rethrow
+        session._engine.functions["MException"] = forge_MException
 
         # R110: Fast TIGA assembly built-ins
         def _findspan(n, p, u, U):

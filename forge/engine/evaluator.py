@@ -67,8 +67,13 @@ class Workspace:
         self._vars: Dict[str, Any] = {}
         self._parent = parent
         self._globals: set = set()
+        self._global_store: Dict[str, Any] = None  # ref to Session._global_store
+        self._persistent_vars: set = set()
 
     def get(self, name: str) -> Any:
+        # Check globals: if declared global and exists in global store
+        if name in self._globals and self._global_store is not None and name in self._global_store:
+            return self._global_store[name]
         if name in self._vars:
             return self._vars[name]
         if self._parent:
@@ -76,9 +81,14 @@ class Workspace:
         raise NameError(f"Undefined variable: {name}")
 
     def set(self, name: str, value: Any):
+        # If variable is declared global, store in global store
+        if name in self._globals and self._global_store is not None:
+            self._global_store[name] = value
         self._vars[name] = value
 
     def has(self, name: str) -> bool:
+        if name in self._globals and self._global_store is not None and name in self._global_store:
+            return True
         if name in self._vars:
             return True
         if self._parent:
@@ -470,9 +480,17 @@ class Session:
         self.output_buffer = io.StringIO()
         self.ans = None
         self._index_sizes = []  # Stack of (size,) for end keyword resolution
+        self._global_store: Dict[str, Any] = {}  # shared global variable storage
+        self._persistent_store: Dict[str, Dict[str, Any]] = {}  # func_name -> {var: val}
+        self._current_function: str = ""  # track current executing function name
         self._setup_builtins()
         self._setup_constants()
+        self._wire_global_store()
         self._session_ref = None  # Set by ForgeSession to enable .m file discovery
+
+    def _wire_global_store(self):
+        """Connect workspace to shared global store."""
+        self.workspace._global_store = self._global_store
 
     def _setup_constants(self):
         self.workspace.set("pi", ForgeArray(FORGE_PI))
@@ -1166,9 +1184,25 @@ class Session:
         if isinstance(node, GlobalStatement):
             for name in node.names:
                 ws._globals.add(name)
+                # Sync: if global store has a value, load it into workspace
+                if name in self._global_store:
+                    ws.set(name, self._global_store[name])
             return None
 
         if isinstance(node, PersistentStatement):
+            func_name = self._current_function
+            if func_name:
+                store = self._persistent_store.setdefault(func_name, {})
+                for name in node.names:
+                    if name in store:
+                        ws.set(name, store[name])
+                    else:
+                        # First call: initialize to empty matrix (Octave behavior)
+                        ws.set(name, ForgeArray(np.empty((0, 0))))
+                    # Mark variable as persistent in workspace
+                    if not hasattr(ws, '_persistent_vars'):
+                        ws._persistent_vars = set()
+                    ws._persistent_vars.add(name)
             return None
 
         raise RuntimeError(f"Unknown AST node: {type(node).__name__}")
@@ -2059,6 +2093,7 @@ class Session:
     def _call_function(self, funcdef: FunctionDef, args: list, caller_ws: Workspace, nargout=None) -> Any:
         """Call a user-defined function with varargin/varargout support."""
         local_ws = Workspace()
+        local_ws._global_store = self._global_store  # share global store
         # Copy constants from base workspace into local workspace
         _CONSTANTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
                       "realmin", "realmax", "i", "j", "true", "false"}
@@ -2089,10 +2124,20 @@ class Session:
             if not local_ws.has(ret):
                 local_ws.set(ret, ForgeArray(0.0))
         # Execute body
+        prev_func = self._current_function
+        self._current_function = funcdef.name
         try:
             self._exec_stmts(funcdef.body, local_ws)
         except ReturnSignal:
             pass
+        finally:
+            # Save persistent variables back to store
+            if hasattr(local_ws, '_persistent_vars') and local_ws._persistent_vars:
+                store = self._persistent_store.setdefault(funcdef.name, {})
+                for pvar in local_ws._persistent_vars:
+                    if pvar in local_ws._vars:
+                        store[pvar] = local_ws._vars[pvar]
+            self._current_function = prev_func
         # Collect return values (expand varargout)
         returns = funcdef.returns
         if len(returns) == 0:

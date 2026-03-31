@@ -451,22 +451,15 @@ class Parser:
     def _parse_unwind_protect(self):
         """Parse unwind_protect ... unwind_protect_cleanup ... end"""
         self._advance()  # consume 'unwind_protect'
-        self._skip_newlines()
-        try_body = []
-        while not (self._at(TokenType.KEYWORD) and self._peek().value == "unwind_protect_cleanup") and not self._is_end_keyword() and not self._at(TokenType.EOF):
-            stmt = self._parse_statement()
-            if stmt:
-                try_body.append(stmt)
+        self._consume_terminator()
+        try_body = self._parse_body(['unwind_protect_cleanup', 'end', 'end_unwind_protect'])
         cleanup_body = []
         if self._at(TokenType.KEYWORD) and self._peek().value == "unwind_protect_cleanup":
             self._advance()
-            self._skip_newlines()
-            while not self._is_end_keyword() and not self._at(TokenType.EOF):
-                stmt = self._parse_statement()
-                if stmt:
-                    cleanup_body.append(stmt)
-        if self._is_end_keyword():
-            self._advance()
+            self._consume_terminator()
+            cleanup_body = self._parse_body(['end', 'end_unwind_protect'])
+        self._expect_end(['end', 'end_unwind_protect'])
+        self._consume_terminator()
         return UnwindProtect(try_body, cleanup_body)
 
 
