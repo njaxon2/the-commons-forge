@@ -41,6 +41,16 @@ def _ensure_float(x):
     return np.asarray(_unwrap(x), dtype=np.float64)
 
 
+def _coeff1d(x):
+    """Convert filter coefficients to 1-D float64 array.
+
+    ForgeArray and butter/cheby outputs are often (1, N) row vectors;
+    scipy.signal functions expect plain 1-D arrays.
+    """
+    return _ensure_float(x).ravel()
+
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 1. WINDOW FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════
@@ -374,9 +384,9 @@ def filtfilt(b, a, x, padtype='odd', padlen=None):
     Y = filtfilt(B, A, X)
     Applies filter forward and backward to eliminate phase distortion.
     """
-    b = _ensure_float(b)
-    a = _ensure_float(a)
-    x = _ensure_float(x)
+    b = _coeff1d(b)
+    a = _coeff1d(a)
+    x = _ensure_float(x).ravel()
     y = sig.filtfilt(b, a, x, padtype=padtype, padlen=padlen)
     return _fa(y)
 
@@ -387,11 +397,11 @@ def lfilter(b, a, x, zi=None):
     Y = lfilter(B, A, X)
     [Y, ZF] = lfilter(B, A, X, ZI)
     """
-    b = _ensure_float(b)
-    a = _ensure_float(a)
-    x = _ensure_float(x)
+    b = _coeff1d(b)
+    a = _coeff1d(a)
+    x = _ensure_float(x).ravel()
     if zi is not None:
-        zi = _ensure_float(zi)
+        zi = _ensure_float(zi).ravel()
         y, zf = sig.lfilter(b, a, x, zi=zi)
         return _fa(y), _fa(zf)
     return _fa(sig.lfilter(b, a, x))
@@ -436,8 +446,8 @@ def freqz(b, a=1, n=512, whole=False, fs=None):
     Returns the N-point frequency response vector H and the angular
     frequency vector W (in rad/sample, or Hz if fs given).
     """
-    b = _ensure_float(b)
-    a = _ensure_float(np.atleast_1d(a))
+    b = _coeff1d(b)
+    a = _coeff1d(a) if not isinstance(a, (int, float)) else np.array([float(a)])
     kwargs = {}
     if fs is not None:
         kwargs['fs'] = float(fs)
@@ -464,12 +474,12 @@ def freqs(b, a, w=None):
 
     [H, W] = freqs(B, A, W)
     """
-    b = _ensure_float(b)
-    a = _ensure_float(a)
+    b = _coeff1d(b)
+    a = _coeff1d(a)
     if w is None:
         w = np.logspace(-1, 3, 512)
     else:
-        w = _ensure_float(w)
+        w = _ensure_float(w).ravel()
     wout, h = sig.freqs(b, a, worN=w)
     return _fa(h), _fa(wout)
 
@@ -480,8 +490,8 @@ def grpdelay(b, a=1, n=512, whole=False, fs=None):
     [GD, W] = grpdelay(B, A, N)
     Returns group delay in samples.
     """
-    b = _ensure_float(b)
-    a = _ensure_float(np.atleast_1d(a))
+    b = _coeff1d(b)
+    a = _coeff1d(a) if not isinstance(a, (int, float)) else np.array([float(a)])
     kwargs = {}
     if fs is not None:
         kwargs['fs'] = float(fs)

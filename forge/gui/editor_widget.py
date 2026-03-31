@@ -588,8 +588,16 @@ class CodeEditor(QPlainTextEdit):
     # --- line numbers ---------------------------------------------------
 
     def line_number_area_width(self) -> int:
+        if not getattr(self, '_line_numbers_visible', True):
+            return 0
         digits = max(1, len(str(self.blockCount())))
         return 12 + self.fontMetrics().horizontalAdvance("9") * digits
+
+    def set_line_numbers_visible(self, visible: bool):
+        """Show or hide line number gutter."""
+        self._line_numbers_visible = visible
+        self._line_area.setVisible(visible)
+        self._update_line_area_width(0)
 
     def _update_line_area_width(self, _count):
         self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)

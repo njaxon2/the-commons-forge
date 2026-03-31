@@ -380,6 +380,25 @@ class HelpViewerWidget(QWidget):
         self._btn_back.setEnabled(self._history_pos > 0)
         self._btn_forward.setEnabled(self._history_pos < len(self._history) - 1)
 
+    def apply_theme(self):
+        """Re-apply palette-derived styles after a theme switch."""
+        from forge.gui.theme_utils import detect_palette, is_light_theme
+        p = detect_palette()
+        bg0 = p.get('bg0', '#1e1e2e')
+        fg0 = p.get('fg0', '#cdd6f4')
+        bg1 = p.get('bg1', '#252536')
+        accent = p.get('accent', '#00BCD4')
+        if hasattr(self, '_content'):
+            css = (
+                f"body {{ background: {bg0}; color: {fg0}; "
+                f"font-family: sans-serif; padding: 12px; }}"
+                f" a {{ color: {accent}; }}"
+                f" pre, code {{ background: {bg1}; padding: 4px 8px; "
+                f"border-radius: 4px; }}"
+            )
+            self._content.document().setDefaultStyleSheet(css)
+
+
     def show_help(self, func_name: str):
         """Display help and add to history."""
         self._history = self._history[:self._history_pos + 1]

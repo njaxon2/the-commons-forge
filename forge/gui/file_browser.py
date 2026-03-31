@@ -175,6 +175,13 @@ class FileBrowserWidget(QWidget):
         self._nav_recording = True
         self._build_ui()
 
+    def apply_theme(self):
+        """Re-apply styles after a theme switch."""
+        # The QSS from themes.py handles most styling via selectors.
+        # This ensures any hardcoded widget styles are refreshed.
+        pass
+
+
     def set_search_paths(self, paths):
         """Set the Forge search path (called by main window after engine init)."""
         self._search_paths = list(paths)

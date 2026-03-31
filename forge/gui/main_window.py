@@ -835,6 +835,12 @@ class ForgeMainWindow(QMainWindow):
         self.act_word_wrap.triggered.connect(self._toggle_word_wrap)
         view_menu.addAction(self.act_word_wrap)
 
+        self.act_show_line_numbers = QAction("Show Line Numbers", self, checkable=True)
+        self.act_show_line_numbers.setChecked(True)
+        self.act_show_line_numbers.setShortcut("Alt+L")
+        self.act_show_line_numbers.triggered.connect(self._toggle_line_numbers)
+        view_menu.addAction(self.act_show_line_numbers)
+
         self.act_zoom_in = QAction("Zoom In", self, shortcut="Ctrl+=")
         self.act_zoom_in.triggered.connect(lambda: self._zoom(1))
         view_menu.addAction(self.act_zoom_in)
@@ -1446,15 +1452,34 @@ class ForgeMainWindow(QMainWindow):
         dlg.exec()
 
     def _apply_preferences(self, prefs):
-        from forge.gui.themes import apply_theme
-        app = QApplication.instance()
-        apply_theme(app, prefs.get('default_theme', 'dark'))
-        font = QFont(prefs.get('font_family', 'Consolas'), prefs.get('font_size', 10))
+        # Map from preferences_dialog keys to theme system
+        theme = prefs.get('appearance.theme', prefs.get('default_theme', 'dark'))
+        font_family = prefs.get('editor.font_family', 'Consolas')
+        font_size = prefs.get('editor.font_size', 13)
+        show_line_numbers = prefs.get('editor.show_line_numbers', True)
+
+        # Apply theme via _switch_theme for full propagation
+        self._switch_theme(theme)
+
+        # Apply editor font to all open editors
+        from forge.gui.editor_widget import CodeEditor
+        font = QFont(font_family, font_size)
         font.setStyleHint(QFont.StyleHint.Monospace)
-        app.setFont(font)
-        # Update editor palette
-        from forge.gui.editor_widget import set_editor_palette
-        set_editor_palette(prefs.get('default_theme', 'dark'))
+        font.setFixedPitch(True)
+        if hasattr(self, 'editor_widget') and hasattr(self.editor_widget, 'tabs'):
+            for i in range(self.editor_widget.tabs.count()):
+                editor = self.editor_widget.tabs.widget(i)
+                if isinstance(editor, CodeEditor):
+                    editor.setFont(font)
+                    editor.setTabStopDistance(
+                        editor.fontMetrics().horizontalAdvance(" ") * prefs.get('editor.tab_size', 4)
+                    )
+                    editor.set_line_numbers_visible(show_line_numbers)
+                    editor._update_line_area_width(0)
+
+        # Sync line-number toggle in View menu
+        if hasattr(self, 'act_show_line_numbers'):
+            self.act_show_line_numbers.setChecked(show_line_numbers)
 
     def _cycle_theme(self):
         """Cycle through available themes."""
@@ -1480,14 +1505,18 @@ class ForgeMainWindow(QMainWindow):
         set_editor_palette(theme_name)
         self._refresh_dock_title_bars()
         # Refresh all theme-aware panels
-        for attr in ('_output_panel', '_profiler_panel', '_terminal_widget'):
+        for attr in ('_output_panel', '_profiler_panel', '_terminal_widget',
+                     '_git_panel', '_bookmarks_panel', '_ai_panel'):
             panel = getattr(self, attr, None)
             if panel and hasattr(panel, 'apply_theme'):
                 panel.apply_theme()
             elif panel and hasattr(panel, '_apply_theme'):
                 panel._apply_theme()
-        if hasattr(self, '_bookmarks_panel') and hasattr(self._bookmarks_panel, 'apply_theme'):
-            self._bookmarks_panel.apply_theme()
+        # Refresh widgets that use detect_palette at construction time
+        for attr in ('help_widget', 'workspace_widget', 'file_browser_widget'):
+            widget = getattr(self, attr, None)
+            if widget and hasattr(widget, 'apply_theme'):
+                widget.apply_theme()
         # Refresh command widget syntax-highlighter and prompt colour
         if hasattr(self, 'command_widget') and self.command_widget:
             if hasattr(self.command_widget, 'refresh_theme'):
@@ -1675,6 +1704,21 @@ class ForgeMainWindow(QMainWindow):
             editor = self.editor_widget.tabs.widget(i)
             if hasattr(editor, 'setLineWrapMode'):
                 editor.setLineWrapMode(mode)
+
+    def _toggle_line_numbers(self, checked):
+        """Toggle line numbers for all open editors."""
+        from forge.gui.editor_widget import CodeEditor
+        if hasattr(self, 'editor_widget') and hasattr(self.editor_widget, 'tabs'):
+            for i in range(self.editor_widget.tabs.count()):
+                editor = self.editor_widget.tabs.widget(i)
+                if isinstance(editor, CodeEditor):
+                    editor.set_line_numbers_visible(checked)
+        # Persist to preferences
+        from forge.gui.preferences_dialog import load_prefs, save_prefs
+        prefs = load_prefs()
+        prefs['editor.show_line_numbers'] = checked
+        save_prefs(prefs)
+
 
     def _zoom(self, direction):
         app = QApplication.instance()

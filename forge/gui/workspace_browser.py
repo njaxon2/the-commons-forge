@@ -94,6 +94,16 @@ class WorkspaceBrowserWidget(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
+    def apply_theme(self):
+        """Re-apply palette-derived styles after a theme switch."""
+        from forge.gui.theme_utils import detect_palette
+        _p = detect_palette()
+        if hasattr(self, 'lbl_count'):
+            self.lbl_count.setStyleSheet(
+                f"color: {_p.get('fg3', '#6c7086')}; font-size: 10px; padding: 0 4px;"
+            )
+
+
     def update_workspace(self, workspace_dict: dict):
         """Repopulate from workspace_dict, preserving filter."""
         self._workspace = workspace_dict

@@ -340,6 +340,34 @@ class GitPanel(QWidget):
 
         repo_layout.addWidget(commit_frame)
 
+    # --------------------------------------------------------- Theming
+    def apply_theme(self):
+        """Re-apply theme colors from the current palette."""
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        fg0 = p.get('fg0', '#cdd6f4')
+        fg2 = p.get('fg2', '#a6adc8')
+        fg3 = p.get('fg3', '#6c7086')
+        bg1 = p.get('bg1', '#252536')
+        accent = p.get('accent', '#00BCD4')
+
+        # No-repo page labels
+        for child in self._no_repo_page.findChildren(type(self._no_repo_page)):
+            pass
+        # Update hardcoded label colors
+        if hasattr(self, '_branch_label'):
+            self._branch_label.setStyleSheet(f"font-weight: bold; color: {accent};")
+        if hasattr(self, '_status_label'):
+            self._status_label.setStyleSheet(f"color: {fg2};")
+        if hasattr(self, '_diff_view'):
+            self._diff_view.setStyleSheet(
+                f"background: {bg1}; color: {fg0}; border: none;"
+            )
+        if hasattr(self, '_history_view'):
+            self._history_view.setStyleSheet(
+                f"background: {bg1}; color: {fg0}; border: none;"
+            )
+
     # --------------------------------------------------------- Public API
     def set_cwd(self, path: str | None):
         """Set the working directory to query git in."""

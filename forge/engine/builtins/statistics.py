@@ -487,7 +487,15 @@ def cov(x, *args):
     C = cov(X, NORM)   where NORM is 0 (N-1) or 1 (N)
     """
     data_x = _ensure_float(x)
+    # For a vector input, treat as column of observations (Octave convention)
+    if data_x.ndim <= 2 and min(data_x.shape) <= 1:
+        x_flat = data_x.ravel()
+    else:
+        x_flat = None
+
     if len(args) == 0:
+        if x_flat is not None:
+            return _fa(np.cov(x_flat, ddof=1))
         return _fa(np.cov(data_x, rowvar=False))
     arg = args[0]
     # Check if arg is a scalar 0 or 1 (normalization flag)
@@ -495,11 +503,17 @@ def cov(x, *args):
         sv = _scalar(arg)
         if isinstance(sv, (int, float)) and sv in (0, 1):
             ddof = int(1 - sv)
+            if x_flat is not None:
+                return _fa(np.cov(x_flat, ddof=ddof))
             return _fa(np.cov(data_x, rowvar=False, ddof=ddof))
     except Exception:
         pass
     # Otherwise treat as Y
     data_y = _ensure_float(arg)
+    # When both are vectors, flatten so np.cov treats them as two variables
+    x_v = x_flat if x_flat is not None else data_x.ravel()
+    if data_y.ndim <= 2 and min(data_y.shape) <= 1:
+        return _fa(np.cov(x_v, data_y.ravel()))
     return _fa(np.cov(data_x, data_y, rowvar=False))
 
 
@@ -679,6 +693,42 @@ def empirical_rnd(data, *args):
 # ═══════════════════════════════════════════════════════════════════
 # 5. HISTOGRAM
 # ═══════════════════════════════════════════════════════════════════
+
+def hist(x, *args):
+    """Histogram bin counts (like Octave hist).
+
+    N = hist(X)
+    N = hist(X, NBINS)
+    N = hist(X, X_CENTERS)
+    [N, X_CENTERS] = hist(X, ...)
+
+    With no output arguments, Octave would plot; here we just return counts.
+    Default number of bins is 10.
+    """
+    data = _ensure_float(x).ravel()
+    nbins = 10
+    edges_given = False
+
+    if len(args) >= 1:
+        arg1 = _ensure_float(args[0])
+        if arg1.size == 1:
+            nbins = int(arg1.flat[0])
+        else:
+            # arg1 is vector of bin centers
+            centers = arg1.ravel()
+            # Convert centers to edges
+            edges_arr = np.empty(len(centers) + 1)
+            edges_arr[0] = -np.inf
+            for i in range(len(centers) - 1):
+                edges_arr[i + 1] = (centers[i] + centers[i + 1]) / 2.0
+            edges_arr[-1] = np.inf
+            counts, _ = np.histogram(data, bins=edges_arr)
+            return _fa(counts.astype(np.float64)), _fa(centers)
+
+    counts, bin_edges = np.histogram(data, bins=nbins)
+    centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    return _fa(counts.astype(np.float64)), _fa(centers)
+
 
 def histc(x, edges):
     """Histogram bin counts (like Octave histc).
@@ -897,6 +947,7 @@ STATISTICS_REGISTRY = {
     'empirical_pdf':    empirical_pdf,
     'empirical_rnd':    empirical_rnd,
     # ── Histogram ─────────────────────────────────────────────────
+    'hist':             hist,
     'histc':            histc,
     # ── Moving-window functions ───────────────────────────────────
     'movmad':           movmad,
