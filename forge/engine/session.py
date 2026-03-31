@@ -352,6 +352,9 @@ class ForgeSession:
 
         def forge_class(x):
             from forge.engine.containers import ForgeCell, ForgeStruct
+            from forge.engine.classdef import ForgeObject as _FObj
+            if isinstance(x, _FObj):
+                return x.class_name
             _dtype_map = {
                 "float64": "double", "float32": "single",
                 "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
@@ -1026,6 +1029,12 @@ class ForgeSession:
 
         def forge_isa(x, typename):
             if isinstance(typename, ForgeChar): typename = typename.to_str()
+            typename = str(typename)
+            # Use ForgeObject.isa() for classdef instances (supports inheritance)
+            from forge.engine.classdef import ForgeObject as _FObj
+            if isinstance(x, _FObj):
+                return ForgeArray(np.float64(1.0 if x.isa(typename) else 0.0))
+            # Check built-in types via class()
             cls = session._engine.functions.get("class")
             if cls:
                 actual = cls(x)
@@ -1704,6 +1713,9 @@ class ForgeSession:
             """class(obj) - return class name."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar, ForgeCell, ForgeStruct
+            from forge.engine.classdef import ForgeObject as _FObj
+            if isinstance(obj, _FObj):
+                return ForgeChar(obj.class_name)
             if isinstance(obj, ForgeChar):
                 return ForgeChar("char")
             if isinstance(obj, ForgeCell):
@@ -9926,8 +9938,12 @@ class ForgeSession:
 
         # R113: Utility functions
         def forge_fieldnames(s):
-            """fieldnames(struct) - return cell array of field names."""
+            """fieldnames(struct_or_object) - return cell array of field/property names."""
             from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
+            from forge.engine.classdef import ForgeObject as _FObj
+            if isinstance(s, _FObj):
+                names = list(s._class.all_properties().keys())
+                return ForgeCell([ForgeChar(n) for n in names])
             if isinstance(s, ForgeStruct):
                 names = list(s._fields.keys())
                 return ForgeCell([ForgeChar(n) for n in names])
@@ -10074,6 +10090,44 @@ class ForgeSession:
             return ForgeCell([])
 
         session._engine.functions["fieldnames"] = forge_fieldnames
+
+        def forge_properties_builtin(obj_or_name):
+            """properties(obj) - return cell array of property names."""
+            from forge.engine.containers import ForgeCell, ForgeChar as _FC
+            from forge.engine.classdef import ForgeObject as _FObj, get_class, class_exists
+            if isinstance(obj_or_name, _FObj):
+                names = list(obj_or_name._class.all_properties().keys())
+                return ForgeCell([_FC(n) for n in names])
+            if isinstance(obj_or_name, _FC):
+                obj_or_name = obj_or_name.to_str()
+            if isinstance(obj_or_name, str) and class_exists(obj_or_name):
+                cls = get_class(obj_or_name)
+                names = list(cls.all_properties().keys())
+                return ForgeCell([_FC(n) for n in names])
+            return ForgeCell([])
+        session._engine.functions["properties"] = forge_properties_builtin
+
+        def forge_methods_builtin(obj_or_name):
+            """methods(obj) - return cell array of method names."""
+            from forge.engine.containers import ForgeCell, ForgeChar as _FC
+            from forge.engine.classdef import ForgeObject as _FObj, get_class, class_exists
+            if isinstance(obj_or_name, _FObj):
+                names = list(obj_or_name._class.all_methods().keys())
+                return ForgeCell([_FC(n) for n in names])
+            if isinstance(obj_or_name, _FC):
+                obj_or_name = obj_or_name.to_str()
+            if isinstance(obj_or_name, str) and class_exists(obj_or_name):
+                cls = get_class(obj_or_name)
+                names = list(cls.all_methods().keys())
+                return ForgeCell([_FC(n) for n in names])
+            return ForgeCell([])
+        session._engine.functions["methods"] = forge_methods_builtin
+
+        def forge_isobject(x):
+            """isobject(x) - return true if x is a classdef object."""
+            from forge.engine.classdef import ForgeObject as _FObj
+            return ForgeArray(np.float64(1.0 if isinstance(x, _FObj) else 0.0))
+        session._engine.functions["isobject"] = forge_isobject
         session._engine.functions["isfield"] = forge_isfield
         session._engine.functions["struct"] = forge_struct_func
         session._engine.functions["isstruct"] = forge_isstruct

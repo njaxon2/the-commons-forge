@@ -885,6 +885,9 @@ class Session:
                 return FC("double")
             if isinstance(x, str):
                 return FC("char")
+            from forge.engine.classdef import ForgeObject as _FObj
+            if isinstance(x, _FObj):
+                return FC(x.class_name)
             return FC(type(x).__name__)
         b["class"] = _class_name
         b["typecast"] = lambda x, t: x.astype(t.to_str() if isinstance(t, ForgeChar) else str(t))
@@ -2020,6 +2023,13 @@ class Session:
                 def method_impl(obj, *args):
                     # Create local workspace
                     local_ws = Workspace()
+                    local_ws._global_store = self._global_store
+                    # Copy constants from base workspace
+                    _CONSTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
+                               "realmin", "realmax", "i", "j", "true", "false"}
+                    for _cname in _CONSTS:
+                        if self.workspace.has(_cname):
+                            local_ws.set(_cname, self.workspace.get(_cname))
                     # Set caller context for access control
                     from forge.engine.classdef import ForgeObject as _FO
                     if isinstance(obj, _FO):
@@ -2042,12 +2052,17 @@ class Session:
                                     local_ws.set(param, args[i])
                     else:
                         # Regular method: first param is self/obj
+                        # Value semantics: copy obj so original is not mutated
+                        if not obj._class.is_handle:
+                            obj = obj.copy()
                         if fd.params:
                             local_ws.set(fd.params[0], obj)
                         for i, param in enumerate(fd.params[1:]):
                             if i < len(args):
                                 local_ws.set(param, args[i])
-                    local_ws.set("nargin", ForgeArray(np.array(float(len(args) + 1))))
+                    # nargin: for constructors, count user args only (not obj); for methods, count obj + args
+                    _nargin = len(args) if is_ctor else len(args) + 1
+                    local_ws.set("nargin", ForgeArray(np.array(float(_nargin))))
                     try:
                         self._exec_stmts(fd.body, local_ws)
                     except ReturnSignal:
