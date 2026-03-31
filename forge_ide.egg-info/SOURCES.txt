@@ -116,10 +116,12 @@ tests/test_optimization.py
 tests/test_oqe.py
 tests/test_parser.py
 tests/test_plotting.py
+tests/test_plotting_r2.py
 tests/test_polish_r10.py
 tests/test_polish_r11.py
 tests/test_polish_r12.py
 tests/test_polish_r13.py
+tests/test_polish_r14.py
 tests/test_polish_r2.py
 tests/test_polish_r3.py
 tests/test_polish_r4.py

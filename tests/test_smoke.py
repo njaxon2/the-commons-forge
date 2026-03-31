@@ -1,35 +1,7 @@
-# Copyright 2026 The Commons™
+# Copyright 2026 The Commons(TM)
 # SPDX-License-Identifier: Apache-2.0
-"""Smoke tests: verify basic app startup and framework."""
+"""Smoke tests: verify basic engine startup and framework."""
 import pytest
-from PySide6.QtCore import Qt
-
-
-def test_app_launches(qtbot):
-    """App creates MainWindow and shows it."""
-    from forge.gui.main_window import ForgeMainWindow
-    w = ForgeMainWindow()
-    qtbot.addWidget(w)
-    w.show()
-    assert w.isVisible()
-
-
-def test_menu_bar_exists(qtbot):
-    """All expected menus are present."""
-    from forge.gui.main_window import ForgeMainWindow
-    w = ForgeMainWindow()
-    qtbot.addWidget(w)
-    menus = [a.text().replace('&', '') for a in w.menuBar().actions()]
-    for name in ['File', 'Edit', 'View', 'Debug', 'Window', 'Help']:
-        assert name in menus, f'Missing menu: {name}'
-
-
-def test_status_bar(qtbot):
-    """Status bar exists."""
-    from forge.gui.main_window import ForgeMainWindow
-    w = ForgeMainWindow()
-    qtbot.addWidget(w)
-    assert w.statusBar() is not None
 
 
 def test_validation_framework():
@@ -47,4 +19,12 @@ def test_validation_framework():
 def test_forge_version():
     """Version is set."""
     import forge
-    assert forge.__version__ == '0.2.3'
+    assert forge.__version__ == "0.2.3"
+
+
+def test_session_basic():
+    """Engine session can evaluate simple expressions."""
+    from forge.engine.session import ForgeSession
+    s = ForgeSession()
+    result = s.eval("2+2")
+    assert "4" in str(result)

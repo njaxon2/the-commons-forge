@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "forge-ide"
+name = "forge-engine"
 version = "0.2.3"
-description = "Octave-compatible numerical computing environment with PySide6 GUI"
+description = "Forge Engine - Octave-compatible numerical computing core"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
@@ -21,33 +21,28 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "PySide6>=6.5",
     "numpy>=1.24",
     "scipy>=1.10",
     "matplotlib>=3.7",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-qt", "pytest-xvfb"]
+dev = ["pytest"]
 symbolic = ["sympy>=1.12"]
 full = ["sympy>=1.12", "soundfile", "requests"]
 
-[project.gui-scripts]
-forge = "forge.__main__:main"
-
 [project.scripts]
-forge-cli = "forge.__main__:main"
+forge-engine = "forge.__main__:cli_main"
 
 [project.urls]
-Homepage = "https://github.com/forge-ide/forge"
-Documentation = "https://forge-ide.readthedocs.io"
+Homepage = "https://github.com/njaxon2/the-commons-forge"
+Documentation = "https://thecommons.cc"
 
 [tool.setuptools.packages.find]
 include = ["forge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-qt_api = "pyside6"
 addopts = "-v --tb=short"
 filterwarnings = [
     "ignore:FigureCanvasAgg is non-interactive:UserWarning",

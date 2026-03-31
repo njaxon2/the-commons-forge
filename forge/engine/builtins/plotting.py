@@ -17,7 +17,7 @@ from forge.engine.types import ForgeArray, _unwrap
 def _enhance_current():
     # Enhance the current figure window with Forge tools (Probe, etc.).
     try:
-        from forge.gui.figure_enhancer import enhance_figure
+        from forge_ide.gui.figure_enhancer import enhance_figure
         enhance_figure(plt.gcf())
     except Exception:
         pass
