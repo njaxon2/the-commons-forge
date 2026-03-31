@@ -37,7 +37,7 @@ class TestDatenum:
     def test_datenum_1_1_1(self):
         """datenum(1,1,1) = 1 (epoch day-one)."""
         r = forge_datenum(1, 1, 1)
-        assert int(r) == 1
+        assert int(r) == 367  # MATLAB: datenum(1,1,1) = 367
 
 
 class TestDatevec:

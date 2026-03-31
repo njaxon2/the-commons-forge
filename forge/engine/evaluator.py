@@ -1523,6 +1523,12 @@ class Session:
                         args.append(self._eval_expr(a, ws))
             else:
                 args = [self._eval_expr(a, ws) for a in node.args]
+            # Auto-call zero-arg callables used as function arguments
+            # (e.g., datestr(now) -- now resolves to callable, should be called)
+            args = [v() if (callable(v) and not isinstance(v, (ForgeArray, type))
+                           and isinstance(a, Identifier) and not ws.has(a.name))
+                    else v
+                    for v, a in zip(args, node.args)]
             result = target(*args)
             return result
 

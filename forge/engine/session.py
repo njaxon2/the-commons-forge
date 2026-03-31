@@ -3537,7 +3537,7 @@ class ForgeSession:
             d = datetime.datetime.now()
             # MATLAB datenum: days since Jan 0, 0000
             delta = d - datetime.datetime(1, 1, 1)
-            return ForgeArray(np.float64(delta.days + 1 + delta.seconds/86400.0 + 367))
+            return ForgeArray(np.float64(delta.days + delta.seconds/86400.0 + 367))
 
         def forge_datenum(*args):
             """datenum(y, m, d) or datenum(datestr) — serial date number."""
@@ -3550,7 +3550,7 @@ class ForgeSession:
                 d = int(args[2].data.flat[0]) if isinstance(args[2], ForgeArray) else int(args[2])
                 dt = datetime.datetime(y, m, d)
                 delta = dt - datetime.datetime(1, 1, 1)
-                return ForgeArray(np.float64(delta.days + 1 + 367))
+                return ForgeArray(np.float64(delta.days + 367))
             return ForgeArray(np.float64(0))
 
         def forge_datevec(d):
@@ -3558,7 +3558,7 @@ class ForgeSession:
             from forge.engine.types import ForgeArray
             import datetime
             if isinstance(d, ForgeArray): d = float(d.data.flat[0])
-            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 367)
             return ForgeArray(np.array([[base.year, base.month, base.day,
                                         base.hour, base.minute, base.second]]).astype(float))
 
@@ -3568,7 +3568,7 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             import datetime
             if isinstance(d, ForgeArray): d = float(d.data.flat[0])
-            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 367)
             return ForgeChar(base.strftime('%d-%b-%Y'))
 
         def forge_etime(t1, t0):
@@ -3588,7 +3588,7 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             import datetime
             if isinstance(d, ForgeArray): d = float(d.data.flat[0])
-            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 1 - 367)
+            base = datetime.datetime(1, 1, 1) + datetime.timedelta(days=d - 367)
             dow = base.isoweekday()  # 1=Mon, 7=Sun
             matlab_dow = (dow % 7) + 1  # 1=Sun, 7=Sat
             names = ['', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -11531,7 +11531,7 @@ class ForgeSession:
                 data = data.reshape(1, -1)
             rows = []
             for r in range(data.shape[0]):
-                rows.append(' '.join(str(v) for v in data[r, :]))
+                rows.append(' '.join(('%g' % v) for v in data[r, :]))
             return ForgeChar('[' + '; '.join(rows) + ']')
 
         def forge_blanks(n):

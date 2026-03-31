@@ -45,12 +45,12 @@ _DATENUM_EPOCH = _dt.datetime(1, 1, 1)  # represents datenum = 1
 def _datetime_to_datenum(dt_obj):
     """Convert a Python datetime to MATLAB datenum."""
     delta = dt_obj - _DATENUM_EPOCH
-    return delta.total_seconds() / 86400.0 + 1.0
+    return delta.total_seconds() / 86400.0 + 367.0
 
 
 def _datenum_to_datetime(dn):
     """Convert a MATLAB datenum to Python datetime."""
-    return _DATENUM_EPOCH + _dt.timedelta(days=float(dn) - 1.0)
+    return _DATENUM_EPOCH + _dt.timedelta(days=float(dn) - 367.0)
 
 
 # ── Toolbox function registry ───────────────────────────────────
