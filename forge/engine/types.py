@@ -63,10 +63,18 @@ class ForgeArray:
             if self._data.ndim == 0:
                 self._data = self._data.reshape(1, 1)
         else:
-            self._data = np.asarray(data)
+            import scipy.sparse as _sp
+            if _sp.issparse(data):
+                self._data = data  # Preserve sparse matrices as-is
+            else:
+                self._data = np.asarray(data)
         self._is_char = (dtype == "char")
         # Ensure at least 2D for MATLAB semantics (scalars and vectors)
-        if self._data.ndim == 0:
+        # Skip reshape for sparse matrices (they are always 2D)
+        import scipy.sparse as _sp2
+        if _sp2.issparse(self._data):
+            pass  # scipy sparse is always 2D
+        elif self._data.ndim == 0:
             self._data = self._data.reshape(1, 1)
         elif self._data.ndim == 1:
             self._data = self._data.reshape(1, -1)  # Row vector by default

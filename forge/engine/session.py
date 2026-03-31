@@ -100,6 +100,7 @@ class ForgeSession:
 
     def _format_result(self, value):
         from forge.engine.containers import ForgeCell, ForgeStruct
+        import scipy.sparse as _sp
         # R03: ForgeChar displays as text
         if isinstance(value, ForgeChar):
             return value.to_str()
@@ -107,6 +108,10 @@ class ForgeSession:
             return self._format_cell(value)
         if isinstance(value, ForgeStruct):
             return self._format_struct(value)
+        # Sparse matrix display (raw scipy sparse or ForgeArray wrapping sparse)
+        raw = _unwrap(value) if isinstance(value, ForgeArray) else value
+        if _sp.issparse(raw):
+            return self._format_sparse(raw)
         if isinstance(value, ForgeArray):
             data = _unwrap(value)
             if data.size == 0:
@@ -186,6 +191,28 @@ class ForgeSession:
                 parts.append(formatted[r][c].rjust(col_widths[c] + 4))
             lines.append(''.join(parts))
         return '\n'.join(lines)
+
+    def _format_sparse(self, sp_mat):
+        """Format a scipy sparse matrix for Octave-style display."""
+        import scipy.sparse as _sp
+        import numpy as np
+        coo = _sp.coo_matrix(sp_mat)
+        nnz = coo.nnz
+        m, n = coo.shape
+        if nnz == 0:
+            return f"  All zero sparse: {m}x{n}"
+        lines = []
+        lines.append(f"  Compressed Column Sparse (rows = {m}, cols = {n}, nnz = {nnz})")
+        lines.append("")
+        order = np.lexsort((coo.row, coo.col))
+        max_show = 20
+        for idx, k in enumerate(order):
+            if idx >= max_show:
+                lines.append(f"    ... ({nnz - max_show} more entries)")
+                break
+            r, c, v = coo.row[k] + 1, coo.col[k] + 1, coo.data[k]
+            lines.append(f"    ({r}, {c}) -> {self._format_scalar(v).strip()}")
+        return "\n".join(lines)
 
     def _format_cell(self, cell):
         """Format a cell array for display, MATLAB style."""
@@ -3865,8 +3892,8 @@ class ForgeSession:
                         diag_list.append(Bd[:length, i])
                     else:
                         diag_list.append(Bd[:length])
-            S = diags(diag_list, dd.tolist(), shape=(md, nd))
-            return ForgeArray(S.toarray())
+            S = diags(diag_list, dd.tolist(), shape=(md, nd), format='csc')
+            return S
 
         # Register all R138 functions
         session._engine.functions["csvread"] = forge_csvread
@@ -5335,7 +5362,7 @@ class ForgeSession:
             nd = md
             if n is not None:
                 nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
-            return ForgeArray(speye_fn(md, nd).toarray())
+            return speye_fn(md, nd, format="csc")
 
         def forge_sprand2(m, n, density):
             """sprand(m, n, density) — sparse random matrix."""
@@ -5344,7 +5371,7 @@ class ForgeSession:
             md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
             nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
             dd = float(density.data.flat[0]) if isinstance(density, ForgeArray) else float(density)
-            return ForgeArray(sprand_fn(md, nd, dd).toarray())
+            return sprand_fn(md, nd, dd, format="csc")
 
         def forge_sprandn2(m, n, density):
             """sprandn(m, n, density) — sparse normal random matrix."""
@@ -5353,7 +5380,8 @@ class ForgeSession:
             md = int(m.data.flat[0]) if isinstance(m, ForgeArray) else int(m)
             nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
             dd = float(density.data.flat[0]) if isinstance(density, ForgeArray) else float(density)
-            return ForgeArray(sprand_fn(md, nd, dd, data_rvs=np.random.randn).toarray())
+            rng = np.random.default_rng()
+            return sprand_fn(md, nd, dd, data_rvs=rng.standard_normal, format="csc")
 
         # --- Gallery matrices ---
         def forge_gallery(name, *args):
@@ -8669,8 +8697,13 @@ class ForgeSession:
 
         def forge_nonzeros2(S):
             """nonzeros(S) — extract nonzero elements."""
-            from forge.engine.types import ForgeArray
-            data = S.data if isinstance(S, ForgeArray) else np.atleast_2d(S)
+            import scipy.sparse as _sp
+            from forge.engine.types import ForgeArray, _unwrap
+            data = _unwrap(S) if isinstance(S, ForgeArray) else S
+            if _sp.issparse(data):
+                csc = _sp.csc_matrix(data)
+                return ForgeArray(csc.data.copy().reshape(-1, 1))
+            data = np.atleast_2d(data)
             nz = data[data != 0]
             return ForgeArray(nz.reshape(-1, 1))
 

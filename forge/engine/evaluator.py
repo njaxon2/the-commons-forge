@@ -649,7 +649,16 @@ class Session:
         b["min"] = lambda x, *a: ForgeArray(np.min(_unwrap(x))) if not a else ForgeArray(np.minimum(_unwrap(x), _unwrap(a[0])))
         b["max"] = lambda x, *a: ForgeArray(np.max(_unwrap(x))) if not a else ForgeArray(np.maximum(_unwrap(x), _unwrap(a[0])))
         b["sort"] = lambda x, *a: ForgeArray(np.sort(_unwrap(x), axis=-1))
-        b["find"] = lambda x: ForgeArray(np.flatnonzero(_unwrap(x)) + 1)  # 1-based
+        def _forge_find_builtin(x):
+            import scipy.sparse as _sp
+            data = _unwrap(x) if isinstance(x, ForgeArray) else x
+            if _sp.issparse(data):
+                coo = _sp.coo_matrix(data)
+                m = coo.shape[0]
+                idx = coo.col * m + coo.row + 1  # column-major 1-based
+                return ForgeArray(np.sort(idx).astype(float))
+            return ForgeArray(np.flatnonzero(data) + 1)
+        b["find"] = _forge_find_builtin  # 1-based
         b["any"] = lambda x, *a: ForgeArray(np.array(np.any(_unwrap(x))))
         b["all"] = lambda x, *a: ForgeArray(np.array(np.all(_unwrap(x))))
         b["cumsum"] = lambda x, *a: ForgeArray(np.cumsum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
@@ -1385,16 +1394,60 @@ class Session:
             right = right()
         l, r = _unwrap(left), _unwrap(right)
         op = node.op
-        if op == "+": return ForgeArray(l + r)
-        if op == "-": return ForgeArray(l - r)
-        if op == "*": return ForgeArray(l @ r if _is_matrix_op(l, r) else l * r)
-        if op == "/": return ForgeArray(np.linalg.solve(r.T, l.T).T if _is_matrix_op(l, r) else l / r)
-        if op == "\\": return ForgeArray(np.linalg.solve(l, r) if _is_matrix_op(l, r) else r / l)
-        if op == "^": return ForgeArray(np.linalg.matrix_power(l, int(r.flat[0])) if (l.ndim == 2 and l.size > 1) else l ** r)
-        if op == ".*": return ForgeArray(l * r)
-        if op == "./": return ForgeArray(l / r)
-        if op == ".\\": return ForgeArray(r / l)
-        if op == ".^": return ForgeArray(l ** r)
+        import scipy.sparse as _sp
+        _any_sparse = _sp.issparse(l) or _sp.issparse(r)
+        def _wrap_sparse(result):
+            if _sp.issparse(result):
+                return result  # keep sparse as raw scipy
+            return ForgeArray(result)
+        if op == "+":
+            return _wrap_sparse(l + r) if _any_sparse else ForgeArray(l + r)
+        if op == "-":
+            return _wrap_sparse(l - r) if _any_sparse else ForgeArray(l - r)
+        if op == "*":
+            if _any_sparse:
+                if _is_matrix_op(l, r):
+                    return _wrap_sparse(l @ r)
+                else:
+                    if _sp.issparse(l):
+                        return _wrap_sparse(l.multiply(r))
+                    else:
+                        return _wrap_sparse(r.multiply(l))
+            return ForgeArray(l @ r if _is_matrix_op(l, r) else l * r)
+        if op == "/":
+            if _any_sparse and _is_matrix_op(l, r):
+                from scipy.sparse.linalg import spsolve
+                rt = r.T.tocsc() if _sp.issparse(r) else _sp.csc_matrix(r.T)
+                lt = l.T.toarray().ravel() if _sp.issparse(l) else l.T.ravel() if l.T.ndim > 1 and l.T.shape[1] == 1 else l.T
+                x = spsolve(rt, lt)
+                return ForgeArray(np.atleast_2d(x).T if x.ndim == 1 else x.T)
+            return ForgeArray(np.linalg.solve(r.T, l.T).T if _is_matrix_op(l, r) else l / r)
+        if op == "\\":
+            if _any_sparse and _is_matrix_op(l, r):
+                from scipy.sparse.linalg import spsolve
+                l_sp = l.tocsc() if _sp.issparse(l) else _sp.csc_matrix(l)
+                r_arr = r.toarray() if _sp.issparse(r) else r
+                if r_arr.ndim == 2 and r_arr.shape[1] == 1:
+                    x = spsolve(l_sp, r_arr.ravel())
+                    return ForgeArray(np.atleast_2d(x).T)
+                x = spsolve(l_sp, r_arr)
+                return ForgeArray(np.atleast_2d(x).T if x.ndim == 1 else x)
+            return ForgeArray(np.linalg.solve(l, r) if _is_matrix_op(l, r) else r / l)
+        if op == "^":
+            return ForgeArray(np.linalg.matrix_power(l, int(r.flat[0])) if (l.ndim == 2 and l.size > 1) else l ** r)
+        if op == ".*":
+            if _any_sparse:
+                if _sp.issparse(l):
+                    return _wrap_sparse(l.multiply(r))
+                else:
+                    return _wrap_sparse(r.multiply(l))
+            return ForgeArray(l * r)
+        if op == "./":
+            return ForgeArray(l / r)
+        if op == ".\\":
+            return ForgeArray(r / l)
+        if op == ".^":
+            return ForgeArray(l ** r)
         raise RuntimeError(f"Unknown binary op: {op}")
 
     def _eval_compare(self, node: CompareOp, ws: Workspace) -> ForgeArray:
@@ -2217,12 +2270,27 @@ class Session:
             idx_flat = int(np.argmin(x.ravel()))
             return (ForgeArray(np.min(x)), ForgeArray(np.array(float(idx_flat + 1))))
         if name == 'find':
-            x = _unwrap(args[0])
+            import scipy.sparse as _sp
+            x = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else args[0]
             if nargout >= 2:
-                if x.ndim < 2:
-                    x = x.reshape(1, -1)
-                rows, cols = np.nonzero(x)
-                return (ForgeArray(rows + 1), ForgeArray(cols + 1))
+                if _sp.issparse(x):
+                    coo = _sp.coo_matrix(x)
+                    rows = coo.row.astype(float) + 1
+                    cols = coo.col.astype(float) + 1
+                    vals = coo.data.astype(float)
+                    order = np.lexsort((coo.row, coo.col))
+                    rows, cols, vals = rows[order], cols[order], vals[order]
+                    if nargout >= 3:
+                        return (ForgeArray(rows), ForgeArray(cols), ForgeArray(vals))
+                    return (ForgeArray(rows), ForgeArray(cols))
+                else:
+                    if hasattr(x, 'ndim') and x.ndim < 2:
+                        x = x.reshape(1, -1)
+                    rows, cols = np.nonzero(x)
+                    if nargout >= 3:
+                        vals = np.array([x[r, c] for r, c in zip(rows, cols)], dtype=float)
+                        return (ForgeArray(rows + 1), ForgeArray(cols + 1), ForgeArray(vals))
+                    return (ForgeArray(rows + 1), ForgeArray(cols + 1))
             return None
         if name == 'size':
             x = args[0]
@@ -2410,6 +2478,15 @@ def _is_matrix_op(a, b) -> bool:
     In Octave, * is always matrix multiply for 2D arrays.
     Element-wise is .* operator. So * should use @ whenever
     both operands are 2D (even if one is a vector)."""
+    import scipy.sparse as _sp
+    if _sp.issparse(a) or _sp.issparse(b):
+        sa = a.shape if hasattr(a, "shape") else np.asarray(a).shape
+        sb = b.shape if hasattr(b, "shape") else np.asarray(b).shape
+        if len(sa) != 2 or len(sb) != 2:
+            return False
+        if (sa[0] * sa[1]) == 1 or (sb[0] * sb[1]) == 1:
+            return False
+        return True
     a, b = np.asarray(a), np.asarray(b)
     if a.ndim != 2 or b.ndim != 2:
         return False
