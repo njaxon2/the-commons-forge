@@ -1364,6 +1364,16 @@ class Session:
             from forge.engine.classdef import ForgeObject
             if isinstance(target, ForgeObject):
                 return getattr(target, node.field)
+            # Generic Python object dot access (e.g. inputParser methods/properties)
+            if hasattr(target, node.field):
+                val = getattr(target, node.field)
+                # Wrap plain dict as ForgeStruct for further dot access
+                if isinstance(val, dict):
+                    s = ForgeStruct()
+                    for k, v in val.items():
+                        s._fields[k] = v
+                    return s
+                return val
             raise TypeError(f"Field access on {type(target).__name__}")
 
         if isinstance(node, DynamicFieldAccess):

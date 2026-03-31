@@ -6649,14 +6649,20 @@ class ForgeSession:
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
             if isinstance(expr, ForgeChar): expr = expr.to_str()
-            import io, sys
-            old = sys.stdout
-            sys.stdout = buf = io.StringIO()
+            import io
+            # Use engine.eval directly so session.eval doesn't reset the buffer
+            old_buf = session._engine.output_buffer
+            session._engine.output_buffer = capture_buf = io.StringIO()
             try:
-                session.eval(expr)
+                result = session._engine.eval(expr)
+                # If result is printable and not suppressed, format it
+                if result is not None and not expr.rstrip().endswith(';'):
+                    text = session._format_result(result)
+                    if text:
+                        capture_buf.write(text + chr(10))
             finally:
-                sys.stdout = old
-            return ForgeChar(buf.getvalue())
+                session._engine.output_buffer = old_buf
+            return ForgeChar(capture_buf.getvalue())
 
         def forge_genpath2(d):
             """genpath(dir) — generate path string with subdirs."""
@@ -10727,17 +10733,21 @@ class ForgeSession:
 
         class ForgeInputParser:
             """inputParser — parse and validate function inputs."""
+            @staticmethod
+            def _str(v):
+                from forge.engine.containers import ForgeChar
+                return v.to_str() if isinstance(v, ForgeChar) else str(v)
             def __init__(self):
                 self.Results = {}
                 self._required = []
                 self._optional = []
                 self._params = {}
             def addRequired(self, name, validator=None):
-                self._required.append((name, validator))
+                self._required.append((self._str(name), validator))
             def addOptional(self, name, default, validator=None):
-                self._optional.append((name, default, validator))
+                self._optional.append((self._str(name), default, validator))
             def addParameter(self, name, default, validator=None):
-                self._params[name] = (default, validator)
+                self._params[self._str(name)] = (default, validator)
             def parse(self, *args):
                 idx = 0
                 for name, validator in self._required:
@@ -10754,8 +10764,9 @@ class ForgeSession:
                 # Name-value pairs
                 while idx < len(args) - 1:
                     key = args[idx]
-                    if isinstance(key, str) and key in self._params:
-                        self.Results[key] = args[idx + 1]
+                    ks = self._str(key) if hasattr(key, 'to_str') else str(key) if isinstance(key, str) else None
+                    if ks and ks in self._params:
+                        self.Results[ks] = args[idx + 1]
                         idx += 2
                     else:
                         break
