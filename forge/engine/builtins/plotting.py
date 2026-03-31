@@ -1479,12 +1479,16 @@ def forge_yline(y, *args):
     _cur_ax().axhline(y=yv, **style_kw)
     return _FA(np.array(yv))
 
-def forge_meshgrid(x, y=None):
-    """[X,Y] = meshgrid(x,y) - 2D grid from vectors."""
+def forge_meshgrid(x, y=None, z=None):
+    """[X,Y] = meshgrid(x,y) or [X,Y,Z] = meshgrid(x,y,z) - 2D/3D grid."""
     xv = _to_np(x).flatten()
     yv = _to_np(y).flatten() if y is not None else xv.copy()
+    if z is not None:
+        zv = _to_np(z).flatten()
+        X, Y, Z = np.meshgrid(xv, yv, zv, indexing="xy")
+        return ForgeArray(X), ForgeArray(Y), ForgeArray(Z)
     X, Y = np.meshgrid(xv, yv)
-    return _FA(X), _FA(Y)
+    return ForgeArray(X), ForgeArray(Y)
 
 
 
