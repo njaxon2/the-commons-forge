@@ -420,12 +420,38 @@ class CommandWidget(QWidget):
             self._history_next()
             return
 
-        # --- Enter / Return ---
-        # Tab completion
-        if event.key() == Qt.Key_Tab and self._cursor_in_editable():
-            self._complete_tab()
+        # --- Search mode key handling ---
+        if getattr(self, "_search_mode", False):
+            if key in (Qt.Key_Return, Qt.Key_Enter):
+                match = self._find_search_match()
+                self._exit_search_mode(accept=True)
+                self._write_prompt()
+                if match:
+                    self._set_input_text(match)
+                return
+            elif key == Qt.Key_R and modifiers & Qt.ControlModifier:
+                self._search_match_index += 1
+                self._update_search_prompt()
+                return
+            elif key == Qt.Key_Backspace:
+                if self._search_query:
+                    self._search_query = self._search_query[:-1]
+                    self._search_match_index = 0
+                    self._update_search_prompt()
+                return
+            elif event.text() and not modifiers & Qt.ControlModifier:
+                self._search_query += event.text()
+                self._search_match_index = 0
+                self._update_search_prompt()
+                return
+            match = self._find_search_match()
+            self._exit_search_mode(accept=True)
+            self._write_prompt()
+            if match:
+                self._set_input_text(match)
             return
 
+        # --- Enter / Return ---
         if key in (Qt.Key_Return, Qt.Key_Enter):
             self._on_return()
             return
@@ -479,9 +505,16 @@ class CommandWidget(QWidget):
             self._tab_complete()
             return
 
-        # --- Escape: dismiss completion ---
+        # --- Escape: dismiss completion or exit search mode ---
         if key == Qt.Key_Escape:
             self._completion_candidates = []
+            if getattr(self, '_search_mode', False):
+                self._exit_search_mode()
+            return
+
+        # --- Ctrl+R: reverse history search ---
+        if key == Qt.Key_R and modifiers & Qt.ControlModifier:
+            self._enter_search_mode()
             return
 
         # --- Printable keys ---
@@ -515,55 +548,6 @@ class CommandWidget(QWidget):
     # ------------------------------------------------------------------
 
 
-
-    def _complete_tab(self):
-        """Tab-complete the current word using engine function names."""
-        text = self._get_input_text()
-        if not text:
-            return
-
-        import re
-        m = re.search(r'([a-zA-Z_]\w*)$', text)
-        if not m:
-            return
-
-        partial = m.group(1)
-        if len(partial) < 1:
-            return
-
-        completions = []
-        if hasattr(self, 'engine') and self.engine and hasattr(self.engine, '_engine'):
-            funcs = self.engine._engine.functions
-            completions = sorted([name for name in funcs if name.startswith(partial)])
-
-        if hasattr(self, 'engine') and self.engine and hasattr(self.engine, '_workspace'):
-            workspace_names = [name for name in self.engine._workspace if name.startswith(partial)]
-            completions = sorted(set(completions + workspace_names))
-
-        if not completions:
-            return
-
-        if len(completions) == 1:
-            suffix = completions[0][len(partial):]
-            self._set_input_text(text + suffix)
-        else:
-            common = completions[0]
-            for s in completions[1:]:
-                while not s.startswith(common):
-                    common = common[:-1]
-                    if not common:
-                        break
-            if len(common) > len(partial):
-                suffix = common[len(partial):]
-                self._set_input_text(text + suffix)
-            else:
-                max_len = max(len(c) for c in completions) + 2
-                cols = max(1, 70 // max_len)
-                lines = []
-                for i in range(0, len(completions), cols):
-                    row = completions[i:i+cols]
-                    lines.append("  ".join(c.ljust(max_len) for c in row))
-                self._append_text(chr(10) + chr(10).join(lines) + chr(10))
 
 
     def _show_running_indicator(self):
@@ -820,6 +804,18 @@ class CommandWidget(QWidget):
         matches.extend(
             c for c in constants if c.startswith(prefix) and c not in matches
         )
+
+        # --- File/directory completion for file-oriented commands ---
+        text = self._get_input_text()
+        file_commands = ("cd", "load", "save", "run", "source", "ls", "dir",
+                         "fopen", "dlmread", "csvread", "xlsread", "exist")
+        stripped = text.lstrip()
+        is_file_ctx = any(stripped.startswith(cmd + " ") or stripped.startswith(cmd + "(")
+                         for cmd in file_commands)
+        if is_file_ctx or not matches:
+            file_matches = self._get_file_completions(prefix)
+            matches.extend(m for m in file_matches if m not in matches)
+
         return sorted(set(matches))
 
     def _tab_complete(self):
@@ -884,6 +880,98 @@ class CommandWidget(QWidget):
                 if not prefix:
                     return ""
         return prefix
+
+    # ------------------------------------------------------------------
+    # File completion
+    # ------------------------------------------------------------------
+
+    def _get_file_completions(self, prefix):
+        """Return file/directory names matching *prefix* in the engine CWD."""
+        import os
+        try:
+            if self.engine and hasattr(self.engine, "_engine"):
+                cwd = getattr(self.engine._engine, "cwd", None) or os.getcwd()
+            else:
+                cwd = os.getcwd()
+
+            if os.sep in prefix or "/" in prefix:
+                dirname = os.path.dirname(prefix)
+                partial = os.path.basename(prefix)
+                search_dir = os.path.join(cwd, dirname) if not os.path.isabs(dirname) else dirname
+            else:
+                dirname = ""
+                partial = prefix
+                search_dir = cwd
+
+            if not os.path.isdir(search_dir):
+                return []
+
+            results = []
+            for entry in os.listdir(search_dir):
+                if entry.startswith(partial) and not entry.startswith("."):
+                    full = os.path.join(search_dir, entry)
+                    name = os.path.join(dirname, entry) if dirname else entry
+                    if os.path.isdir(full):
+                        name += os.sep
+                    results.append(name)
+            return sorted(results)[:50]
+        except Exception:
+            return []
+
+    # ------------------------------------------------------------------
+    # Reverse history search (Ctrl+R)
+    # ------------------------------------------------------------------
+
+    _search_mode = False
+    _search_query = ""
+    _search_match_index = 0
+
+    def _enter_search_mode(self):
+        """Activate incremental reverse history search."""
+        self._search_mode = True
+        self._search_query = ""
+        self._search_match_index = 0
+        self._update_search_prompt()
+
+    def _exit_search_mode(self, accept=False):
+        """Leave search mode, optionally accepting the match into the input."""
+        match = self._find_search_match()
+        self._search_mode = False
+        self._search_query = ""
+        self._search_match_index = 0
+        if accept and match:
+            self._set_input_text(match)
+        elif not accept:
+            self._set_input_text("")
+        cursor = self.console.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.console.setTextCursor(cursor)
+
+    def _find_search_match(self):
+        """Find the Nth matching history entry (searching backward)."""
+        if not self._search_query:
+            return None
+        matches = [h for h in reversed(self.history)
+                   if self._search_query in h]
+        if matches and self._search_match_index < len(matches):
+            return matches[self._search_match_index]
+        return None
+
+    def _update_search_prompt(self):
+        """Redraw the search prompt showing the current query and match."""
+        match = self._find_search_match() or ""
+        cursor = self.console.textCursor()
+        cursor.setPosition(self._prompt_pos)
+        cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+        indicator = "(reverse-i-search)`" + self._search_query + "': " + match
+        fmt = QTextCharFormat()
+        from forge.gui.theme_utils import detect_palette
+        p = detect_palette()
+        fmt.setForeground(QColor(p.get("fg0", "#cdd6f4")))
+        cursor.insertText(indicator, fmt)
+        self.console.setTextCursor(cursor)
+        self.console.ensureCursorVisible()
 
     # ------------------------------------------------------------------
     # Execution / multi-line logic

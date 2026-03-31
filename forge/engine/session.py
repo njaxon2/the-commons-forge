@@ -4155,6 +4155,7 @@ class ForgeSession:
         session._engine.functions["realmin"] = forge_realmin
         session._engine.functions["realmax"] = forge_realmax
         session._engine.functions["flintmax"] = forge_flintmax
+        session._engine.functions["bitmax"] = forge_flintmax  # legacy alias
         session._engine.functions["cell2struct"] = forge_cell2struct
         session._engine.functions["struct2cell"] = forge_struct2cell
         session._engine.functions["nfields"] = forge_nfields
@@ -5677,12 +5678,26 @@ class ForgeSession:
                     pass
             return ForgeArray(np.array([]).reshape(0, 0))
 
-        def forge_dec2hex(n):
+        def forge_dec2hex(n, *args):
             """dec2hex(n) — decimal to hexadecimal string."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
+            if isinstance(n, ForgeArray) and n.data.size > 1:
+                rows = []
+                for v in n.data.flatten():
+                    rows.append(hex(int(v))[2:].upper())
+                maxlen = max(len(r) for r in rows)
+                if args:
+                    minlen = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                    maxlen = max(maxlen, minlen)
+                padded = [r.zfill(maxlen) for r in rows]
+                return ForgeChar(chr(10).join(padded))
             nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
-            return ForgeChar(hex(nd)[2:].upper())
+            result = hex(nd)[2:].upper()
+            if args:
+                minlen = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                result = result.zfill(minlen)
+            return ForgeChar(result)
 
         def forge_hex2dec(s):
             """hex2dec(s) — hexadecimal string to decimal."""
@@ -5709,6 +5724,38 @@ class ForgeSession:
             if isinstance(s, ForgeChar): s = s.to_str()
             return ForgeArray(np.float64(int(s, 2)))
 
+        def forge_dec2base(n, base, *args):
+            """dec2base(n, base) — convert decimal to string in given base."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            nd = int(n.data.flat[0]) if isinstance(n, ForgeArray) else int(n)
+            bd = int(base.data.flat[0]) if isinstance(base, ForgeArray) else int(base)
+            if bd < 2 or bd > 36:
+                raise ValueError("base must be between 2 and 36")
+            digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            if nd == 0:
+                result = "0"
+            else:
+                result = ""
+                val = abs(nd)
+                while val > 0:
+                    result = digits[val % bd] + result
+                    val //= bd
+            if args:
+                minlen = int(args[0].data.flat[0]) if isinstance(args[0], ForgeArray) else int(args[0])
+                result = result.zfill(minlen)
+            return ForgeChar(result)
+
+        def forge_base2dec(s, base):
+            """base2dec(s, base) — convert string in given base to decimal."""
+            from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(s, ForgeChar): s = s.to_str()
+            bd = int(base.data.flat[0]) if isinstance(base, ForgeArray) else int(base)
+            if bd < 2 or bd > 36:
+                raise ValueError("base must be between 2 and 36")
+            return ForgeArray(np.float64(int(s.strip(), bd)))
+
         # Register R146 functions
         session._engine.functions["spline"] = forge_spline2
         session._engine.functions["pchip"] = forge_pchip2
@@ -5722,6 +5769,8 @@ class ForgeSession:
         session._engine.functions["hex2dec"] = forge_hex2dec
         session._engine.functions["dec2bin"] = forge_dec2bin
         session._engine.functions["bin2dec"] = forge_bin2dec
+        session._engine.functions["dec2base"] = forge_dec2base
+        session._engine.functions["base2dec"] = forge_base2dec
 
         # R146b: Genuinely new functions
         # --- Signal waveforms ---
@@ -10776,6 +10825,9 @@ class ForgeSession:
         def forge_fliplr(A):
             """fliplr(A) — flip matrix left-right."""
             from forge.engine.types import ForgeArray
+            from forge.engine.containers import ForgeChar
+            if isinstance(A, ForgeChar):
+                return ForgeChar(A.to_str()[::-1])
             data = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
             return ForgeArray(np.fliplr(data if data.ndim >= 2 else data.reshape(1, -1)))
 
