@@ -1716,6 +1716,11 @@ class ForgeSession:
             from forge.engine.classdef import ForgeObject as _FObj
             if isinstance(obj, _FObj):
                 return ForgeChar(obj.class_name)
+            from forge.engine.containers import ForgeMap as _FM, ForgeTable as _FT
+            if isinstance(obj, _FM):
+                return ForgeChar("containers.Map")
+            if isinstance(obj, _FT):
+                return ForgeChar("table")
             if isinstance(obj, ForgeChar):
                 return ForgeChar("char")
             if isinstance(obj, ForgeCell):
@@ -1740,11 +1745,14 @@ class ForgeSession:
             return ForgeChar(type(obj).__name__)
 
         def forge_typecast_val(x, typename):
-            """typecast to named type."""
+            """typecast(X, type) — reinterpret the underlying bytes of X as *type*.
+            Unlike cast(), this does NOT convert values; it reinterprets the raw
+            memory (like C reinterpret_cast / MATLAB typecast)."""
             from forge.engine.types import ForgeArray
             from forge.engine.containers import ForgeChar
             if isinstance(typename, ForgeChar):
                 typename = typename.to_str()
+            typename = str(typename)
             if isinstance(x, ForgeArray):
                 data = x.data
             else:
@@ -1755,9 +1763,11 @@ class ForgeSession:
                 "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
                 "logical": np.bool_,
             }
-            if typename in type_map:
-                return ForgeArray(data.astype(type_map[typename]))
-            return ForgeArray(data)
+            target_dt = type_map.get(typename)
+            if target_dt is None:
+                return ForgeArray(data)
+            # Reinterpret bytes (numpy .view), then flatten to 1-D row
+            return ForgeArray(data.view(target_dt).ravel())
 
 
         def forge_rethrow(err):
@@ -10826,9 +10836,9 @@ class ForgeSession:
             return ForgeArray(result)
 
         def forge_table(*args):
-            """table(vars...) — create a table (simplified)."""
-            from forge.engine.containers import ForgeCell
-            return ForgeCell(list(args))
+            """table(vars..., 'VariableNames', {'name1','name2',...}) — create a table."""
+            from forge.engine.containers import ForgeTable
+            return ForgeTable.from_args(*args)
 
         session._engine.functions["sscanf"] = forge_sscanf
         session._engine.functions["fscanf"] = forge_fscanf
@@ -10844,6 +10854,29 @@ class ForgeSession:
         session._engine.functions["movsum"] = forge_movsum
         session._engine.functions["movstd"] = forge_movstd
         session._engine.functions["table"] = forge_table
+
+        def forge_height(t):
+            """height(t) — number of rows in a table."""
+            from forge.engine.containers import ForgeTable
+            if isinstance(t, ForgeTable):
+                return ForgeArray(np.float64(t.height))
+            raise TypeError("height: argument must be a table")
+
+        def forge_width(t):
+            """width(t) — number of columns (variables) in a table."""
+            from forge.engine.containers import ForgeTable
+            if isinstance(t, ForgeTable):
+                return ForgeArray(np.float64(t.width))
+            raise TypeError("width: argument must be a table")
+
+        def forge_istable(x):
+            """istable(x) — true if x is a table."""
+            from forge.engine.containers import ForgeTable
+            return ForgeArray(np.float64(1.0 if isinstance(x, ForgeTable) else 0.0))
+
+        session._engine.functions["height"] = forge_height
+        session._engine.functions["width"] = forge_width
+        session._engine.functions["istable"] = forge_istable
 
         # R121: del2, divergence, special matrices, string utils
         def forge_del2(U, *args):

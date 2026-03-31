@@ -367,6 +367,15 @@ class ForgeMap:
 
     __slots__ = ("_data", "_key_type", "_value_type")
 
+    @staticmethod
+    def _norm_key(k):
+        """Normalise a key to a plain Python type (str, int, float)."""
+        if isinstance(k, ForgeChar):
+            return k.to_str()
+        if isinstance(k, ForgeArray):
+            return float(k.data.flat[0])
+        return k
+
     def __init__(self, keys=None, values=None, key_type="char", value_type="any"):
         self._data = OrderedDict()
         self._key_type = key_type
@@ -378,38 +387,142 @@ class ForgeMap:
                 values = values._data
             if isinstance(keys, (list, tuple)):
                 for k, v in zip(keys, values):
-                    self._data[k] = v
+                    self._data[self._norm_key(k)] = v
 
     def __getitem__(self, key):
-        return self._data[key]
+        return self._data[self._norm_key(key)]
 
     def __setitem__(self, key, value):
-        self._data[key] = value
+        self._data[self._norm_key(key)] = value
 
     def __contains__(self, key):
-        return key in self._data
+        return self._norm_key(key) in self._data
 
     def __len__(self):
         return len(self._data)
 
+    @property
+    def Count(self):
+        """Number of key-value pairs (read-only property)."""
+        from forge.engine.types import ForgeArray as _FA
+        import numpy as _np
+        return _FA(_np.float64(len(self._data)))
+
+    @property
+    def KeyType(self):
+        return ForgeChar(self._key_type)
+
+    @property
+    def ValueType(self):
+        return ForgeChar(self._value_type)
+
     def keys(self):
-        return ForgeCell(list(self._data.keys()))
+        return ForgeCell([ForgeChar(k) if isinstance(k, str) else k
+                          for k in self._data.keys()])
 
     def values(self):
         return ForgeCell(list(self._data.values()))
 
     def isKey(self, key):
-        return key in self._data
+        return self._norm_key(key) in self._data
 
     def remove(self, key):
-        if key in self._data:
-            del self._data[key]
+        nk = self._norm_key(key)
+        if nk in self._data:
+            del self._data[nk]
 
     def length(self):
         return len(self._data)
 
     def __repr__(self):
         return f"ForgeMap({len(self._data)} entries)"
+
+
+# ============================================================
+# ForgeTable - basic table (dataset) container
+# ============================================================
+class ForgeTable:
+    """Basic table container matching Octave/MATLAB table semantics."""
+
+    __slots__ = ("_columns", "_var_names", "_row_count")
+
+    def __init__(self):
+        from collections import OrderedDict as _OD
+        self._columns = _OD()
+        self._var_names = []
+        self._row_count = 0
+
+    @classmethod
+    def from_args(cls, *args):
+        """Build a table from positional column data + optional VariableNames."""
+        from forge.engine.types import ForgeArray as _FA
+        import numpy as _np
+        tbl = cls()
+        data_args = list(args)
+        var_names = None
+        i = 0
+        while i < len(data_args):
+            a = data_args[i]
+            if isinstance(a, ForgeChar) and a.to_str() == "VariableNames":
+                vn = data_args[i + 1] if i + 1 < len(data_args) else None
+                if isinstance(vn, ForgeCell):
+                    var_names = [c.to_str() if isinstance(c, ForgeChar) else str(c) for c in vn._data]
+                data_args = data_args[:i]
+                break
+            i += 1
+        for idx, col in enumerate(data_args):
+            name = var_names[idx] if var_names and idx < len(var_names) else f"Var{idx + 1}"
+            if isinstance(col, _FA):
+                nrows = col.data.shape[0] if col.data.ndim >= 1 else 1
+            elif isinstance(col, ForgeCell):
+                nrows = len(col._data)
+            else:
+                nrows = 1
+            if tbl._row_count == 0:
+                tbl._row_count = nrows
+            tbl._columns[name] = col
+            tbl._var_names.append(name)
+        return tbl
+
+    def get_column(self, name):
+        if name in self._columns:
+            return self._columns[name]
+        raise KeyError(f"Unrecognized table variable name '{name}'.")
+
+    def set_column(self, name, val):
+        if name not in self._columns:
+            self._var_names.append(name)
+        self._columns[name] = val
+
+    @property
+    def height(self):
+        return self._row_count
+
+    @property
+    def width(self):
+        return len(self._var_names)
+
+    def __repr__(self):
+        return f"ForgeTable({self._row_count}x{self.width} table)"
+
+    def __str__(self):
+        from forge.engine.types import ForgeArray as _FA
+        lines = []
+        lines.append("  ".join(f"{n:>10}" for n in self._var_names))
+        lines.append("  ".join("-" * 10 for _ in self._var_names))
+        for r in range(min(self._row_count, 20)):
+            row_parts = []
+            for name in self._var_names:
+                col = self._columns[name]
+                if isinstance(col, _FA):
+                    val = col.data.flat[r] if r < col.data.size else ""
+                elif isinstance(col, ForgeCell):
+                    val = str(col._data[r]) if r < len(col._data) else ""
+                else:
+                    val = str(col)
+                row_parts.append(f"{str(val):>10}")
+            lines.append("  ".join(row_parts))
+        return chr(10).join(lines)
 
 
 # ============================================================

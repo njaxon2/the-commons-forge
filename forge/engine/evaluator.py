@@ -1286,6 +1286,31 @@ class Session:
             target = self._eval_expr(node.target, ws)
             if isinstance(target, ForgeStruct):
                 return target._fields[node.field]
+            # Support ForgeMap dot access (Count, KeyType, ValueType, keys, values, etc.)
+            if isinstance(target, ForgeMap):
+                field = node.field
+                if field == "Count":
+                    return target.Count
+                if field == "KeyType":
+                    return target.KeyType
+                if field == "ValueType":
+                    return target.ValueType
+                # Method-like access: keys(), values(), isKey(), remove(), length()
+                method = getattr(target, field, None)
+                if method is not None and callable(method):
+                    return method
+                raise TypeError(f"containers.Map has no property '{field}'")
+            # Support ForgeTable dot access (column names, Properties)
+            from forge.engine.containers import ForgeTable
+            if isinstance(target, ForgeTable):
+                field = node.field
+                if field == "Properties":
+                    # Return a struct with VariableNames
+                    props = ForgeStruct()
+                    props._fields["VariableNames"] = ForgeCell(
+                        [ForgeChar(n) for n in target._var_names])
+                    return props
+                return target.get_column(field)
             # Support ForgeObject (classdef instances)
             from forge.engine.classdef import ForgeObject
             if isinstance(target, ForgeObject):
@@ -1873,6 +1898,10 @@ class Session:
             obj = self._eval_expr(target.target, ws)
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
+                return value
+            from forge.engine.containers import ForgeTable
+            if isinstance(obj, ForgeTable):
+                obj.set_column(target.field, value)
                 return value
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
