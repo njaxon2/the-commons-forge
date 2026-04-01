@@ -82,7 +82,8 @@ class TestIsmember:
     def test_ismember_known(self):
         a = ForgeArray(np.array([1.0, 2.0, 3.0, 4.0]))
         b = ForgeArray(np.array([2.0, 4.0, 6.0]))
-        r = _unwrap(forge_ismember(a, b)).ravel()
+        tf, loc = forge_ismember(a, b)
+        r = _unwrap(tf).ravel()
         np.testing.assert_array_equal(r, [0, 1, 0, 1])
 
 

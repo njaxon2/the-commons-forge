@@ -10846,17 +10846,41 @@ class ForgeSession:
 
         # Additional useful functions
         def forge_accumarray(subs, val, *args):
-            """accumarray(subs, val) — accumulate values by subscripts."""
-            from forge.engine.types import ForgeArray
+            """accumarray(subs, val, sz, func) — accumulate values by subscripts."""
+            from forge.engine.types import ForgeArray, _unwrap
             if isinstance(subs, ForgeArray):
                 subs = subs.data.flatten().astype(int)
             if isinstance(val, ForgeArray):
                 val = val.data.flatten()
             n = int(subs.max())
-            result = np.zeros(n)
+            # Parse optional args: sz ([] or scalar), func (callable)
+            func = None
+            for a in args:
+                if callable(a):
+                    func = a
+                elif isinstance(a, ForgeArray) and np.asarray(_unwrap(a)).size == 0:
+                    pass  # [] placeholder
+                elif isinstance(a, (int, float)):
+                    n = max(n, int(a))
+                else:
+                    try:
+                        n = max(n, int(float(np.asarray(_unwrap(a)).ravel()[0])))
+                    except Exception:
+                        pass
+            # Group values by subscript
+            groups = {}
             for i, s in enumerate(subs):
                 v = val[i] if i < len(val) else val[0] if len(val) == 1 else 0
-                result[int(s) - 1] += v
+                groups.setdefault(int(s), []).append(v)
+            result = np.zeros(n)
+            for idx in range(1, n + 1):
+                if idx in groups:
+                    vals = np.array(groups[idx])
+                    if func is not None:
+                        r = func(ForgeArray(vals))
+                        result[idx - 1] = float(np.asarray(_unwrap(r)).ravel()[0])
+                    else:
+                        result[idx - 1] = np.sum(vals)
             return ForgeArray(result.reshape(-1, 1))
 
         def forge_histc(x, edges):

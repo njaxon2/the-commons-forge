@@ -265,11 +265,33 @@ def forge_accumarray(subs, val, *args):
     subs_d = _unwrap(subs).ravel().astype(int)
     val_d = _unwrap(val).ravel()
     sz = int(np.max(subs_d))
-    if args:
-        sz = max(sz, int(_scalar(args[0])))
-    result = np.zeros(sz)
+    # args: sz, func, fillval
+    func = None
+    for a in args:
+        if callable(a):
+            func = a
+        elif isinstance(a, (list,)) and len(a) == 0:
+            pass  # [] placeholder
+        elif isinstance(a, ForgeArray) and np.asarray(_unwrap(a)).size == 0:
+            pass  # [] placeholder
+        elif func is None and not callable(a):
+            try:
+                sz = max(sz, int(_scalar(a)))
+            except (TypeError, ValueError):
+                pass
+    # Group values by subscript
+    groups = {}
     for i, v in zip(subs_d, val_d):
-        result[i - 1] += v
+        groups.setdefault(i, []).append(v)
+    result = np.zeros(sz)
+    for idx in range(1, sz + 1):
+        if idx in groups:
+            vals = np.array(groups[idx])
+            if func is not None:
+                r = func(ForgeArray(vals))
+                result[idx - 1] = float(np.asarray(_unwrap(r)).ravel()[0])
+            else:
+                result[idx - 1] = np.sum(vals)
     return ForgeArray(result.ravel())
 
 def forge_logspace(a, b, *args):

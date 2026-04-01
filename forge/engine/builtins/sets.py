@@ -69,11 +69,30 @@ def forge_unique(x, *args):
 def forge_ismember(a, b):
     """Test whether elements of a are members of b.
 
-    Returns a logical ForgeArray of the same shape as a.
+    Returns (tf, loc) tuple.  tf is logical, loc gives index in b (0 if not found).
+    Handles string-in-cell: ismember("hello", {"hello","world"}) => 1
     """
+    from forge.engine.containers import ForgeCell, ForgeChar
+
+    # --- string-in-cell: a is a single string, b is a cell of strings ---
+    if isinstance(a, ForgeChar) and isinstance(b, ForgeCell):
+        a_str = str(a)
+        b_strs = [str(item) if isinstance(item, ForgeChar) else repr(item) for item in b._data]
+        if a_str in b_strs:
+            idx = b_strs.index(a_str) + 1
+            return (_wrap(np.array([1.0])), _wrap(np.array([float(idx)])))
+        return (_wrap(np.array([0.0])), _wrap(np.array([0.0])))
+
+    # --- numeric arrays ---
     va = np.asarray(_unwrap(a)).ravel()
     vb = np.asarray(_unwrap(b)).ravel()
-    return _wrap(np.isin(va, vb).astype(float).ravel())
+    tf = np.isin(va, vb).astype(float)
+    loc = np.zeros_like(va, dtype=float)
+    for i, v in enumerate(va):
+        matches = np.where(vb == v)[0]
+        if len(matches) > 0:
+            loc[i] = float(matches[0] + 1)  # 1-based index
+    return (_wrap(tf.ravel()), _wrap(loc.ravel()))
 
 
 # ── Tolerance-based operations ───────────────────────────────────

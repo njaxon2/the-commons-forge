@@ -642,7 +642,18 @@ class Session:
         b["length"] = lambda x: ForgeArray(np.array(max(x._shape) if (hasattr(x, "_shape") and len(x._data) > 0) else (0 if hasattr(x, "_data") and len(x._data) == 0 else (x.length() if isinstance(x, ForgeArray) else len(x)))))
         b["numel"] = lambda x: ForgeArray(np.array(x._shape[0]*x._shape[1] if hasattr(x, "_shape") else (x.numel() if isinstance(x, ForgeArray) else len(x))))
         b["ndims"] = lambda x: ForgeArray(np.array(x.ndim if isinstance(x, ForgeArray) else 0))
-        b["reshape"] = lambda x, *a: ForgeArray(_unwrap(x).reshape(*[int(_to_py(v)) for v in a]))
+        def _forge_reshape(x, *a):
+            dims = []
+            for v in a:
+                pv = _to_py(v)
+                if isinstance(pv, np.ndarray) and pv.size == 0:
+                    dims.append(-1)  # [] means auto-compute
+                else:
+                    dims.append(int(pv))
+            data = _unwrap(x)
+            # Octave reshape uses Fortran order
+            return ForgeArray(data.reshape(dims, order='F'))
+        b["reshape"] = _forge_reshape
         b["squeeze"] = lambda x: ForgeArray(np.squeeze(_unwrap(x)))
         b["permute"] = lambda x, order: ForgeArray(np.transpose(_unwrap(x), [int(_to_py(o))-1 for o in _unwrap(order).flatten()]))
         b["ndims"] = lambda x: ForgeArray(np.float64(max(2, _unwrap(x).ndim)))
@@ -1613,6 +1624,10 @@ class Session:
                     else v
                     for v, a in zip(args, node.args)]
             result = target(*args)
+            # Single-output context: if function returns a tuple, take first element
+            # (multi-output is handled by _eval_multi_output for [a,b]=func() syntax)
+            if isinstance(result, tuple) and len(result) > 0:
+                result = result[0]
             return result
 
         # Step 3: If target is a FunctionDef AST node, call it
@@ -2541,6 +2556,14 @@ class Session:
             base = os.path.basename(fname)
             name_only, ext = os.path.splitext(base)
             return (ForgeChar(d), ForgeChar(name_only), ForgeChar(ext))
+        if name == 'ismember':
+            from forge.engine.builtins.sets import forge_ismember
+            result = forge_ismember(*args)
+            if isinstance(result, tuple) and nargout >= 2:
+                return result[:nargout]
+            if isinstance(result, tuple):
+                return result[0]
+            return result
         if name == 'deal':
             if len(args) == 1:
                 return tuple(args[0] for _ in range(nargout))
