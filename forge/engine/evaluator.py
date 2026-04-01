@@ -909,10 +909,28 @@ class Session:
 
         # narginchk / nargoutchk
         def _narginchk(minargs, maxargs):
-            # These are checked at call time; standalone just validates
-            pass
+            _min = int(_unwrap(minargs).flat[0]) if isinstance(minargs, ForgeArray) else int(minargs)
+            _max = int(_unwrap(maxargs).flat[0]) if isinstance(maxargs, ForgeArray) else int(maxargs)
+            # Read nargin from the current workspace (set by function call)
+            _ws = self._current_workspace if hasattr(self, "_current_workspace") else self.workspace
+            _ni = _ws.get("nargin") if _ws.has("nargin") else None
+            if _ni is not None:
+                _n = int(_unwrap(_ni).flat[0]) if isinstance(_ni, ForgeArray) else int(_ni)
+                if _n < _min:
+                    raise ForgeError("Forge:narginchk", f"narginchk: incorrect number of input arguments (got {_n}, need at least {_min})")
+                if _n > _max:
+                    raise ForgeError("Forge:narginchk", f"narginchk: too many input arguments (got {_n}, max is {_max})")
         def _nargoutchk(minargs, maxargs):
-            pass
+            _min = int(_unwrap(minargs).flat[0]) if isinstance(minargs, ForgeArray) else int(minargs)
+            _max = int(_unwrap(maxargs).flat[0]) if isinstance(maxargs, ForgeArray) else int(maxargs)
+            _ws = self._current_workspace if hasattr(self, "_current_workspace") else self.workspace
+            _no = _ws.get("nargout") if _ws.has("nargout") else None
+            if _no is not None:
+                _n = int(_unwrap(_no).flat[0]) if isinstance(_no, ForgeArray) else int(_no)
+                if _n < _min:
+                    raise ForgeError("Forge:nargoutchk", f"nargoutchk: incorrect number of output arguments (got {_n}, need at least {_min})")
+                if _n > _max:
+                    raise ForgeError("Forge:nargoutchk", f"nargoutchk: too many output arguments (got {_n}, max is {_max})")
         b["narginchk"] = _narginchk
         b["nargoutchk"] = _nargoutchk
 
@@ -2342,7 +2360,9 @@ class Session:
                 local_ws.set(ret, ForgeArray(0.0))
         # Execute body
         prev_func = self._current_function
+        prev_ws = getattr(self, "_current_workspace", None)
         self._current_function = funcdef.name
+        self._current_workspace = local_ws
         try:
             self._exec_stmts(funcdef.body, local_ws)
         except ReturnSignal:
@@ -2355,6 +2375,7 @@ class Session:
                     if pvar in local_ws._vars:
                         store[pvar] = local_ws._vars[pvar]
             self._current_function = prev_func
+            self._current_workspace = prev_ws
         # Collect return values (expand varargout)
         returns = funcdef.returns
         if len(returns) == 0:

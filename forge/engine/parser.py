@@ -528,6 +528,28 @@ class Parser:
             else:
                 self.pos = _saved_pre  # backtrack
 
+        # Pre-check: clearvars needs special handling because -except
+        # would otherwise be parsed as binary minus by _parse_expression
+        if (self._peek().type == TokenType.IDENT
+                and self._peek().value == "clearvars"):
+            _cv_pos = self.pos
+            self._advance()  # consume "clearvars"
+            str_args = []
+            while not self._at_end_of_statement() and self._peek().type != TokenType.EOF:
+                if self._peek().type == TokenType.MINUS:
+                    self._advance()  # consume -
+                    if self._peek().type == TokenType.IDENT:
+                        flag = "-" + self._advance().value
+                        str_args.append(StringLiteral(flag, is_char=True))
+                elif self._peek().type == TokenType.IDENT:
+                    str_args.append(StringLiteral(self._advance().value, is_char=True))
+                else:
+                    break
+            expr = Index(Identifier("clearvars"), str_args)
+            suppress = bool(self._match(TokenType.SEMICOLON))
+            self._match(TokenType.NEWLINE)
+            return ExpressionStatement(expr, print_result=not suppress)
+
         expr = self._parse_expression(0)
 
         # Command-style syntax: hold on, axis equal, cd dir, etc.
@@ -537,7 +559,7 @@ class Parser:
             "hold", "axis", "format", "grid", "box", "legend",
             "colormap", "shading", "view", "cd", "type", "help",
             "doc", "edit", "dbstop", "dbclear", "dbcont",
-            "who", "whos", "clear", "clc", "close", "figure",
+            "who", "whos", "clear", "clearvars", "clc", "close", "figure",
             "load", "save", "diary", "more", "pkg", "addpath",
             "rmpath", "which", "lookfor", "run", "source",
             "exist", "methods", "properties", "print",
@@ -551,6 +573,11 @@ class Parser:
         if (not _is_cmd_trigger and isinstance(expr, Identifier)
                 and expr.name in _PATH_COMMANDS
                 and _next_tt in (TokenType.RDIVIDE, TokenType.LDIVIDE, TokenType.DOT, TokenType.NOT)):
+            _is_cmd_trigger = True
+        # For clearvars, also trigger on - (e.g. clearvars -except x)
+        if (not _is_cmd_trigger and isinstance(expr, Identifier)
+                and expr.name == "clearvars"
+                and _next_tt == TokenType.MINUS):
             _is_cmd_trigger = True
         if (isinstance(expr, Identifier)
                 and expr.name in _CMD_STYLE_NAMES
@@ -568,8 +595,17 @@ class Parser:
                     str_args = []
             else:
                 # Regular command-style: collect identifiers as separate string args
+                # Also handle -flag args (e.g. clearvars -except x)
                 str_args = []
-                while self._peek().type == TokenType.IDENT:
+                while self._peek().type == TokenType.IDENT or (
+                    self._peek().type == TokenType.MINUS and expr.name == "clearvars"
+                ):
+                    if self._peek().type == TokenType.MINUS:
+                        self._advance()  # consume -
+                        if self._peek().type == TokenType.IDENT:
+                            flag = "-" + self._advance().value
+                            str_args.append(StringLiteral(flag, is_char=True))
+                        continue
                     str_args.append(StringLiteral(self._advance().value, is_char=True))
             expr = Index(expr, str_args)
 

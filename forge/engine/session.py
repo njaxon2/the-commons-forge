@@ -338,13 +338,35 @@ class ForgeSession:
             ws = session._engine.workspace
             _PROTECTED = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
                           "true", "false", "i", "j", "realmin", "realmax"}
-            if not args:
+            str_args = [str(a) for a in args]
+            if not args or "all" in str_args:
                 for n in list(ws.names()):
                     if n not in _PROTECTED:
                         ws.delete(n)
             else:
-                for a in args:
-                    name = str(a)
+                for name in str_args:
+                    if name not in _PROTECTED:
+                        ws.delete(name)
+
+        def forge_clearvars(*args):
+            ws = session._engine.workspace
+            _PROTECTED = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan",
+                          "true", "false", "i", "j", "realmin", "realmax"}
+            str_args = [str(a) for a in args]
+            # clearvars -except var1 var2 ...
+            if str_args and str_args[0] == "-except":
+                keep = set(str_args[1:]) | _PROTECTED
+                for n in list(ws.names()):
+                    if n not in keep:
+                        ws.delete(n)
+            elif not str_args:
+                # clearvars with no args = clear all user vars
+                for n in list(ws.names()):
+                    if n not in _PROTECTED:
+                        ws.delete(n)
+            else:
+                # clearvars var1 var2 ... = clear specific vars
+                for name in str_args:
                     if name not in _PROTECTED:
                         ws.delete(name)
 
@@ -443,7 +465,7 @@ class ForgeSession:
 
         for name, fn in [
             ('cd', forge_cd), ('pwd', forge_pwd), ('who', forge_who),
-            ('whos', forge_whos), ('clear', forge_clear),
+            ('whos', forge_whos), ('clear', forge_clear), ('clearvars', forge_clearvars),
             ('addpath', forge_addpath), ('rmpath', forge_rmpath),
             ('path', forge_path_cmd), ('disp', forge_disp),
             ('exist', forge_exist), ('class', forge_class),
@@ -11016,7 +11038,17 @@ class ForgeSession:
                 minargs = int(minargs.data.flat[0])
             if isinstance(maxargs, ForgeArray):
                 maxargs = int(maxargs.data.flat[0])
-            return None  # format command produces no output
+            # Read nargin from current function workspace
+            eng = session._engine
+            _ws = getattr(eng, "_current_workspace", None) or eng.workspace
+            _ni = _ws.get("nargin") if _ws.has("nargin") else None
+            if _ni is not None:
+                _n = int(_ni.data.flat[0]) if isinstance(_ni, ForgeArray) else int(_ni)
+                if _n < minargs:
+                    raise ForgeError("Forge:narginchk", f"narginchk: incorrect number of input arguments (got {_n}, need at least {minargs})")
+                if _n > maxargs:
+                    raise ForgeError("Forge:narginchk", f"narginchk: too many input arguments (got {_n}, max is {maxargs})")
+            return None
 
         def forge_nargoutchk(minargs, maxargs):
             """nargoutchk(min, max) — check number of output arguments."""
@@ -11025,7 +11057,16 @@ class ForgeSession:
                 minargs = int(minargs.data.flat[0])
             if isinstance(maxargs, ForgeArray):
                 maxargs = int(maxargs.data.flat[0])
-            return None  # format command produces no output
+            eng = session._engine
+            _ws = getattr(eng, "_current_workspace", None) or eng.workspace
+            _no = _ws.get("nargout") if _ws.has("nargout") else None
+            if _no is not None:
+                _n = int(_no.data.flat[0]) if isinstance(_no, ForgeArray) else int(_no)
+                if _n < minargs:
+                    raise ForgeError("Forge:nargoutchk", f"nargoutchk: incorrect number of output arguments (got {_n}, need at least {minargs})")
+                if _n > maxargs:
+                    raise ForgeError("Forge:nargoutchk", f"nargoutchk: too many output arguments (got {_n}, max is {maxargs})")
+            return None
 
         def forge_rosser():
             """rosser — classic test matrix for eigenvalue routines."""

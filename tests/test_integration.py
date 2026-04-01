@@ -135,7 +135,7 @@ class TestRegistryCounts:
 class TestVersionAndMetadata:
     def test_version_string(self):
         import forge
-        assert forge.__version__ == "0.2.6"
+        assert forge.__version__ == "0.2.7"
 
     def test_importable(self):
         import forge.engine.session
