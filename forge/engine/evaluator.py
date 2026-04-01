@@ -307,7 +307,7 @@ def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
 
 
 def _num2cell_builtin(arr, *args):
-    """Convert array to cell array."""
+    """Convert array to cell array, optionally along a dimension."""
     from forge.engine.containers import ForgeCell
     from forge.engine.types import ForgeArray
     if isinstance(arr, ForgeArray):
@@ -317,7 +317,46 @@ def _num2cell_builtin(arr, *args):
     else:
         return ForgeCell([arr])
 
-    return ForgeCell([ForgeArray(np.atleast_1d(np.array(x))) for x in data.ravel()])
+    data = np.atleast_2d(data)
+
+    # Check for dim argument
+    dim = None
+    if args:
+        d = args[0]
+        if isinstance(d, ForgeArray):
+            dim = int(d.data.flat[0])
+        elif isinstance(d, (int, float)):
+            dim = int(d)
+
+    if dim is not None:
+        # dim=1: split along columns (each column becomes a cell element)
+        # dim=2: split along rows (each row becomes a cell element)
+        if dim == 1:
+            # Each column becomes a cell element
+            result = []
+            for j in range(data.shape[1]):
+                result.append(ForgeArray(data[:, j:j+1].copy()))
+            cell = ForgeCell(result)
+            cell._shape = (1, data.shape[1])
+            return cell
+        elif dim == 2:
+            # Each row becomes a cell element
+            result = []
+            for i in range(data.shape[0]):
+                result.append(ForgeArray(data[i:i+1, :].copy()))
+            cell = ForgeCell(result)
+            cell._shape = (data.shape[0], 1)
+            return cell
+        else:
+            # Higher dims: fall through to element-wise
+            pass
+
+    # No dim: convert each element to a cell, preserving 2d shape
+    result = [ForgeArray(np.atleast_1d(np.array(x))) for x in data.ravel()]
+    cell = ForgeCell(result)
+    if data.ndim >= 2:
+        cell._shape = data.shape
+    return cell
 
 
 def _cell2mat_builtin(c):
@@ -606,7 +645,7 @@ class Session:
                       'asin','acos','atan','sinh','cosh','tanh','ceil','floor',
                       'round','fix','sign','real','imag','conj','angle']:
             np_name = _np_name_map.get(name, name)
-            fn = getattr(np, np_name, None) or getattr(np, name)
+            fn = getattr(np, np_name) if np_name != name else getattr(np, name)
             def _make_math(f, nm):
                 def _fn(*a):
                     if not a: raise ValueError(f"{nm} requires at least 1 argument")

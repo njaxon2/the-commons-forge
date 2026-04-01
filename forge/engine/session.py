@@ -10074,19 +10074,93 @@ class ForgeSession:
                 return ForgeArray(np.float64(1.0 if fname in s._fields else 0.0))
             return ForgeArray(np.float64(0.0))
 
+        class ForgeStructArray:
+            """Array of structs — supports sa(i).field indexing."""
+            def __init__(self, structs):
+                self._structs = list(structs)
+            def __len__(self):
+                return len(self._structs)
+            def __getitem__(self, idx):
+                from forge.engine.types import ForgeArray as _FA
+                if isinstance(idx, _FA):
+                    idx = int(idx.data.flat[0])
+                if isinstance(idx, (int, float)):
+                    idx = int(idx)
+                    # 1-based indexing like Octave
+                    return self._structs[idx - 1]
+                return self._structs[idx]
+            def __call__(self, *args):
+                """Support sa(i) paren indexing."""
+                from forge.engine.types import ForgeArray as _FA
+                if len(args) == 1:
+                    idx = args[0]
+                    if isinstance(idx, _FA):
+                        idx = int(idx.data.flat[0])
+                    if isinstance(idx, (int, float)):
+                        return self._structs[int(idx) - 1]
+                raise IndexError(f"Invalid struct array index: {args}")
+            def __getattr__(self, name):
+                if name.startswith('_'):
+                    raise AttributeError(name)
+                # Return field from first struct (scalar access)
+                if self._structs and name in self._structs[0]._fields:
+                    return self._structs[0]._fields[name]
+                raise AttributeError(f"No field '{name}' in struct array")
+            def __repr__(self):
+                n = len(self._structs)
+                if n > 0:
+                    fields = ", ".join(self._structs[0]._fields.keys())
+                    return f"ForgeStructArray(1x{n}, fields: {fields})"
+                return "ForgeStructArray(empty)"
+
         def forge_struct_func(*args):
-            """struct(field1, val1, field2, val2, ...) - create struct."""
-            from forge.engine.containers import ForgeStruct, ForgeChar
-            s = ForgeStruct()
+            """struct(field1, val1, field2, val2, ...) - create struct or struct array."""
+            from forge.engine.containers import ForgeStruct, ForgeChar, ForgeCell
+            if len(args) == 0:
+                return ForgeStruct()
+            # Collect field-value pairs
+            pairs = []
             i = 0
             while i + 1 < len(args):
                 name = args[i]
                 val = args[i + 1]
                 if isinstance(name, ForgeChar):
                     name = name.to_str()
-                s._fields[name] = val
+                elif not isinstance(name, str):
+                    name = str(name)
+                pairs.append((name, val))
                 i += 2
-            return s
+            # Check if any value is a cell array (struct array creation)
+            has_cell = any(isinstance(v, ForgeCell) for _, v in pairs)
+            if has_cell:
+                # Determine array size from cell values
+                cell_sizes = []
+                for _, v in pairs:
+                    if isinstance(v, ForgeCell):
+                        cell_sizes.append(len(v._data))
+                if not cell_sizes:
+                    n = 1
+                else:
+                    n = cell_sizes[0]
+                    if not all(sz == n for sz in cell_sizes):
+                        raise ValueError("dimensions of parameter 'val' do not match")
+                # Build array of structs
+                structs = []
+                for idx in range(n):
+                    s = ForgeStruct()
+                    for name, val in pairs:
+                        if isinstance(val, ForgeCell):
+                            s._fields[name] = val._data[idx]
+                        else:
+                            s._fields[name] = val
+                    structs.append(s)
+                # Return as ForgeStructArray
+                return ForgeStructArray(structs)
+            else:
+                s = ForgeStruct()
+                for name, val in pairs:
+                    s._fields[name] = val
+                return s
 
         def forge_isstruct(x):
             """isstruct(x) - check if x is a struct."""
@@ -10651,17 +10725,27 @@ class ForgeSession:
                     # Literal text — advance past it
                     if s[pos:pos+len(part)] == part:
                         pos += len(part)
-            # Return as array if all numeric, else cell
+            # Return as array if all numeric, else cell for mixed types
+            if not values:
+                return ForgeArray(np.array([], dtype=np.float64))
             if all(isinstance(v, (int, float)) for v in values):
                 if len(values) == 1:
                     return ForgeArray(np.float64(values[0]))
                 return ForgeArray(np.array(values, dtype=np.float64))
-            # Mixed: return first value
+            # Mixed types or string: return as cell array
             if len(values) == 1:
                 if isinstance(values[0], str):
                     return ForgeChar(values[0])
                 return ForgeArray(np.float64(values[0]))
-            return ForgeArray(np.array([v for v in values if isinstance(v, (int, float))], dtype=np.float64))
+            # Build cell with proper types
+            from forge.engine.containers import ForgeCell
+            result_items = []
+            for v in values:
+                if isinstance(v, str):
+                    result_items.append(ForgeChar(v))
+                else:
+                    result_items.append(ForgeArray(np.float64(v)))
+            return ForgeCell(result_items)
 
         def forge_fscanf(fid, fmt, *args):
             """fscanf(fid, format) — read formatted data from file."""
@@ -10677,7 +10761,7 @@ class ForgeSession:
             raise RuntimeError(f"Invalid file ID: {fid}")
 
         def forge_textscan(fid_or_str, fmt, *args):
-            """textscan(str, format) — read formatted text into cell array."""
+            """textscan(str, format, ..., Name, Value) — read formatted text into cell array."""
             from forge.engine.containers import ForgeChar, ForgeCell
             from forge.engine.types import ForgeArray
             if isinstance(fid_or_str, ForgeChar):
@@ -10692,28 +10776,80 @@ class ForgeSession:
                 text = str(fid_or_str)
             if isinstance(fmt, ForgeChar):
                 fmt = fmt.to_str()
-            import re
-            specs = re.findall(r'%[dfiusg]|%[0-9]*[dfiusg]', fmt)
-            # Parse lines
+            import re as _re
+            # Parse name-value options
+            delimiter = None
+            ii = 0
+            remaining = list(args)
+            while ii + 1 < len(remaining):
+                key = remaining[ii]
+                val = remaining[ii + 1]
+                if isinstance(key, ForgeChar):
+                    key = key.to_str()
+                if isinstance(val, ForgeChar):
+                    val = val.to_str()
+                if isinstance(key, str) and key.lower() == "delimiter":
+                    delimiter = val
+                ii += 2
+            # Parse format: extract specifiers and literal text
+            fmt_tokens = _re.findall(r'%[dfiusg]|%[0-9]*[dfiusg]|[^%]+', fmt)
+            specs = [t for t in fmt_tokens if t.startswith('%')]
             columns = [[] for _ in specs]
             for line in text.strip().split('\n'):
-                tokens = line.split()
-                for j, (spec, tok) in enumerate(zip(specs, tokens)):
-                    s = spec[-1]
-                    if s in ('d', 'i', 'u'):
-                        columns[j].append(float(tok))
-                    elif s == 'f':
-                        columns[j].append(float(tok))
-                    elif s == 's':
+                if not line.strip():
+                    continue
+                if delimiter is not None:
+                    tokens = [t.strip() for t in line.split(delimiter)]
+                else:
+                    # Check if there are non-whitespace literal separators in the format
+                    has_literals = any(not t.startswith('%') and t.strip() for t in fmt_tokens)
+                    if has_literals:
+                        remainder = line
+                        tokens = []
+                        for tidx, t in enumerate(fmt_tokens):
+                            if t.startswith('%'):
+                                # Find next literal
+                                next_lit = None
+                                for k in range(tidx + 1, len(fmt_tokens)):
+                                    if not fmt_tokens[k].startswith('%'):
+                                        next_lit = fmt_tokens[k]
+                                        break
+                                if next_lit and next_lit in remainder:
+                                    pos = remainder.index(next_lit)
+                                    tokens.append(remainder[:pos].strip())
+                                    remainder = remainder[pos + len(next_lit):]
+                                else:
+                                    m2 = _re.match(r'\S+', remainder.strip())
+                                    if m2:
+                                        tokens.append(m2.group())
+                                        remainder = remainder.strip()[m2.end():]
+                            else:
+                                if t in remainder:
+                                    pos = remainder.index(t)
+                                    remainder = remainder[pos + len(t):]
+                    else:
+                        tokens = line.split()
+                for j, tok in enumerate(tokens):
+                    if j >= len(specs):
+                        break
+                    spec_char = specs[j][-1]
+                    try:
+                        if spec_char in ('d', 'i', 'u'):
+                            columns[j].append(float(tok))
+                        elif spec_char == 'f':
+                            columns[j].append(float(tok))
+                        elif spec_char == 's':
+                            columns[j].append(tok)
+                        elif spec_char == 'g':
+                            columns[j].append(float(tok))
+                    except (ValueError, TypeError):
                         columns[j].append(tok)
-                    elif s == 'g':
-                        columns[j].append(float(tok))
             result = []
             for col in columns:
-                if col and isinstance(col[0], (int, float)):
+                if col and all(isinstance(v, (int, float)) for v in col):
                     result.append(ForgeArray(np.array(col, dtype=np.float64).reshape(-1, 1)))
                 else:
-                    result.append(ForgeCell([ForgeChar(s) for s in col]))
+                    result.append(ForgeCell([ForgeChar(str(ss)) if not isinstance(ss, str) else ForgeChar(ss) for ss in col]))
             return ForgeCell(result)
 
         def forge_sylvester(A, B, C):
@@ -11135,16 +11271,32 @@ class ForgeSession:
 
         def forge_strtrim(s):
             """strtrim(s) — strip leading/trailing whitespace."""
-            from forge.engine.containers import ForgeChar
+            from forge.engine.containers import ForgeChar, ForgeCell
             if isinstance(s, ForgeChar):
                 return ForgeChar(s.to_str().strip())
+            if isinstance(s, ForgeCell):
+                result = []
+                for item in s._data:
+                    if isinstance(item, ForgeChar):
+                        result.append(ForgeChar(item.to_str().strip()))
+                    else:
+                        result.append(item)
+                return ForgeCell(result)
             return s
 
         def forge_deblank(s):
             """deblank(s) — strip trailing blanks."""
-            from forge.engine.containers import ForgeChar
+            from forge.engine.containers import ForgeChar, ForgeCell
             if isinstance(s, ForgeChar):
                 return ForgeChar(s.to_str().rstrip())
+            if isinstance(s, ForgeCell):
+                result = []
+                for item in s._data:
+                    if isinstance(item, ForgeChar):
+                        result.append(ForgeChar(item.to_str().rstrip()))
+                    else:
+                        result.append(item)
+                return ForgeCell(result)
             return s
 
         def forge_fliplr(A):
