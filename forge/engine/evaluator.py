@@ -583,7 +583,7 @@ class Session:
         b["isnan"] = forge_isnan
         b["isinf"] = forge_isinf
         b["isfinite"] = forge_isfinite
-        b["isempty"] = lambda x: ForgeArray(np.array(x.isempty() if isinstance(x, ForgeArray) else len(x) == 0))
+        b["isempty"] = lambda x: ForgeArray(np.float64(x.isempty() if isinstance(x, ForgeArray) else len(x) == 0))
         def _isfield(s, f):
             from forge.engine.containers import ForgeStruct, ForgeChar
             if isinstance(f, ForgeChar):
@@ -663,8 +663,22 @@ class Session:
         b["ctranspose"] = lambda x: ForgeArray(np.conj(np.asarray(x.data if isinstance(x, ForgeArray) else x).T))
         b["sum"] = lambda x, *a: ForgeArray(np.sum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
         b["prod"] = lambda x, *a: ForgeArray(np.prod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
-        b["min"] = lambda x, *a: ForgeArray(np.min(_unwrap(x))) if not a else ForgeArray(np.minimum(_unwrap(x), _unwrap(a[0])))
-        b["max"] = lambda x, *a: ForgeArray(np.max(_unwrap(x))) if not a else ForgeArray(np.maximum(_unwrap(x), _unwrap(a[0])))
+        def _forge_min(x, *a):
+            data = _unwrap(x)
+            if not a:
+                if np.asarray(data).size == 0:
+                    return ForgeArray(np.array([]).reshape(0, 0))
+                return ForgeArray(np.min(data))
+            return ForgeArray(np.minimum(data, _unwrap(a[0])))
+        b["min"] = _forge_min
+        def _forge_max(x, *a):
+            data = _unwrap(x)
+            if not a:
+                if np.asarray(data).size == 0:
+                    return ForgeArray(np.array([]).reshape(0, 0))
+                return ForgeArray(np.max(data))
+            return ForgeArray(np.maximum(data, _unwrap(a[0])))
+        b["max"] = _forge_max
         b["sort"] = lambda x, *a: ForgeArray(np.sort(_unwrap(x), axis=-1))
         def _forge_find_builtin(x):
             import scipy.sparse as _sp
@@ -682,8 +696,24 @@ class Session:
         b["cumprod"] = lambda x, *a: ForgeArray(np.cumprod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
         b["diff"] = lambda x, *a: ForgeArray(np.diff(_unwrap(x), n=_to_py(a[0]) if a else 1, axis=-1))
         b["cat"] = lambda dim, *arrays: ForgeArray(np.concatenate([_unwrap(a) for a in arrays], axis=_to_py(dim)-1))
-        b["horzcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0], axis=1)) if any(np.asarray(_unwrap(x)).size > 0 for x in a) else ForgeArray(np.array([]).reshape(0, 0))
-        b["vertcat"] = lambda *a: ForgeArray(np.concatenate([_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0], axis=0)) if any(np.asarray(_unwrap(x)).size > 0 for x in a) else ForgeArray(np.array([]).reshape(0, 0))
+        def _forge_horzcat(*a):
+            non_empty = [_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0]
+            if not non_empty:
+                return ForgeArray(np.array([]).reshape(0, 0))
+            try:
+                return ForgeArray(np.concatenate(non_empty, axis=1))
+            except ValueError:
+                raise ValueError("horizontal dimensions mismatch")
+        b["horzcat"] = _forge_horzcat
+        def _forge_vertcat(*a):
+            non_empty = [_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0]
+            if not non_empty:
+                return ForgeArray(np.array([]).reshape(0, 0))
+            try:
+                return ForgeArray(np.concatenate(non_empty, axis=0))
+            except ValueError:
+                raise ValueError("vertical dimensions mismatch")
+        b["vertcat"] = _forge_vertcat
         b["fliplr"] = lambda x: ForgeArray(np.fliplr(_unwrap(x)))
         b["flipud"] = lambda x: ForgeArray(np.flipud(_unwrap(x)))
         b["rot90"] = lambda x, *a: ForgeArray(np.rot90(_unwrap(x), k=_to_py(a[0]) if a else 1))
@@ -1507,7 +1537,12 @@ class Session:
                         return _wrap_sparse(l.multiply(r))
                     else:
                         return _wrap_sparse(r.multiply(l))
-            return ForgeArray(l @ r if _is_matrix_op(l, r) else l * r)
+            try:
+                return ForgeArray(l @ r if _is_matrix_op(l, r) else l * r)
+            except ValueError:
+                if _is_matrix_op(l, r):
+                    raise ValueError(f"operator *: inner matrix dimensions must agree ({l.shape[0]}x{l.shape[1]} * {r.shape[0]}x{r.shape[1]})")
+                raise
         if op == "/":
             if _any_sparse and _is_matrix_op(l, r):
                 from scipy.sparse.linalg import spsolve
@@ -1772,7 +1807,12 @@ class Session:
                 _check_1based_index(idx_int, data.shape[dim] if dim < len(data.shape) else 1)
                 slices.append(idx_int - 1)  # 1-based to 0-based
 
-        result = data[np.ix_(*[s if isinstance(s, np.ndarray) else (np.arange(data.shape[i]) if isinstance(s, slice) else np.array([s])) for i, s in enumerate(slices)])]
+        try:
+            result = data[np.ix_(*[s if isinstance(s, np.ndarray) else (np.arange(data.shape[i]) if isinstance(s, slice) else np.array([s])) for i, s in enumerate(slices)])]
+        except IndexError as e:
+            if "too many indices" in str(e):
+                raise IndexError(f"index exceeds array dimensions: array is {data.ndim}-dimensional, but {len(slices)} indices were given")
+            raise
         # Squeeze singleton dimensions from scalar indices
         squeeze_axes = [i for i, s in enumerate(slices) if isinstance(s, (int, np.integer))]
         for ax in sorted(squeeze_axes, reverse=True):
@@ -1814,10 +1854,17 @@ class Session:
             vals = [v for v in vals if v.size > 0]
             if not vals:
                 continue
-            rows.append(np.concatenate(vals, axis=1))
+            try:
+                rows.append(np.concatenate(vals, axis=1))
+            except ValueError:
+                raise ValueError("horizontal dimensions mismatch")
         if not rows:
             return ForgeArray(np.array([]).reshape(0, 0))
-        return ForgeArray(np.concatenate(rows, axis=0))
+        try:
+            return ForgeArray(np.concatenate(rows, axis=0))
+        except ValueError:
+            sizes = " vs ".join(str(r.shape[1]) for r in rows)
+            raise ValueError(f"vertical dimensions mismatch ({sizes} columns)")
 
     def _eval_cell_literal(self, node: CellLiteral, ws: Workspace) -> ForgeCell:
         elements = []

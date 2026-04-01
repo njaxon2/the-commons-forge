@@ -408,13 +408,13 @@ def forge_ischar(x):
     return x.type_name() == "char"
 
 def forge_isnan(x):
-    return ForgeArray(np.isnan(_unwrap(x)))
+    return ForgeArray(np.float64(np.isnan(_unwrap(x))))
 
 def forge_isinf(x):
-    return ForgeArray(np.isinf(_unwrap(x)))
+    return ForgeArray(np.float64(np.isinf(_unwrap(x))))
 
 def forge_isfinite(x):
-    return ForgeArray(np.isfinite(_unwrap(x)))
+    return ForgeArray(np.float64(np.isfinite(_unwrap(x))))
 
 
 # --- Special values ---
