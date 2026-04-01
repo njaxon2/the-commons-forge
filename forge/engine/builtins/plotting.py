@@ -1140,11 +1140,16 @@ def forge_clf():
     _enhance_current()
 
 
+# Module-level flag for IDE to detect close-all
+_close_all_requested = False
+
 def forge_close(n=None):
+    global _close_all_requested
     if n is None:
         plt.close()
     elif n == "all":
         plt.close("all")
+        _close_all_requested = True
     else:
         plt.close(int(n))
 
