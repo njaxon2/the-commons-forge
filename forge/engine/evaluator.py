@@ -1347,9 +1347,16 @@ class Session:
             if isinstance(target, ForgeCell):
                 self._index_sizes.append(target.numel())
                 try:
-                    args = [_to_int(self._eval_expr(a, ws)) for a in node.args]
+                    raw_args = [self._eval_expr(a, ws) for a in node.args]
                 finally:
                     self._index_sizes.pop()
+                # BareColon expands to all elements (e.g. c{:})
+                if len(raw_args) == 1 and raw_args[0] is None:
+                    # Return tuple of all elements for expansion
+                    if target.numel() == 1:
+                        return target.content_get(1)
+                    return tuple(target._data)
+                args = [_to_int(a) for a in raw_args]
                 return target.content_get(*args)
             raise TypeError("Cell indexing on non-cell")
 
@@ -1764,7 +1771,14 @@ class Session:
         raw_vals = []
         all_char = True
         for row in node.rows:
-            row_raw = [self._eval_expr(e, ws) for e in row]
+            row_raw = []
+            for e in row:
+                val = self._eval_expr(e, ws)
+                # Expand tuples from cell {:} expansion
+                if isinstance(val, tuple):
+                    row_raw.extend(val)
+                else:
+                    row_raw.append(val)
             raw_vals.append(row_raw)
             for v in row_raw:
                 if not isinstance(v, ForgeChar):

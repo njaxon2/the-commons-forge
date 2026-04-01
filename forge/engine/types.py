@@ -476,6 +476,11 @@ def forge_false(*args):
 def forge_diag(v, k=0):
     """Create diagonal matrix or extract diagonal."""
     v_data = _unwrap(v)
+    # Unwrap k from ForgeArray if needed
+    if isinstance(k, ForgeArray):
+        k = int(k.data.flat[0])
+    else:
+        k = int(k)
     if v_data.ndim <= 1 or (v_data.ndim == 2 and min(v_data.shape) == 1):
         # Vector input: create diagonal matrix
         return ForgeArray(np.diag(v_data.ravel(), k))

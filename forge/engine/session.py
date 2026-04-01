@@ -4316,6 +4316,8 @@ class ForgeSession:
             if isinstance(s, ForgeChar): s = s.to_str()
             if isinstance(pat, ForgeChar): pat = pat.to_str()
             if isinstance(rep, ForgeChar): rep = rep.to_str()
+            # Convert Octave-style $1, $2 backreferences to Python , 
+            rep = re.sub(r"\$(\d+)", lambda m: chr(92) + m.group(1), rep)
             return ForgeChar(re.sub(pat, rep, s))
 
         def forge_bench(*args):

@@ -1008,13 +1008,21 @@ def forge_regexpi(s, pat, *args):
 
 @_tb("regexprep")
 def forge_regexprep(s, pat, rep):
-    """Regular expression replace."""
-    import re
-    from forge.engine.containers import ForgeChar
-    if isinstance(s, ForgeChar):
-        s = s.to_str()
-    if isinstance(pat, ForgeChar):
-        pat = pat.to_str()
-    if isinstance(rep, ForgeChar):
-        rep = rep.to_str()
-    return ForgeChar(re.sub(str(pat), str(rep), str(s)))
+    # Convert Octave-style $1, $2 backreferences to Python , 
+    rep_str = str(rep)
+    rep_str = re.sub(r"\$(\d+)", lambda m: chr(92) + m.group(1), rep_str)
+    return ForgeChar(re.sub(str(pat), rep_str, str(s)))
+
+
+@_tb("iscellstr")
+def forge_iscellstr(c):
+    """Return true if every element of cell array is a character string."""
+    from forge.engine.containers import ForgeCell, ForgeChar
+    from forge.engine.types import ForgeArray
+    import numpy as np
+    if not isinstance(c, ForgeCell):
+        return ForgeArray(np.array(0.0))
+    for item in c._data:
+        if not isinstance(item, ForgeChar):
+            return ForgeArray(np.array(0.0))
+    return ForgeArray(np.array(1.0))
