@@ -9,6 +9,35 @@ import numpy as np
 import sys
 import time
 import os
+from scipy.linalg import solve as _scipy_solve, solve_triangular as _solve_tri, cho_factor as _cho_factor, cho_solve as _cho_solve
+
+# Pre-seeded RNG for sampled symmetry check (deterministic, no perf cost)
+_MLDIVIDE_RNG = np.random.default_rng(42)
+
+def _smart_mldivide(A, b):
+    """Fast-dispatch linear solve with structure detection."""
+    m, n = A.shape
+    if m != n:
+        return np.linalg.lstsq(A, b, rcond=None)[0]
+    # Fast triangular check: O(n) via triu/tril nonzero scan
+    if not np.any(np.triu(A, 1)):  # lower triangular
+        return _solve_tri(A, b, lower=True, check_finite=False)
+    if not np.any(np.tril(A, -1)):  # upper triangular
+        return _solve_tri(A, b, lower=False, check_finite=False)
+    # Sampled symmetry check for large matrices -> Cholesky if SPD
+    if n >= 64:
+        k = min(100, n)
+        idx = _MLDIVIDE_RNG.integers(0, n, size=k)
+        jdx = _MLDIVIDE_RNG.integers(0, n, size=k)
+        if np.allclose(A[idx, jdx], A[jdx, idx]):
+            try:
+                cf = _cho_factor(A, check_finite=False)
+                return _cho_solve(cf, b, check_finite=False)
+            except np.linalg.LinAlgError:
+                pass
+    # General dense: scipy with skip finite check
+    return _scipy_solve(A, b, overwrite_a=False, overwrite_b=False, check_finite=False)
+
 import io
 from typing import Any, Dict, List, Optional, Callable
 from forge.engine.types import (
@@ -1592,7 +1621,7 @@ class Session:
                 lt = l.T.toarray().ravel() if _sp.issparse(l) else l.T.ravel() if l.T.ndim > 1 and l.T.shape[1] == 1 else l.T
                 x = spsolve(rt, lt)
                 return ForgeArray(np.atleast_2d(x).T if x.ndim == 1 else x.T)
-            return ForgeArray(np.linalg.solve(r.T, l.T).T if _is_matrix_op(l, r) else l / r)
+            return ForgeArray(_smart_mldivide(r.T, l.T).T if _is_matrix_op(l, r) else l / r)
         if op == "\\":
             if _any_sparse and _is_matrix_op(l, r):
                 from scipy.sparse.linalg import spsolve
@@ -1603,7 +1632,7 @@ class Session:
                     return ForgeArray(np.atleast_2d(x).T)
                 x = spsolve(l_sp, r_arr)
                 return ForgeArray(np.atleast_2d(x).T if x.ndim == 1 else x)
-            return ForgeArray(np.linalg.solve(l, r) if _is_matrix_op(l, r) else r / l)
+            return ForgeArray(_smart_mldivide(l, r) if _is_matrix_op(l, r) else r / l)
         if op == "^":
             return ForgeArray(np.linalg.matrix_power(l, int(r.flat[0])) if (l.ndim == 2 and l.size > 1) else l ** r)
         if op == ".*":
