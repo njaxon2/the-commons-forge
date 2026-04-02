@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forge-engine"
-version = "0.2.8"
+version = "0.3.3"
 description = "Forge Engine - Octave-compatible numerical computing core"
 readme = "README.md"
 license = {text = "Apache-2.0"}

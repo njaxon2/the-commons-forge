@@ -14,6 +14,7 @@ from forge.engine.types import ForgeArray, _unwrap
 # ---------------------------------------------------------------------------
 
 def forge_sparse(i_or_m, j=None, v=None, m=None, n=None):
+    """sparse(i, j, v, m, n) — create sparse matrix."""
     i_val = _unwrap(i_or_m) if isinstance(i_or_m, ForgeArray) else np.asarray(i_or_m)
     if j is not None and v is None:
         j_val = _unwrap(j) if isinstance(j, ForgeArray) else np.asarray(j)

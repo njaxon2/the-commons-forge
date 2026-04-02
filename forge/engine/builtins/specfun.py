@@ -23,24 +23,30 @@ def _scalar(x):
 
 
 def forge_beta(a, b):
+    """beta(a, b) — beta function B(a,b) = gamma(a)*gamma(b)/gamma(a+b)."""
     return _wrap(special.beta(_unwrap(a), _unwrap(b)))
 
 def forge_betaln(a, b):
+    """betaln(a, b) — log of beta function."""
     return _wrap(special.betaln(_unwrap(a), _unwrap(b)))
 
 def forge_betainc(x, a, b):
+    """betainc(x, a, b) — incomplete beta function."""
     return _wrap(special.betainc(_unwrap(a), _unwrap(b), _unwrap(x)))
 
 def forge_betaincinv(y, a, b):
+    """betaincinv(y, a, b) — inverse incomplete beta function."""
     return _wrap(special.betaincinv(_unwrap(a), _unwrap(b), _unwrap(y)))
 
 def forge_factorial(n):
+    """factorial(n) — factorial n! = 1*2*...*n."""
     return _wrap(special.factorial(_unwrap(n), exact=False))
 
 def forge_nchoosek(n, k):
     return _wrap(special.comb(_unwrap(n), _unwrap(k), exact=False))
 
 def forge_isprime(n):
+    """isprime(n) — true for prime numbers."""
     arr = np.atleast_1d(_unwrap(n)).astype(int)
     result = np.zeros_like(arr, dtype=bool)
     for idx, v in np.ndenumerate(arr):
@@ -60,6 +66,7 @@ def forge_isprime(n):
     return ForgeArray(result.ravel())
 
 def forge_primes(n):
+    """primes(n) — list of prime numbers up to n."""
     n_val = int(_scalar(n))
     if n_val < 2:
         return ForgeArray(np.array([], dtype=int))
@@ -71,6 +78,7 @@ def forge_primes(n):
     return ForgeArray(np.where(sieve)[0])
 
 def forge_factor(n):
+    """factor(n) — prime factorization of integer n."""
     n_val = int(_scalar(n))
     if n_val <= 1:
         return ForgeArray(np.array([n_val]))
@@ -86,6 +94,7 @@ def forge_factor(n):
     return ForgeArray(np.array(factors))
 
 def forge_lcm(a, b):
+    """lcm(a, b) — least common multiple."""
     ad, bd = np.atleast_1d(_unwrap(a)).astype(int), np.atleast_1d(_unwrap(b)).astype(int)
     r = np.lcm(ad, bd)
     return ForgeArray(r.ravel()) if np.ndim(r) > 0 else ForgeArray(r)
@@ -100,12 +109,14 @@ def forge_cosint(x):
     return _wrap(special.sici(_unwrap(x))[1])
 
 def forge_ellipke(m):
+    """ellipke(m) — complete elliptic integrals K(m) and E(m)."""
     md = _unwrap(m)
     K = special.ellipk(md)
     E = special.ellipe(md)
     return ForgeArray(K), ForgeArray(E)
 
 def forge_legendre(n, x):
+    """legendre(n, x) — associated Legendre functions."""
     n_val = int(_scalar(n))
     xd = _unwrap(x).ravel()
     # Returns (n+1) x len(x) matrix of associated Legendre functions
@@ -115,6 +126,7 @@ def forge_legendre(n, x):
     return ForgeArray(result)
 
 def forge_nthroot(x, n):
+    """nthroot(x, n) — real n-th root of x."""
     xd, nd = _unwrap(x), _unwrap(n)
     return _wrap(np.sign(xd) * np.abs(xd) ** (1.0 / nd))
 
@@ -138,9 +150,11 @@ def forge_realsqrt(x):
     return _wrap(np.sqrt(xd))
 
 def forge_gammainc(x, a):
+    """gammainc(x, a) — incomplete gamma function."""
     return _wrap(special.gammainc(_unwrap(a), _unwrap(x)))
 
 def forge_gammaincinv(y, a):
+    """gammaincinv(y, a) — inverse incomplete gamma function."""
     return _wrap(special.gammaincinv(_unwrap(a), _unwrap(y)))
 
 

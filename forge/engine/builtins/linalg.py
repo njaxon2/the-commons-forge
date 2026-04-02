@@ -29,6 +29,7 @@ def _scalar(x):
 
 
 def forge_cond(A, *args):
+    """cond(A) — matrix condition number."""
     Ad = _unwrap(A)
     if Ad.ndim < 2:
         Ad = Ad.reshape(1, -1)
@@ -36,6 +37,7 @@ def forge_cond(A, *args):
     return _wrap(la.cond(Ad, p))
 
 def forge_rank(A, *args):
+    """rank(A) — matrix rank."""
     Ad = _unwrap(A)
     if Ad.ndim < 2:
         Ad = Ad.reshape(1, -1)
@@ -43,12 +45,14 @@ def forge_rank(A, *args):
     return _wrap(la.matrix_rank(Ad, tol=tol))
 
 def forge_trace(A):
+    """trace(A) — sum of diagonal elements."""
     Ad = _unwrap(A)
     if Ad.ndim < 2:
         return _wrap(np.sum(Ad))
     return _wrap(np.trace(Ad))
 
 def forge_cross(a, b):
+    """cross(a, b) — vector cross product."""
     ad, bd = _unwrap(a).ravel(), _unwrap(b).ravel()
     return ForgeArray(np.cross(ad, bd))
 

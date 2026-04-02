@@ -125,24 +125,29 @@ class ForgeArray:
         return self._data.shape[0]
 
     def columns(self):
+        """columns(A) — return number of columns in matrix A."""
         return self._data.shape[1] if self._data.ndim >= 2 else 1
 
     def isempty(self):
         return self._data.size == 0
 
     def isscalar(self):
+        """isscalar(x) — true if x is a 1x1 scalar."""
         return self._data.size == 1
 
     def isvector(self):
+        """isvector(x) — true if x is a row or column vector."""
         if self._data.size == 0:
             return False
         non_singleton = sum(1 for s in self._data.shape if s > 1)
         return non_singleton <= 1
 
     def ismatrix(self):
+        """ismatrix(x) — true if x is a 2-D matrix."""
         return self._data.ndim == 2
 
     def issquare(self):
+        """issquare(x) — true if x is a square matrix."""
         return self._data.ndim == 2 and self._data.shape[0] == self._data.shape[1]
 
     # --- 1-based indexing ---
@@ -340,27 +345,35 @@ def _octave_int_cast(x, dtype_name):
     return ForgeArray(arr.astype(target_dtype))
 
 def forge_int8(x):
+    """int8(x) — convert to signed 8-bit integer."""
     return _octave_int_cast(x, "int8")
 
 def forge_int16(x):
+    """int16(x) — convert to signed 16-bit integer."""
     return _octave_int_cast(x, "int16")
 
 def forge_int32(x):
+    """int32(x) — convert to signed 32-bit integer."""
     return _octave_int_cast(x, "int32")
 
 def forge_int64(x):
+    """int64(x) — convert to signed 64-bit integer."""
     return _octave_int_cast(x, "int64")
 
 def forge_uint8(x):
+    """uint8(x) — convert to unsigned 8-bit integer."""
     return _octave_int_cast(x, "uint8")
 
 def forge_uint16(x):
+    """uint16(x) — convert to unsigned 16-bit integer."""
     return _octave_int_cast(x, "uint16")
 
 def forge_uint32(x):
+    """uint32(x) — convert to unsigned 32-bit integer."""
     return _octave_int_cast(x, "uint32")
 
 def forge_uint64(x):
+    """uint64(x) — convert to unsigned 64-bit integer."""
     return _octave_int_cast(x, "uint64")
 
 def forge_logical(x):
@@ -393,6 +406,7 @@ def forge_islogical(x):
     return x.dtype == np.bool_
 
 def forge_isfloat(x):
+    """isfloat(x) — true if x is a floating-point type."""
     if not isinstance(x, ForgeArray):
         return False
     return np.issubdtype(x.dtype, np.floating) or np.issubdtype(x.dtype, np.complexfloating)

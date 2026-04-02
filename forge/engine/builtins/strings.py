@@ -668,6 +668,7 @@ def forge_sprintf(fmt, *args):
 
 @_tb("strcmp")
 def forge_strcmp(s1, s2):
+    """strcmp(s1, s2) — compare strings (case-sensitive)."""
     import numpy as np
     """Compare two strings (exact match)."""
     from forge.engine.containers import ForgeChar
@@ -679,6 +680,7 @@ def forge_strcmp(s1, s2):
 
 @_tb("strcmpi")
 def forge_strcmpi(s1, s2):
+    """strcmpi(s1, s2) — compare strings (case-insensitive)."""
     import numpy as np
     """Compare two strings (case-insensitive)."""
     from forge.engine.containers import ForgeChar

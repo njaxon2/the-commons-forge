@@ -185,6 +185,7 @@ def forge_plot(*args):
 
 
 def forge_semilogx(*args):
+    """semilogx(x, y) — semi-log plot (x-axis logarithmic)."""
     _maybe_clear()
     forge_plot(*args)
     _cur_ax().set_xscale("log")
@@ -194,6 +195,7 @@ def forge_semilogx(*args):
 
 
 def forge_semilogy(*args):
+    """semilogy(x, y) — semi-log plot (y-axis logarithmic)."""
     _maybe_clear()
     forge_plot(*args)
     _cur_ax().set_yscale("log")
@@ -203,6 +205,7 @@ def forge_semilogy(*args):
 
 
 def forge_loglog(*args):
+    """loglog(x, y) — log-log scale plot."""
     _maybe_clear()
     forge_plot(*args)
     ax = _cur_ax()
@@ -285,6 +288,7 @@ def forge_bar(*args, **kwargs):
 
 
 def forge_barh(x, y=None, height=0.8):
+    """barh(y, data) — horizontal bar chart."""
     _maybe_clear()
     if y is None:
         y = _to_np(x)
@@ -298,6 +302,7 @@ def forge_barh(x, y=None, height=0.8):
 
 
 def forge_scatter(x, y, s=None, c=None, **kwargs):
+    """scatter(x, y) — scatter plot."""
     _maybe_clear()
     _cur_ax().scatter(_to_np(x), _to_np(y), s=s, c=c, **kwargs)
     plt.draw()
@@ -306,6 +311,7 @@ def forge_scatter(x, y, s=None, c=None, **kwargs):
 
 
 def forge_stem(x, y=None):
+    """stem(x, y) — discrete sequence (stem) plot."""
     _maybe_clear()
     if y is None:
         _cur_ax().stem(_to_np(x))
@@ -317,6 +323,7 @@ def forge_stem(x, y=None):
 
 
 def forge_stairs(x, y=None):
+    """stairs(x, y) — stairstep plot."""
     _maybe_clear()
     if y is None:
         _cur_ax().step(np.arange(len(_to_np(x))), _to_np(x), where="post")
@@ -328,6 +335,7 @@ def forge_stairs(x, y=None):
 
 
 def forge_area(x, y=None):
+    """area(x, y) — filled area plot."""
     _maybe_clear()
     if y is None:
         y = _to_np(x)
@@ -341,6 +349,7 @@ def forge_area(x, y=None):
 
 
 def forge_errorbar(x, y, err, **kwargs):
+    """errorbar(x, y, err) — plot with error bars."""
     _maybe_clear()
     _cur_ax().errorbar(_to_np(x), _to_np(y), yerr=_to_np(err), **kwargs)
     plt.draw()
@@ -358,6 +367,7 @@ def forge_histogram(data, bins=10):
 
 
 def forge_pie(x, **kwargs):
+    """pie(x) — pie chart."""
     _maybe_clear()
     _cur_ax().pie(_to_np(x), **kwargs)
     plt.draw()
@@ -366,6 +376,7 @@ def forge_pie(x, **kwargs):
 
 
 def forge_polar(theta, r):
+    """polar(theta, rho) — polar coordinate plot."""
     fig = _cur_fig()
     ax = fig.add_subplot(111, projection="polar")
     ax.plot(_to_np(theta), _to_np(r))
@@ -375,6 +386,7 @@ def forge_polar(theta, r):
 
 
 def forge_fill(x, y, *args, **kwargs):
+    """fill(x, y, c) — filled polygon."""
     _maybe_clear()
     _cur_ax().fill(_to_np(x), _to_np(y), *args, **kwargs)
     plt.draw()
@@ -383,6 +395,7 @@ def forge_fill(x, y, *args, **kwargs):
 
 
 def forge_line(x, y, **kwargs):
+    """line(x, y) — create line graphics object."""
     _maybe_clear()
     _cur_ax().plot(_to_np(x), _to_np(y), **kwargs)
     plt.draw()
@@ -468,6 +481,7 @@ def forge_plot3(*args, **kwargs):
 
 
 def forge_scatter3(x, y, z, **kwargs):
+    """scatter3(x, y, z) — 3-D scatter plot."""
     ax = _get_3d_ax()
     ax.scatter(_to_np(x), _to_np(y), _to_np(z), **kwargs)
     plt.draw()
@@ -532,6 +546,7 @@ def _prepare_surf_args(*args):
 
 
 def forge_surf(*args, **kwargs):
+    """surf(X, Y, Z) — 3-D surface plot."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {"cmap": "viridis", "edgecolor": "none"}
@@ -548,6 +563,7 @@ def forge_surf(*args, **kwargs):
 
 
 def forge_surfc(*args, **kwargs):
+    """surfc(X, Y, Z) — surface plot with contour underneath."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {"alpha": 0.7, "cmap": "viridis"}
@@ -563,6 +579,7 @@ def forge_surfc(*args, **kwargs):
 
 
 def forge_surfl(*args, **kwargs):
+    """surfl(X, Y, Z) — surface plot with lighting."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {"rstride": 1, "cstride": 1, "shade": True, "cmap": "copper"}
@@ -575,6 +592,7 @@ def forge_surfl(*args, **kwargs):
 
 
 def forge_mesh(*args, **kwargs):
+    """mesh(X, Y, Z) — 3-D mesh surface plot."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {}
@@ -587,6 +605,7 @@ def forge_mesh(*args, **kwargs):
 
 
 def forge_meshc(*args, **kwargs):
+    """meshc(X, Y, Z) — mesh plot with contour underneath."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {}
@@ -600,6 +619,7 @@ def forge_meshc(*args, **kwargs):
 
 
 def forge_meshz(*args, **kwargs):
+    """meshz(X, Y, Z) — mesh plot with curtain."""
     ax = _get_3d_ax()
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {}
@@ -637,6 +657,7 @@ def forge_contour(*args, **kwargs):
 
 
 def forge_contourf(X, Y, Z, *args, **kwargs):
+    """contourf(X, Y, Z) — filled contour plot."""
     _maybe_clear()
     # Convert ForgeArray args (e.g., levels)
     converted_args = []
@@ -662,6 +683,7 @@ def forge_contourf(X, Y, Z, *args, **kwargs):
 
 
 def forge_contour3(X, Y, Z, *args, **kwargs):
+    """contour3(X, Y, Z) — 3-D contour plot."""
     ax = _get_3d_ax()
     ax.contour(_to_np(X), _to_np(Y), _to_np(Z), *args, **kwargs)
     plt.draw()
@@ -670,6 +692,7 @@ def forge_contour3(X, Y, Z, *args, **kwargs):
 
 
 def forge_waterfall(X, Y, Z, **kwargs):
+    """waterfall(X, Y, Z) — waterfall plot."""
     ax = _get_3d_ax()
     Xn, Yn, Zn = _to_np(X), _to_np(Y), _to_np(Z)
     for i in range(Xn.shape[0]):
@@ -880,6 +903,7 @@ def forge_zlabel(*args):
 
 
 def forge_legend(*args, **kwargs):
+    """legend(str1, str2, ...) — add legend to plot."""
     # Convert ForgeChar args to Python strings, extracting MATLAB-style keyword pairs
     from forge.engine.containers import ForgeChar
     # MATLAB keyword args that can appear in positional args
@@ -958,6 +982,7 @@ def forge_legend(*args, **kwargs):
 
 
 def forge_grid(on=None):
+    """grid on/off — toggle grid lines on axes."""
     if on is None:
         # toggle
         ax = _cur_ax()
@@ -994,6 +1019,7 @@ def forge_axis(spec=None):
 
 
 def forge_xlim(lo=None, hi=None):
+    """xlim([lo hi]) — set x-axis limits."""
     if lo is None:
         return _cur_ax().get_xlim()
     if hi is None:
@@ -1007,6 +1033,7 @@ def forge_xlim(lo=None, hi=None):
 
 
 def forge_ylim(lo=None, hi=None):
+    """ylim([lo hi]) — set y-axis limits."""
     if lo is None:
         return _cur_ax().get_ylim()
     if hi is None:
@@ -1021,6 +1048,7 @@ def forge_ylim(lo=None, hi=None):
 
 
 def forge_zlim(lo=None, hi=None):
+    """zlim([lo hi]) — set z-axis limits."""
     ax = _cur_ax()
     if not hasattr(ax, "set_zlim"):
         return
@@ -1051,6 +1079,7 @@ def forge_hold(state=None):
 
 
 def forge_colorbar(**kwargs):
+    """colorbar — add colorbar to current axes."""
     fig = _cur_fig()
     ax = _cur_ax()
     mappable = getattr(fig, '_forge_last_mappable', None)
@@ -1106,6 +1135,7 @@ def forge_figure(n=None):
 
 
 def forge_subplot(m, n, p):
+    """subplot(m, n, p) — create axes in tiled positions."""
     m_int = int(_to_np(m).flat[0]) if hasattr(m, '__array__') else int(m)
     n_int = int(_to_np(n).flat[0]) if hasattr(n, '__array__') else int(n)
     p_int = int(_to_np(p).flat[0]) if hasattr(p, '__array__') else int(p)
@@ -1119,14 +1149,17 @@ def forge_subplot(m, n, p):
 
 
 def forge_gca():
+    """gca — get current axes handle."""
     return _cur_ax()
 
 
 def forge_gcf():
+    """gcf — get current figure handle."""
     return _cur_fig()
 
 
 def forge_cla():
+    """cla — clear current axes."""
     _cur_ax().cla()
     plt.draw()
     plt.pause(0.01)
@@ -1134,6 +1167,7 @@ def forge_cla():
 
 
 def forge_clf():
+    """clf — clear current figure."""
     _cur_fig().clf()
     plt.draw()
     plt.pause(0.01)
@@ -1144,6 +1178,7 @@ def forge_clf():
 _close_all_requested = False
 
 def forge_close(n=None):
+    """close — close current figure window. close all closes all figures."""
     global _close_all_requested
     if n is None:
         plt.close()

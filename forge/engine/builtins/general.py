@@ -69,6 +69,7 @@ def forge_circshift(x, k, *args):
     return ForgeArray(np.roll(data, k_val, axis=dim))
 
 def forge_flip(x, *args):
+    """flip(A, dim) — flip array along specified dimension."""
     data = _unwrap(x)
     if args:
         dim = int(_scalar(args[0])) - 1
@@ -76,6 +77,7 @@ def forge_flip(x, *args):
     return ForgeArray(np.flip(data))
 
 def forge_shiftdim(x, n=None):
+    """shiftdim(A, n) — shift array dimensions."""
     data = _unwrap(x)
     if n is not None:
         n_val = int(_scalar(n))
@@ -103,6 +105,7 @@ def forge_sortrows(x, *args):
     return ForgeArray(data[idx])
 
 def forge_repelem(x, *args):
+    """repelem(A, r, c) — replicate array elements."""
     data = _unwrap(x)
     if len(args) == 1:
         r = int(_scalar(args[0]))
@@ -182,9 +185,11 @@ def forge_interp1(x, y, xq, *args):
     return ForgeArray(f(xqd))
 
 def forge_deg2rad(x):
+    """deg2rad(d) — convert degrees to radians."""
     return ForgeArray(np.deg2rad(_unwrap(x)))
 
 def forge_rad2deg(x):
+    """rad2deg(r) — convert radians to degrees."""
     return ForgeArray(np.rad2deg(_unwrap(x)))
 
 def forge_nextpow2(x):
@@ -195,10 +200,12 @@ def forge_nextpow2(x):
     return ForgeArray(result)
 
 def forge_bincoeff(n, k):
+    """bincoeff(n, k) — binomial coefficient C(n,k)."""
     from scipy.special import comb
     return ForgeArray(comb(_unwrap(n), _unwrap(k), exact=False))
 
 def forge_idivide(a, b, *args):
+    """idivide(a, b, op) — integer division with specified rounding."""
     ad, bd = _unwrap(a), _unwrap(b)
     mode = "fix"
     if args:
@@ -217,9 +224,11 @@ def forge_idivide(a, b, *args):
     return ForgeArray(r.astype(int))
 
 def forge_xor(a, b):
+    """xor(a, b) — exclusive OR."""
     return ForgeArray(np.logical_xor(_unwrap(a), _unwrap(b)))
 
 def forge_isequal(*args):
+    """isequal(a, b) — true if values are equal."""
     if len(args) < 2:
         return ForgeArray(np.array(True))
     first = _unwrap(args[0])
@@ -229,6 +238,7 @@ def forge_isequal(*args):
     return ForgeArray(np.array(True))
 
 def forge_isequaln(*args):
+    """isequaln(a, b) — true if values are equal (NaN == NaN)."""
     if len(args) < 2:
         return ForgeArray(np.array(True))
     first = _unwrap(args[0])
@@ -250,6 +260,7 @@ def forge_polyarea(x, y):
     return ForgeArray(0.5 * np.abs(np.dot(xd, np.roll(yd, 1)) - np.dot(yd, np.roll(xd, 1))))
 
 def forge_rat(x, *args):
+    """rat(x) — rational approximation."""
     from fractions import Fraction
     v = float(_scalar(x))
     tol = float(_scalar(args[0])) if args else 1e-6
@@ -300,6 +311,7 @@ def forge_logspace(a, b, *args):
     return ForgeArray(np.logspace(a_val, b_val, n))
 
 def forge_cplxpair(x, *args):
+    """cplxpair(x) — sort complex numbers into conjugate pairs."""
     data = _unwrap(x).ravel()
     tol = float(_scalar(args[0])) if args else 100 * np.finfo(float).eps
     reals = data[np.abs(data.imag) <= tol * np.abs(data)]

@@ -1120,6 +1120,7 @@ class Session:
         b.update(BUILTIN_REGISTRY)
 
     def _builtin_size(self, x, *args):
+        """size(A) — array dimensions. [m, n] = size(A)."""
         from forge.engine.containers import ForgeCell
         if isinstance(x, ForgeCell):
             shape = x._shape
@@ -1135,6 +1136,7 @@ class Session:
         return ForgeArray(np.array(x.shape))
 
     def _builtin_disp(self, *args):
+        """disp(x) — display value of variable."""
         for a in args:
             if isinstance(a, ForgeChar):
                 self.output_buffer.write(a.to_str() + "\n")
@@ -1144,6 +1146,7 @@ class Session:
                 self.output_buffer.write(str(a) + "\n")
 
     def _builtin_fprintf(self, *args):
+        """fprintf(fid, fmt, ...) — write formatted data to file."""
         fmt = args[0]
         if isinstance(fmt, ForgeChar):
             fmt = fmt.to_str()

@@ -599,6 +599,7 @@ try:
             return ForgeArray(self._data @ _unwrap(other))
 
     def forge_sparse(i_or_A, j=None, v=None, m=None, n=None):
+        """sparse(i, j, v, m, n) — create sparse matrix."""
         if j is not None and v is None:
             rows = int(np.asarray(_unwrap(i_or_A) if isinstance(i_or_A, ForgeArray) else i_or_A).flat[0])
             cols = int(np.asarray(_unwrap(j) if isinstance(j, ForgeArray) else j).flat[0])
