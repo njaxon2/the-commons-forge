@@ -1255,12 +1255,17 @@ class ForgeSession:
                         full = os.path.join(browser_dir, name)
                         if full not in candidates:
                             candidates.append(full)
-                # Check each candidate, with and without .mat
+                # Check each candidate, with and without common data extensions
+                _data_exts = (".mat", ".csv", ".txt", ".json", ".tsv", ".dat")
+                _, _orig_ext = os.path.splitext(name)
                 for c in candidates:
                     if os.path.isfile(c):
                         return c
-                    if not name.endswith(".mat") and os.path.isfile(c + ".mat"):
-                        return c + ".mat"
+                    # Try appending common extensions if none was given
+                    if not _orig_ext:
+                        for ext in _data_exts:
+                            if os.path.isfile(c + ext):
+                                return c + ext
                 return name  # fall through -- will raise FileNotFoundError
 
             fname = _find_file(fname)
@@ -5417,7 +5422,13 @@ class ForgeSession:
             if dirname is not None:
                 if isinstance(dirname, ForgeChar): dirname = dirname.to_str()
                 os.chdir(dirname)
-            return ForgeChar(os.getcwd())
+            # Keep session.path[0] in sync with process CWD
+            cwd = os.getcwd()
+            if session.path:
+                session.path[0] = cwd
+            else:
+                session.path.append(cwd)
+            return ForgeChar(cwd)
 
         # Register all R144 functions
         session._engine.functions["unifrnd"] = forge_unifrnd
@@ -8443,7 +8454,7 @@ class ForgeSession:
             from forge.engine.containers import ForgeChar
             if isinstance(data, ForgeChar): data = data.to_str()
             elif isinstance(data, ForgeArray): data = str(data.data.tolist())
-            return ForgeChar(hashlib.md5(data.encode()).hexdigest())
+            return ForgeChar(hashlib.md5(data.encode(), usedforsecurity=False).hexdigest())
 
         def forge_sha256_func(data):
             """sha256(data) — SHA-256 hash."""
