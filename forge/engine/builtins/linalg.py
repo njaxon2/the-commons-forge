@@ -13,7 +13,11 @@ SRS trace: SRS-FUNC-001
 import numpy as np
 from numpy import linalg as la
 from scipy import linalg as sla
+import scipy.fft as _scipy_fft
 from forge.engine.types import ForgeArray, _unwrap
+
+# Pre-seeded RNG for sampled symmetry checks
+_SYMM_RNG = np.random.default_rng(42)
 
 
 def _wrap(x):
@@ -144,15 +148,12 @@ def forge_bandwidth(A):
     if Ad.ndim < 2:
         return _wrap(0), _wrap(0)
     rows, cols = Ad.shape
-    lower = 0
-    upper = 0
-    for i in range(rows):
-        for j in range(cols):
-            if abs(Ad[i, j]) > 0:
-                if i > j:
-                    lower = max(lower, i - j)
-                elif j > i:
-                    upper = max(upper, j - i)
+    nz = np.nonzero(Ad)
+    if len(nz[0]) == 0:
+        return _wrap(0), _wrap(0)
+    diffs = nz[0] - nz[1]
+    lower = int(max(0, diffs.max()))
+    upper = int(max(0, (-diffs).max()))
     return _wrap(lower), _wrap(upper)
 
 def forge_isbanded(A, lower, upper):
@@ -161,11 +162,11 @@ def forge_isbanded(A, lower, upper):
     if Ad.ndim < 2:
         return _wrap(True)
     rows, cols = Ad.shape
-    for i in range(rows):
-        for j in range(cols):
-            if (i - j > lo or j - i > up) and abs(Ad[i, j]) > 0:
-                return _wrap(False)
-    return _wrap(True)
+    nz = np.nonzero(Ad)
+    if len(nz[0]) == 0:
+        return _wrap(True)
+    diffs = nz[0] - nz[1]
+    return _wrap(bool(diffs.max() <= lo and (-diffs).max() <= up))
 
 def forge_isdiag(A):
     Ad = _unwrap(A)
@@ -299,19 +300,31 @@ def _forge_pinv(A):
 def _forge_kron(A, B):
     return ForgeArray(np.kron(_unwrap(A), _unwrap(B)))
 
+def _is_symmetric_sampled(A, n_samples=200):
+    """Fast sampled symmetry check: O(k) instead of O(n^2)."""
+    n = A.shape[0]
+    if n <= 64:
+        return np.allclose(A, A.T)
+    k = min(n_samples, n * 2)
+    idx = _SYMM_RNG.integers(0, n, size=k)
+    jdx = _SYMM_RNG.integers(0, n, size=k)
+    if not np.allclose(A[idx, jdx], A[jdx, idx]):
+        return False
+    return np.allclose(A, A.T)
+
 def _forge_eig(A, B=None):
     """eig(A) or eig(A,B) returns eigenvalues as a column vector (MATLAB single-output behavior)."""
     Aa = _unwrap(A)
     if B is not None:
         Bb = _unwrap(B)
         from scipy.linalg import eigvalsh, eig as scipy_eig
-        if np.allclose(Aa, Aa.T) and np.allclose(Bb, Bb.T):
+        if _is_symmetric_sampled(Aa) and _is_symmetric_sampled(Bb):
             vals = eigvalsh(Aa, Bb)
         else:
             vals = scipy_eig(Aa, Bb)[0]
         vals = np.sort(np.real(vals))
     else:
-        vals = np.linalg.eigvalsh(Aa) if np.allclose(Aa, Aa.T) else np.linalg.eig(Aa)[0]
+        vals = np.linalg.eigvalsh(Aa) if _is_symmetric_sampled(Aa) else np.linalg.eig(Aa)[0]
         vals = np.sort(np.real(vals))
     return ForgeArray(np.atleast_2d(vals).T)  # column vector
 
@@ -322,12 +335,12 @@ def _forge_eig_full(A, B=None):
     if B is not None:
         Bb = _unwrap(B)
         from scipy.linalg import eigh as scipy_eigh, eig as scipy_eig
-        if np.allclose(Aa, Aa.T) and np.allclose(Bb, Bb.T):
+        if _is_symmetric_sampled(Aa) and _is_symmetric_sampled(Bb):
             vals, vecs = scipy_eigh(Aa, Bb)
         else:
             vals, vecs = scipy_eig(Aa, Bb)
     else:
-        if np.allclose(Aa, Aa.T):
+        if _is_symmetric_sampled(Aa):
             vals, vecs = np.linalg.eigh(Aa)
         else:
             vals, vecs = np.linalg.eig(Aa)
@@ -347,8 +360,7 @@ def _forge_svd(A):
     return ForgeArray(U), ForgeArray(S), ForgeArray(Vt.T)
 
 def _forge_lu(A):
-    from scipy.linalg import lu as scipy_lu
-    P, L, U = scipy_lu(_unwrap(A))
+    P, L, U = sla.lu(_unwrap(A))
     return ForgeArray(L), ForgeArray(U), ForgeArray(P)
 
 def _forge_qr(A):
@@ -362,18 +374,18 @@ def _forge_chol(A):
 def _forge_fft(x, *args):
     n = int(args[0]) if args else None
     data = _unwrap(x).ravel()
-    return ForgeArray(np.fft.fft(data, n=n))
+    return ForgeArray(_scipy_fft.fft(data, n=n))
 
 def _forge_ifft(x, *args):
     n = int(args[0]) if args else None
     data = _unwrap(x).ravel()
-    return ForgeArray(np.fft.ifft(data, n=n))
+    return ForgeArray(_scipy_fft.ifft(data, n=n))
 
 def _forge_fft2(x):
-    return ForgeArray(np.fft.fft2(_unwrap(x)))
+    return ForgeArray(_scipy_fft.fft2(_unwrap(x)))
 
 def _forge_ifft2(x):
-    return ForgeArray(np.fft.ifft2(_unwrap(x)))
+    return ForgeArray(_scipy_fft.ifft2(_unwrap(x)))
 
 
 def _forge_dot(a, b):

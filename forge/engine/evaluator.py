@@ -11,6 +11,7 @@ import time
 import os
 from scipy.linalg import solve as _scipy_solve, solve_triangular as _solve_tri, cho_factor as _cho_factor, cho_solve as _cho_solve
 import scipy.sparse as _sp
+from scipy.linalg import lu as _sp_linalg_lu
 
 # Pre-seeded RNG for sampled symmetry check (deterministic, no perf cost)
 _MLDIVIDE_RNG = np.random.default_rng(42)
@@ -2761,16 +2762,36 @@ class Session:
             x = _unwrap(args[0])
             if len(args) >= 2:
                 b = _unwrap(args[1])
-                from scipy.linalg import eig as scipy_eig
-                if nargout <= 1:
-                    vals = scipy_eig(x, b, right=False)
-                    return ForgeArray(np.diag(vals))
-                vals, vecs = scipy_eig(x, b)
+                from scipy.linalg import eig as scipy_eig, eigh as scipy_eigh
+                is_symm = (x.shape[0] == x.shape[1] and np.allclose(x, x.T))
+                is_symm_b = (b.shape[0] == b.shape[1] and np.allclose(b, b.T))
+                if is_symm and is_symm_b:
+                    if nargout <= 1:
+                        vals = scipy_eigh(x, b, eigvals_only=True)
+                        return ForgeArray(np.diag(vals))
+                    vals, vecs = scipy_eigh(x, b)
+                else:
+                    if nargout <= 1:
+                        vals = scipy_eig(x, b, right=False)
+                        return ForgeArray(np.diag(vals))
+                    vals, vecs = scipy_eig(x, b)
             else:
-                if nargout <= 1:
-                    vals = np.linalg.eigvals(x)
-                    return ForgeArray(np.diag(vals))
-                vals, vecs = np.linalg.eig(x)
+                is_symm = (x.shape[0] == x.shape[1] and np.allclose(x, x.T))
+                if is_symm:
+                    if nargout <= 1:
+                        vals = np.linalg.eigvalsh(x)
+                        return ForgeArray(np.diag(vals))
+                    vals, vecs = np.linalg.eigh(x)
+                else:
+                    if nargout <= 1:
+                        vals = np.linalg.eigvals(x)
+                        return ForgeArray(np.diag(vals))
+                    vals, vecs = np.linalg.eig(x)
+            # Convert to real if all imaginary parts are negligible
+            if np.isrealobj(vals) or np.allclose(np.imag(vals), 0):
+                vals = np.real(vals)
+            if np.isrealobj(vecs) or np.allclose(np.imag(vecs), 0):
+                vecs = np.real(vecs)
             return (ForgeArray(vecs), ForgeArray(np.diag(vals)))
         if name == 'svd':
             x = _unwrap(args[0])
@@ -2787,8 +2808,7 @@ class Session:
             return (ForgeArray(U), ForgeArray(S))
         if name == 'lu':
             x = _unwrap(args[0])
-            from scipy.linalg import lu as scipy_lu
-            P, L, U = scipy_lu(x.copy(), overwrite_a=True, check_finite=False)
+            P, L, U = _sp_linalg_lu(x.copy(), overwrite_a=True, check_finite=False)
             if nargout >= 3:
                 return (ForgeArray(L), ForgeArray(U), ForgeArray(P))
             return (ForgeArray(L), ForgeArray(U))
