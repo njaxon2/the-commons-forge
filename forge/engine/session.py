@@ -2559,9 +2559,15 @@ class ForgeSession:
 
         def forge_conv2(a, b):
             """conv(a, b) — convolution."""
-            ad = a.data.flatten() if isinstance(a, ForgeArray) else np.array(a).flatten()
-            bd = b.data.flatten() if isinstance(b, ForgeArray) else np.array(b).flatten()
-            return ForgeArray(np.convolve(ad, bd).reshape(1, -1))
+            ad = a._data.ravel() if isinstance(a, ForgeArray) else np.asarray(a).ravel()
+            bd = b._data.ravel() if isinstance(b, ForgeArray) else np.asarray(b).ravel()
+            # Use FFT-based convolution for large arrays (much faster)
+            if ad.size + bd.size > 500:
+                from scipy.signal import fftconvolve
+                result = fftconvolve(ad, bd, mode='full')
+            else:
+                result = np.convolve(ad, bd)
+            return ForgeArray._from_ndarray(result.reshape(1, -1))
 
         def forge_deconv2(b, a):
             """[q, r] = deconv(b, a) — deconvolution."""
@@ -2585,31 +2591,35 @@ class ForgeSession:
 
         def forge_fft2(x, *args):
             """fft(x) or fft(x, n) — Fast Fourier Transform."""
+            import scipy.fft as _scipy_fft
             xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
             n = None
             if args and isinstance(args[0], ForgeArray):
                 n = int(args[0].data.flat[0])
-            result = np.fft.fft(xd, n=n)
+            result = _scipy_fft.fft(xd, n=n)
             return ForgeArray(result.reshape(1, -1))
 
         def forge_ifft2(x, *args):
             """ifft(x) — inverse FFT."""
+            import scipy.fft as _scipy_fft
             xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
             n = None
             if args and isinstance(args[0], ForgeArray):
                 n = int(args[0].data.flat[0])
-            result = np.fft.ifft(xd, n=n)
+            result = _scipy_fft.ifft(xd, n=n)
             return ForgeArray(result.reshape(1, -1))
 
         def forge_fft2d(x):
             """fft2(x) — 2-D FFT."""
+            import scipy.fft as _scipy_fft
             xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
-            return ForgeArray(np.fft.fft2(xd))
+            return ForgeArray(_scipy_fft.fft2(xd))
 
         def forge_ifft2d(x):
             """ifft2(x) — inverse 2-D FFT."""
+            import scipy.fft as _scipy_fft
             xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
-            return ForgeArray(np.real(np.fft.ifft2(xd)))
+            return ForgeArray(np.real(_scipy_fft.ifft2(xd)))
 
         def forge_fftshift2(x):
             """fftshift(x) — shift zero-frequency to center."""
@@ -8195,7 +8205,8 @@ class ForgeSession:
 
         def forge_unique2(x, *args):
             """[C, ia, ic] = unique(x) — unique values."""
-            data = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
+            data = x._data if isinstance(x, ForgeArray) else np.array(x)
+            data = data.ravel() if data.ndim != 1 else data
             C, ia, ic = np.unique(data, return_index=True, return_inverse=True)
             return ForgeArray(C.reshape(1, -1)), ForgeArray((ia + 1).astype(float).reshape(-1, 1)), ForgeArray((ic + 1).astype(float).reshape(-1, 1))
 

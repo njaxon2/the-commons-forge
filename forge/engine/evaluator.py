@@ -10,6 +10,7 @@ import sys
 import time
 import os
 from scipy.linalg import solve as _scipy_solve, solve_triangular as _solve_tri, cho_factor as _cho_factor, cho_solve as _cho_solve
+import scipy.sparse as _sp
 
 # Pre-seeded RNG for sampled symmetry check (deterministic, no perf cost)
 _MLDIVIDE_RNG = np.random.default_rng(42)
@@ -718,7 +719,14 @@ class Session:
             def _make_math(f, nm):
                 def _fn(*a):
                     if not a: raise ValueError(f"{nm} requires at least 1 argument")
-                    return ForgeArray(f(_unwrap(a[0])))
+                    x = a[0]
+                    if isinstance(x, ForgeArray):
+                        result = f(x._data)
+                        if type(result) is np.ndarray and result.ndim >= 2:
+                            return ForgeArray._from_ndarray(result)
+                    else:
+                        result = f(_unwrap(x))
+                    return ForgeArray(result)
                 return _fn
             b[name] = _make_math(fn, name)
 
@@ -769,8 +777,16 @@ class Session:
         b["columns"] = lambda x: ForgeArray(np.float64(_unwrap(x).shape[1] if _unwrap(x).ndim >= 2 else 1))
         b["transpose"] = lambda x: x.T if isinstance(x, ForgeArray) else ForgeArray(np.asarray(x).T)
         b["ctranspose"] = lambda x: ForgeArray(np.conj(np.asarray(x.data if isinstance(x, ForgeArray) else x).T))
-        b["sum"] = lambda x, *a: ForgeArray(np.sum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
-        b["prod"] = lambda x, *a: ForgeArray(np.prod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
+        def _fast_sum(x, *a):
+            data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            result = np.sum(data, axis=int(_to_py(a[0]))-1 if a else None)
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
+        b["sum"] = _fast_sum
+        def _fast_prod(x, *a):
+            data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            result = np.prod(data, axis=int(_to_py(a[0]))-1 if a else None)
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
+        b["prod"] = _fast_prod
         def _forge_min(x, *a):
             data = _unwrap(x)
             if not a:
@@ -789,7 +805,6 @@ class Session:
         b["max"] = _forge_max
         b["sort"] = lambda x, *a: ForgeArray(np.sort(_unwrap(x), axis=-1))
         def _forge_find_builtin(x):
-            import scipy.sparse as _sp
             data = _unwrap(x) if isinstance(x, ForgeArray) else x
             if _sp.issparse(data):
                 coo = _sp.coo_matrix(data)
@@ -800,8 +815,36 @@ class Session:
         b["find"] = _forge_find_builtin  # 1-based
         b["any"] = lambda x, *a: ForgeArray(np.array(np.any(_unwrap(x))))
         b["all"] = lambda x, *a: ForgeArray(np.array(np.all(_unwrap(x))))
-        b["cumsum"] = lambda x, *a: ForgeArray(np.cumsum(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
-        b["cumprod"] = lambda x, *a: ForgeArray(np.cumprod(_unwrap(x), axis=_to_py(a[0])-1 if a else None))
+        def _fast_cumsum(x, *a):
+            data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            if a:
+                axis = int(_to_py(a[0])) - 1
+            elif data.ndim >= 2 and data.shape[0] == 1:
+                axis = 1  # Row vector: cumsum along columns (preserves shape)
+            elif data.ndim >= 2 and data.shape[1] == 1:
+                axis = 0  # Column vector: cumsum along rows
+            else:
+                axis = None
+            result = np.cumsum(data, axis=axis)
+            if type(result) is np.ndarray and result.ndim >= 2:
+                return ForgeArray._from_ndarray(result)
+            return ForgeArray(result)
+        b["cumsum"] = _fast_cumsum
+        def _fast_cumprod(x, *a):
+            data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            if a:
+                axis = int(_to_py(a[0])) - 1
+            elif data.ndim >= 2 and data.shape[0] == 1:
+                axis = 1
+            elif data.ndim >= 2 and data.shape[1] == 1:
+                axis = 0
+            else:
+                axis = None
+            result = np.cumprod(data, axis=axis)
+            if type(result) is np.ndarray and result.ndim >= 2:
+                return ForgeArray._from_ndarray(result)
+            return ForgeArray(result)
+        b["cumprod"] = _fast_cumprod
         b["diff"] = lambda x, *a: ForgeArray(np.diff(_unwrap(x), n=_to_py(a[0]) if a else 1, axis=-1))
         b["cat"] = lambda dim, *arrays: ForgeArray(np.concatenate([_unwrap(a) for a in arrays], axis=_to_py(dim)-1))
         def _forge_horzcat(*a):
@@ -1583,8 +1626,16 @@ class Session:
         raise RuntimeError("'end' used outside of indexing context")
 
     def _eval_number(self, node, ws: Workspace = None) -> ForgeArray:
-        """Evaluate NumberLiteral. Delegates to _parse_number."""
-        return self._parse_number(node.value)
+        """Evaluate NumberLiteral. Uses cache for common constants."""
+        v = node.value
+        cached = self._number_cache.get(v)
+        if cached is not None:
+            return cached
+        result = self._parse_number(v)
+        # Cache small integer-like constants (very common in loops/indexing)
+        if len(self._number_cache) < 256:
+            self._number_cache[v] = result
+        return result
 
     @staticmethod
     def _parse_number(v: str) -> ForgeArray:
@@ -1613,7 +1664,6 @@ class Session:
             right = right()
         l, r = _unwrap(left), _unwrap(right)
         op = node.op
-        import scipy.sparse as _sp
         _any_sparse = _sp.issparse(l) or _sp.issparse(r)
         def _wrap_sparse(result):
             if _sp.issparse(result):
@@ -1623,14 +1673,16 @@ class Session:
             if _any_sparse:
                 return _wrap_sparse(l + r)
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(l + r)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = l + r
+            return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         if op == "-":
             if _any_sparse:
                 return _wrap_sparse(l - r)
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(l - r)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = l - r
+            return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         if op == "*":
             if _any_sparse:
                 if _is_matrix_op(l, r):
@@ -1674,20 +1726,24 @@ class Session:
                 else:
                     return _wrap_sparse(r.multiply(l))
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(l * r)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = l * r
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
         if op == "./":
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(l / r)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = l / r
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
         if op == ".\\":
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(r / l)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = r / l
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
         if op == ".^":
             if can_fuse(op, l, r):
-                return ForgeArray(fused_binop(op, l, r))
-            return ForgeArray(l ** r)
+                return ForgeArray._from_ndarray(fused_binop(op, l, r))
+            result = l ** r
+            return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
         raise RuntimeError(f"Unknown binary op: {op}")
 
     def _eval_compare(self, node: CompareOp, ws: Workspace) -> ForgeArray:
@@ -1994,19 +2050,18 @@ class Session:
     # ============================================================
 
     def _exec_assign(self, node: Assignment, ws: Workspace) -> Any:
-        value = self._eval_expr(node.value, ws)
-        # Auto-call bare callable identifiers on RHS (e.g., t = toc)
-        if callable(value) and not isinstance(value, ForgeArray):
-            if isinstance(node.value, Identifier):
-                value = value()
         target = node.targets
 
         if isinstance(target, list):
             nargout = len(target)
-            if not isinstance(value, tuple) and nargout > 1:
-                val_tuple = self._eval_multi_output(node.value, ws, nargout)
-                if val_tuple is not None and isinstance(val_tuple, tuple):
-                    value = val_tuple
+            # Try nargout-aware multi-output path FIRST to avoid computing
+            # unneeded outputs (e.g. unique with nargout=1 skips indices).
+            value = self._eval_multi_output(node.value, ws, nargout)
+            if value is None:
+                value = self._eval_expr(node.value, ws)
+                if callable(value) and not isinstance(value, ForgeArray):
+                    if isinstance(node.value, Identifier):
+                        value = value()
             if isinstance(value, tuple):
                 for t, v in zip(target, value):
                     if t.name != "~":  # ~ = discard output
@@ -2015,6 +2070,12 @@ class Session:
                 if target[0].name != "~":
                     ws.set(target[0].name, value)
             return value
+
+        value = self._eval_expr(node.value, ws)
+        # Auto-call bare callable identifiers on RHS (e.g., t = toc)
+        if callable(value) and not isinstance(value, ForgeArray):
+            if isinstance(node.value, Identifier):
+                value = value()
 
         if isinstance(target, Identifier):
             # Value semantics: copy ForgeArray to prevent aliasing (B = A)
@@ -2598,7 +2659,6 @@ class Session:
             idx_flat = int(np.argmin(x.ravel()))
             return (ForgeArray(np.min(x)), ForgeArray(np.array(float(idx_flat + 1))))
         if name == 'find':
-            import scipy.sparse as _sp
             x = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else args[0]
             if nargout >= 2:
                 if _sp.issparse(x):
@@ -2616,7 +2676,7 @@ class Session:
                         x = x.reshape(1, -1)
                     rows, cols = np.nonzero(x)
                     if nargout >= 3:
-                        vals = np.array([x[r, c] for r, c in zip(rows, cols)], dtype=float)
+                        vals = x[rows, cols].astype(float)
                         return (ForgeArray(rows + 1), ForgeArray(cols + 1), ForgeArray(vals))
                     return (ForgeArray(rows + 1), ForgeArray(cols + 1))
             return None
@@ -2657,26 +2717,33 @@ class Session:
             if len(args) >= 2:
                 b = _unwrap(args[1])
                 from scipy.linalg import eig as scipy_eig
+                if nargout <= 1:
+                    vals = scipy_eig(x, b, right=False)
+                    return ForgeArray(np.diag(vals))
                 vals, vecs = scipy_eig(x, b)
             else:
+                if nargout <= 1:
+                    vals = np.linalg.eigvals(x)
+                    return ForgeArray(np.diag(vals))
                 vals, vecs = np.linalg.eig(x)
             return (ForgeArray(vecs), ForgeArray(np.diag(vals)))
         if name == 'svd':
             x = _unwrap(args[0])
+            if nargout <= 1:
+                s = np.linalg.svd(x, compute_uv=False)
+                return ForgeArray(s)
             U, s, Vt = np.linalg.svd(x, full_matrices=True)
             m, n = x.shape
+            k = min(m, n)
             S = np.zeros((m, n))
-            for i in range(min(m, n)):
-                S[i, i] = s[i]
+            S[:k, :k] = np.diag(s)
             if nargout >= 3:
                 return (ForgeArray(U), ForgeArray(S), ForgeArray(Vt.T))
-            if nargout == 2:
-                return (ForgeArray(U), ForgeArray(S))
-            return ForgeArray(s)
+            return (ForgeArray(U), ForgeArray(S))
         if name == 'lu':
             x = _unwrap(args[0])
             from scipy.linalg import lu as scipy_lu
-            P, L, U = scipy_lu(x)
+            P, L, U = scipy_lu(x.copy(), overwrite_a=True, check_finite=False)
             if nargout >= 3:
                 return (ForgeArray(L), ForgeArray(U), ForgeArray(P))
             return (ForgeArray(L), ForgeArray(U))
@@ -2692,13 +2759,15 @@ class Session:
                 return (ForgeArray(R), ForgeArray(np.array(0.0)))
             return ForgeArray(R)
         if name == 'unique':
-            x = _unwrap(args[0]).ravel()
-            vals, i_first, i_inverse = np.unique(x, return_index=True, return_inverse=True)
+            raw = _unwrap(args[0])
+            x = raw.ravel() if raw.ndim != 1 else raw
             if nargout >= 3:
+                vals, i_first, i_inverse = np.unique(x, return_index=True, return_inverse=True)
                 return (ForgeArray(vals), ForgeArray((i_first + 1).astype(float)), ForgeArray((i_inverse + 1).astype(float)))
             if nargout == 2:
+                vals, i_first = np.unique(x, return_index=True)
                 return (ForgeArray(vals), ForgeArray((i_first + 1).astype(float)))
-            return ForgeArray(vals)
+            return ForgeArray(np.unique(x))
         if name == 'meshgrid':
             if len(args) >= 2:
                 X, Y = np.meshgrid(_unwrap(args[0]).ravel(), _unwrap(args[1]).ravel())
@@ -2765,9 +2834,12 @@ def _process_c_escapes(s):
 def _to_py(val):
     """Convert ForgeArray scalar to Python number."""
     if isinstance(val, ForgeArray):
-        if val.isscalar():
-            return val.data.flat[0].item()
-        return val.data
+        d = val._data
+        if d.size == 1:
+            return d.flat[0].item()
+        return d
+    if isinstance(val, (int, float)):
+        return val
     if isinstance(val, ForgeChar):
         return val.to_str()
     if isinstance(val, (np.integer, np.floating)):
@@ -2790,11 +2862,13 @@ def _check_1based_index(idx_val, dim_size=None):
 
 def _to_int(val):
     """Convert to Python int (for indexing)."""
+    if isinstance(val, int):
+        return val
     if isinstance(val, ForgeArray):
-        return int(val.data.flat[0])
-    if isinstance(val, (float, np.floating)):
+        return int(val._data.flat[0])
+    if isinstance(val, float):
         return int(val)
-    if isinstance(val, (int, np.integer)):
+    if isinstance(val, (np.integer, np.floating)):
         return int(val)
     return int(val)
 
@@ -2813,7 +2887,6 @@ def _is_matrix_op(a, b) -> bool:
     In Octave, * is always matrix multiply for 2D arrays.
     Element-wise is .* operator. So * should use @ whenever
     both operands are 2D (even if one is a vector)."""
-    import scipy.sparse as _sp
     if _sp.issparse(a) or _sp.issparse(b):
         sa = a.shape if hasattr(a, "shape") else np.asarray(a).shape
         sb = b.shape if hasattr(b, "shape") else np.asarray(b).shape
