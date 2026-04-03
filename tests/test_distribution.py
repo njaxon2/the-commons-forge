@@ -1,5 +1,5 @@
 """
-Distribution and packaging tests for forge-engine.
+Distribution and packaging tests for forge-ide.
 
 Verifies that the package metadata, imports, entry points, toolbox registries,
 and basic engine functionality work correctly after installation.
@@ -18,8 +18,8 @@ class TestPackageMetadata:
 
     def test_package_name(self):
         from importlib.metadata import metadata
-        meta = metadata("forge-engine")
-        assert meta["Name"] == "forge-engine"
+        meta = metadata("forge-ide")
+        assert meta["Name"] == "forge-ide"
 
     def test_version_present(self):
         import forge
@@ -30,22 +30,22 @@ class TestPackageMetadata:
         """__init__.__version__ must match pyproject.toml version."""
         import forge
         from importlib.metadata import version
-        installed = version("forge-engine")
+        installed = version("forge-ide")
         assert forge.__version__ == installed
 
     def test_description_present(self):
         from importlib.metadata import metadata
-        meta = metadata("forge-engine")
+        meta = metadata("forge-ide")
         assert meta["Summary"]  # non-empty
 
     def test_requires_python(self):
         from importlib.metadata import metadata
-        meta = metadata("forge-engine")
+        meta = metadata("forge-ide")
         assert ">=3.11" in (meta["Requires-Python"] or "")
 
     def test_license(self):
         from importlib.metadata import metadata
-        meta = metadata("forge-engine")
+        meta = metadata("forge-ide")
         license_text = meta.get("License") or meta.get("License-Expression") or ""
         assert "Apache" in license_text
 

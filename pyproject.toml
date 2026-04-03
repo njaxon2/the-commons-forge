@@ -43,6 +43,10 @@ include = ["forge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with -m \"not slow\")",
+    "security: marks security audit tests",
+]
 addopts = "-v --tb=short"
 filterwarnings = [
     "ignore:FigureCanvasAgg is non-interactive:UserWarning",
