@@ -2589,36 +2589,35 @@ class ForgeSession:
             f = interp1d(xd, yd, kind=method_map.get(method, 'linear'), fill_value='extrapolate')
             return ForgeArray(f(xid).reshape(1, -1))
 
+        # Pre-import scipy.fft at registration time (not per-call)
+        import scipy.fft as _scipy_fft
+
         def forge_fft2(x, *args):
             """fft(x) or fft(x, n) — Fast Fourier Transform."""
-            import scipy.fft as _scipy_fft
-            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
-            n = None
-            if args and isinstance(args[0], ForgeArray):
-                n = int(args[0].data.flat[0])
+            xd = _unwrap(x)
+            if xd.ndim > 1:
+                xd = xd.ravel()
+            n = int(_unwrap(args[0]).flat[0]) if args else None
             result = _scipy_fft.fft(xd, n=n)
             return ForgeArray(result.reshape(1, -1))
 
         def forge_ifft2(x, *args):
             """ifft(x) — inverse FFT."""
-            import scipy.fft as _scipy_fft
-            xd = x.data.flatten() if isinstance(x, ForgeArray) else np.array(x).flatten()
-            n = None
-            if args and isinstance(args[0], ForgeArray):
-                n = int(args[0].data.flat[0])
+            xd = _unwrap(x)
+            if xd.ndim > 1:
+                xd = xd.ravel()
+            n = int(_unwrap(args[0]).flat[0]) if args else None
             result = _scipy_fft.ifft(xd, n=n)
             return ForgeArray(result.reshape(1, -1))
 
         def forge_fft2d(x):
             """fft2(x) — 2-D FFT."""
-            import scipy.fft as _scipy_fft
-            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            xd = _unwrap(x)
             return ForgeArray(_scipy_fft.fft2(xd))
 
         def forge_ifft2d(x):
             """ifft2(x) — inverse 2-D FFT."""
-            import scipy.fft as _scipy_fft
-            xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
+            xd = _unwrap(x)
             return ForgeArray(np.real(_scipy_fft.ifft2(xd)))
 
         def forge_fftshift2(x):
