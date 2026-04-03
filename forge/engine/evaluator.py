@@ -2644,9 +2644,9 @@ class Session:
 
 
     _MULTI_OUTPUT_FUNCS = frozenset({
-        max, min, find, size, ind2sub, sort, eig, svd,
-        lu, qr, chol, unique, meshgrid, fileparts, ismember,
-        deal, cellfun, arrayfun,
+        "max", "min", "find", "size", "ind2sub", "sort", "eig", "svd",
+        "lu", "qr", "chol", "unique", "meshgrid", "fileparts", "ismember",
+        "deal", "cellfun", "arrayfun",
     })
 
     def _eval_multi_output(self, expr, ws, nargout):
