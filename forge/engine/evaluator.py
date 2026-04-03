@@ -53,6 +53,7 @@ from forge.engine.containers import (
     ForgeChar, ForgeCell, ForgeStruct, ForgeMap, forge_char,
     forge_strcmp, forge_strcmpi, forge_cell, forge_iscell, forge_fieldnames,
     forge_isstruct, forge_struct,
+    ForgeTable,
 )
 from forge.engine.builtins import BUILTIN_REGISTRY
 from forge.engine.parser import (
@@ -64,6 +65,11 @@ from forge.engine.parser import (
     BreakStatement, ContinueStatement, FunctionDef, ExpressionStatement,
     GlobalStatement, PersistentStatement, ClassDef, UnwindProtect, parse,
 )
+from forge.engine.classdef import (
+    ForgeObject, ForgeClass, Property, Method, register_class,
+    get_class, class_exists,
+)
+from forge.engine.builtins.sets import forge_ismember
 
 
 class BreakSignal(Exception):
@@ -147,8 +153,6 @@ def _cellfun_builtin(func, cell_arg, *extra_args, **kwargs):
       cellfun(@func, C, 'UniformOutput', false)
       cellfun('isclass', C, 'char')         -- string-form builtins
     """
-    from forge.engine.containers import ForgeCell, ForgeChar
-    from forge.engine.types import ForgeArray
 
     # --- Handle string-form func names ---
     uniform_output = True
@@ -268,8 +272,6 @@ def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
       arrayfun(@func, A, B, ...)            -- multiple array inputs
       arrayfun(@func, A, 'UniformOutput', false)
     """
-    from forge.engine.types import ForgeArray
-    from forge.engine.containers import ForgeCell, ForgeChar
 
     # --- Parse name-value pairs from extra_arrs ---
     uniform_output = True
@@ -337,8 +339,6 @@ def _arrayfun_builtin(func, arr, *extra_arrs, **kwargs):
 
 def _num2cell_builtin(arr, *args):
     """Convert array to cell array, optionally along a dimension."""
-    from forge.engine.containers import ForgeCell
-    from forge.engine.types import ForgeArray
     if isinstance(arr, ForgeArray):
         data = arr.data
     elif isinstance(arr, np.ndarray):
@@ -390,8 +390,6 @@ def _num2cell_builtin(arr, *args):
 
 def _cell2mat_builtin(c):
     """Convert cell array of matrices to a single matrix."""
-    from forge.engine.containers import ForgeCell
-    from forge.engine.types import ForgeArray
     if not isinstance(c, ForgeCell):
         return c
 
@@ -426,7 +424,6 @@ def _cell2mat_builtin(c):
 
 def _rmfield_builtin(s, field):
     """Remove field from struct."""
-    from forge.engine.containers import ForgeStruct, ForgeChar
     if isinstance(field, ForgeChar):
         field = field.to_str()
     field = str(field)
@@ -441,7 +438,6 @@ def _rmfield_builtin(s, field):
 
 def _cat_builtin(dim, *arrays):
     """Concatenate arrays along dimension dim."""
-    from forge.engine.types import ForgeArray
     dim = int(dim) - 1  # Convert to 0-based
     np_arrays = []
     for a in arrays:
@@ -496,8 +492,6 @@ def _structfun_builtin(func, s, *extra_args):
       structfun(@func, S)
       structfun(@func, S, 'UniformOutput', false)
     """
-    from forge.engine.containers import ForgeStruct, ForgeCell, ForgeChar
-    from forge.engine.types import ForgeArray
     import numpy as np
     if not isinstance(s, ForgeStruct):
         raise ValueError("Second argument must be a struct")
@@ -599,7 +593,6 @@ class Session:
         b["repmat"] = lambda *a: forge_repmat(*a)
 
         def _meshgrid(*args):
-            from forge.engine.types import ForgeArray
             import numpy as np
             arrays = [_unwrap(a) if isinstance(a, ForgeArray) else np.asarray(a) for a in args]
             arrays = [a.flatten() for a in arrays]
@@ -616,7 +609,6 @@ class Session:
                 raise ValueError("meshgrid requires 1-3 arguments")
 
         def _ndgrid(*args):
-            from forge.engine.types import ForgeArray
             import numpy as np
             arrays = [_unwrap(a).flatten() if isinstance(a, ForgeArray) else np.asarray(a).flatten() for a in args]
             grids = np.meshgrid(*arrays, indexing="ij")
@@ -653,7 +645,6 @@ class Session:
         b["isfinite"] = forge_isfinite
         b["isempty"] = lambda x: ForgeArray(np.float64(x.isempty() if isinstance(x, ForgeArray) else len(x) == 0))
         def _isfield(s, f):
-            from forge.engine.containers import ForgeStruct, ForgeChar
             if isinstance(f, ForgeChar):
                 f = f.to_str()
             if isinstance(s, ForgeStruct):
@@ -916,7 +907,6 @@ class Session:
         b["cat"] = _cat_builtin
 
         def _getfield_builtin(s, *fields):
-            from forge.engine.containers import ForgeStruct, ForgeChar
             cur = s
             for f in fields:
                 fname = f.to_str() if isinstance(f, ForgeChar) else str(f)
@@ -927,7 +917,6 @@ class Session:
             return cur
 
         def _setfield_builtin(s, *args):
-            from forge.engine.containers import ForgeStruct, ForgeChar
             if len(args) < 2:
                 raise ValueError("setfield requires at least 3 arguments")
             *fields, value = args
@@ -986,7 +975,6 @@ class Session:
 
         # Misc
         def _class_name(x):
-            from forge.engine.containers import ForgeChar as FC, ForgeCell, ForgeStruct
             if isinstance(x, ForgeArray):
                 # Map numpy dtype to MATLAB class name
                 _dtype_map = {
@@ -996,23 +984,22 @@ class Session:
                     "bool": "logical", "complex128": "double", "complex64": "single",
                 }
                 dtype_name = str(x.data.dtype)
-                return FC(_dtype_map.get(dtype_name, dtype_name))
-            if isinstance(x, FC):
-                return FC("char")
+                return ForgeChar(_dtype_map.get(dtype_name, dtype_name))
+            if isinstance(x, ForgeChar):
+                return ForgeChar("char")
             if isinstance(x, ForgeCell):
-                return FC("cell")
+                return ForgeChar("cell")
             if isinstance(x, ForgeStruct):
-                return FC("struct")
+                return ForgeChar("struct")
             if isinstance(x, bool):
-                return FC("logical")
+                return ForgeChar("logical")
             if isinstance(x, (int, float)):
-                return FC("double")
+                return ForgeChar("double")
             if isinstance(x, str):
-                return FC("char")
-            from forge.engine.classdef import ForgeObject as _FObj
-            if isinstance(x, _FObj):
-                return FC(x.class_name)
-            return FC(type(x).__name__)
+                return ForgeChar("char")
+            if isinstance(x, ForgeObject):
+                return ForgeChar(x.class_name)
+            return ForgeChar(type(x).__name__)
         b["class"] = _class_name
         b["typecast"] = lambda x, t: x.astype(t.to_str() if isinstance(t, ForgeChar) else str(t))
 
@@ -1150,7 +1137,6 @@ class Session:
 
     def _builtin_size(self, x, *args):
         """size(A) — array dimensions. [m, n] = size(A)."""
-        from forge.engine.containers import ForgeCell
         if isinstance(x, ForgeCell):
             shape = x._shape
             if args:
@@ -1491,7 +1477,6 @@ class Session:
                     return method
                 raise TypeError(f"containers.Map has no property '{field}'")
             # Support ForgeTable dot access (column names, Properties)
-            from forge.engine.containers import ForgeTable
             if isinstance(target, ForgeTable):
                 field = node.field
                 if field == "Properties":
@@ -1502,7 +1487,6 @@ class Session:
                     return props
                 return target.get_column(field)
             # Support ForgeObject (classdef instances)
-            from forge.engine.classdef import ForgeObject
             if isinstance(target, ForgeObject):
                 return getattr(target, node.field)
             # Generic Python object dot access (e.g. inputParser methods/properties)
@@ -1522,8 +1506,7 @@ class Session:
             field = self._eval_expr(node.field_expr, ws)
             if isinstance(field, ForgeChar):
                 field = field.to_str()
-            from forge.engine.classdef import ForgeObject as _FO
-            if isinstance(target, _FO):
+            if isinstance(target, ForgeObject):
                 return getattr(target, str(field))
             return target._fields[str(field)]
 
@@ -1797,7 +1780,6 @@ class Session:
 
     def _do_index(self, target, args):
         """Perform array indexing with evaluated args."""
-        from forge.engine.containers import ForgeChar
         # ForgeChar indexing returns a char substring
         if isinstance(target, ForgeChar):
             s = target.to_str()
@@ -2220,7 +2202,6 @@ class Session:
             if isinstance(target.target, Identifier) and ws.has(target.target.name):
                 existing = ws.get(target.target.name)
                 if not isinstance(existing, ForgeStruct):
-                    from forge.engine.classdef import ForgeObject
                     if not isinstance(existing, ForgeObject):
                         new_struct = ForgeStruct()
                         new_struct._fields[target.field] = value
@@ -2233,14 +2214,12 @@ class Session:
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
                 return value
-            from forge.engine.containers import ForgeTable
             if isinstance(obj, ForgeTable):
                 obj.set_column(target.field, value)
                 return value
             if isinstance(obj, ForgeStruct):
                 obj._fields[target.field] = value
             else:
-                from forge.engine.classdef import ForgeObject
                 if isinstance(obj, ForgeObject):
                     obj.set(target.field, value)
             return value
@@ -2374,9 +2353,6 @@ class Session:
 
     def _exec_classdef(self, node: ClassDef, ws: Workspace):
         """Register a classdef as a constructable class."""
-        from forge.engine.classdef import (
-            ForgeClass, Property, Method, register_class, ForgeObject
-        )
         # Build properties
         props = {}
         for name, default_expr in node.properties.items():
@@ -2398,8 +2374,7 @@ class Session:
                         if self.workspace.has(_cname):
                             local_ws.set(_cname, self.workspace.get(_cname))
                     # Set caller context for access control
-                    from forge.engine.classdef import ForgeObject as _FO
-                    if isinstance(obj, _FO):
+                    if isinstance(obj, ForgeObject):
                         obj._caller_context = 'internal'
                     is_ctor = (fd.name == _cn)
                     if is_ctor:
@@ -2435,12 +2410,12 @@ class Session:
                     except ReturnSignal:
                         pass
                     finally:
-                        if isinstance(obj, _FO):
+                        if isinstance(obj, ForgeObject):
                             obj._caller_context = None
                     if fd.returns:
                         ret_val = local_ws.get(fd.returns[0])
                         # For constructors: if return var was overwritten with non-object, use original
-                        if is_ctor and isinstance(obj, _FO) and not isinstance(ret_val, _FO):
+                        if is_ctor and isinstance(obj, ForgeObject) and not isinstance(ret_val, ForgeObject):
                             return obj
                         return ret_val
                     return obj
@@ -2675,7 +2650,6 @@ class Session:
             name_only, ext = os.path.splitext(base)
             return (ForgeChar(d), ForgeChar(name_only), ForgeChar(ext))
         if name == 'ismember':
-            from forge.engine.builtins.sets import forge_ismember
             result = forge_ismember(*args)
             if isinstance(result, tuple) and nargout >= 2:
                 return result[:nargout]
