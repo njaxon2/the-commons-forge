@@ -46,8 +46,10 @@ def _smart_mldivide(A, b):
         jdx = _MLDIVIDE_RNG.integers(0, n, size=k)
         if np.allclose(A[idx, jdx], A[jdx, idx]):
             try:
-                cf = _cho_factor(A, check_finite=False)
-                return _cho_solve(cf, b, check_finite=False)
+                # Use numpy cholesky (much faster than scipy on Windows)
+                L = np.linalg.cholesky(A)
+                y = np.linalg.solve(L, b)
+                return np.linalg.solve(L.T, y)
             except np.linalg.LinAlgError:
                 pass
     # General dense: use numpy (faster on Windows, same on Linux)
