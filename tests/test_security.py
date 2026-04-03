@@ -99,8 +99,14 @@ def test_bandit_no_high_severity_issues():
         timeout=120,
     )
 
+    # bandit may emit a progress bar before the JSON — strip it
+    stdout = result.stdout
+    json_start = stdout.find("{")
+    if json_start > 0:
+        stdout = stdout[json_start:]
+
     try:
-        data = json.loads(result.stdout)
+        data = json.loads(stdout)
     except json.JSONDecodeError:
         pytest.fail(
             f"bandit produced non-JSON output.\n"
