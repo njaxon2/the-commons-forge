@@ -31,8 +31,11 @@ dev = ["pytest"]
 symbolic = ["sympy>=1.12"]
 full = ["sympy>=1.12", "soundfile", "requests"]
 
+[project.gui-scripts]
+forge = "forge.__main__:main"
+
 [project.scripts]
-forge-engine = "forge.__main__:cli_main"
+forge-cli = "forge.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/njaxon2/the-commons-forge"

@@ -4,7 +4,110 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QToolBar, QMenuBar, QStatusBar, QWidget,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QMessageBox, QGroupBox,
 )
+from forge.license import get_license_manager
+
+
+
+class LicenseDialog(QDialog):
+    """License activation / deactivation dialog."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Forge IDE - License Activation")
+        self.setMinimumWidth(420)
+        self.setModal(True)
+        self._lm = get_license_manager()
+        self._build_ui()
+        self._refresh_status()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        # --- Status group ---
+        status_group = QGroupBox("Current License")
+        sg_layout = QVBoxLayout(status_group)
+        self.status_label = QLabel()
+        self.tier_label = QLabel()
+        sg_layout.addWidget(self.status_label)
+        sg_layout.addWidget(self.tier_label)
+        layout.addWidget(status_group)
+
+        # --- Activation group ---
+        act_group = QGroupBox("Activate")
+        ag_layout = QVBoxLayout(act_group)
+        self.key_edit = QLineEdit()
+        self.key_edit.setPlaceholderText("Enter your license key")
+        ag_layout.addWidget(self.key_edit)
+
+        btn_row = QHBoxLayout()
+        self.activate_btn = QPushButton("Activate")
+        self.activate_btn.clicked.connect(self._on_activate)
+        self.deactivate_btn = QPushButton("Deactivate")
+        self.deactivate_btn.clicked.connect(self._on_deactivate)
+        btn_row.addWidget(self.activate_btn)
+        btn_row.addWidget(self.deactivate_btn)
+        ag_layout.addLayout(btn_row)
+        layout.addWidget(act_group)
+
+        # --- Close ---
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+
+        # Apply dark-friendly styles
+        self.setStyleSheet(
+            "QGroupBox { font-weight: bold; margin-top: 8px; }"
+            "QGroupBox::title { subcontrol-origin: margin; padding: 2px 6px; }"
+            "QPushButton { padding: 6px 18px; }"
+            "QLineEdit { padding: 4px; }"
+        )
+
+    def _refresh_status(self):
+        activated = self._lm.is_activated
+        tier = self._lm.tier.capitalize()
+        if activated:
+            key = self._lm.license_key or ""
+            masked = key[:4] + "..." + key[-4:] if len(key) > 8 else key
+            self.status_label.setText(f"Status: <b>Activated</b> ({masked})")
+        else:
+            self.status_label.setText("Status: <b>Not activated</b> (Community Edition)")
+        self.tier_label.setText(f"Tier: <b>{tier}</b>")
+        self.deactivate_btn.setEnabled(activated)
+
+    def _on_activate(self):
+        key = self.key_edit.text().strip()
+        if not key:
+            QMessageBox.warning(self, "License", "Please enter a license key.")
+            return
+        try:
+            resp = self._lm.activate(key)
+            tier = resp.get("tier", "free").capitalize()
+            QMessageBox.information(
+                self, "License Activated",
+                f"License activated successfully!\nTier: {tier}")
+            self._refresh_status()
+            # Update parent window title
+            if self.parent() and hasattr(self.parent(), '_update_title_for_license'):
+                self.parent()._update_title_for_license()
+        except Exception as exc:
+            QMessageBox.critical(self, "Activation Failed", str(exc))
+
+    def _on_deactivate(self):
+        reply = QMessageBox.question(
+            self, "Deactivate License",
+            "Are you sure you want to deactivate your license?\n"
+            "You will revert to the Community Edition.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self._lm.deactivate()
+            self._refresh_status()
+            QMessageBox.information(
+                self, "License", "License deactivated. Reverted to Community Edition.")
+            if self.parent() and hasattr(self.parent(), '_update_title_for_license'):
+                self.parent()._update_title_for_license()
 
 
 class ForgeMainWindow(QMainWindow):
@@ -12,7 +115,7 @@ class ForgeMainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Forge")
+        self._update_title_for_license()
         self.resize(1280, 800)
 
         self.session = None
@@ -27,6 +130,11 @@ class ForgeMainWindow(QMainWindow):
         self._create_docks()
         self._create_status_bar()
         self._restore_state()
+        # Non-blocking license check on startup
+        try:
+            get_license_manager().startup_check()
+        except Exception:
+            pass  # license check is best-effort
 
     # ------------------------------------------------------------------
     # Engine integration
@@ -48,6 +156,24 @@ class ForgeMainWindow(QMainWindow):
             cwd = session.path[0]
         self.git_widget.set_repo_path(cwd)
         self._update_workspace()
+
+
+    # ------------------------------------------------------------------
+    # License
+    # ------------------------------------------------------------------
+
+    def _update_title_for_license(self):
+        """Set window title based on license tier."""
+        lm = get_license_manager()
+        if lm.is_pro:
+            self.setWindowTitle("Forge IDE")
+        else:
+            self.setWindowTitle("Forge IDE - Community Edition")
+
+    def _show_license_dialog(self):
+        """Open the license activation dialog."""
+        dlg = LicenseDialog(self)
+        dlg.exec()
 
     def _connect_signals(self):
         """Wire inter-widget signals after engine is set."""
@@ -140,6 +266,8 @@ class ForgeMainWindow(QMainWindow):
 
         self.action_about = QAction("&About", self)
         self.action_docs = QAction("&Documentation", self)
+        self.action_license = QAction("Activate &License...", self)
+        self.action_license.triggered.connect(self._show_license_dialog)
 
     # ------------------------------------------------------------------
     # Menus
@@ -186,6 +314,8 @@ class ForgeMainWindow(QMainWindow):
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.action_about)
         help_menu.addAction(self.action_docs)
+        help_menu.addSeparator()
+        help_menu.addAction(self.action_license)
 
     # ------------------------------------------------------------------
     # Toolbar
