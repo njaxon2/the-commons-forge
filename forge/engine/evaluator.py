@@ -20,11 +20,25 @@ def _smart_mldivide(A, b):
     m, n = A.shape
     if m != n:
         return np.linalg.lstsq(A, b, rcond=None)[0]
-    # Fast triangular check: O(n) via triu/tril nonzero scan
-    if not np.any(np.triu(A, 1)):  # lower triangular
-        return _solve_tri(A, b, lower=True, check_finite=False)
-    if not np.any(np.tril(A, -1)):  # upper triangular
-        return _solve_tri(A, b, lower=False, check_finite=False)
+    # Sampled triangular check: O(k) instead of O(n^2)
+    if n <= 64:
+        if not np.any(np.triu(A, 1)):  # lower triangular
+            return _solve_tri(A, b, lower=True, check_finite=False)
+        if not np.any(np.tril(A, -1)):  # upper triangular
+            return _solve_tri(A, b, lower=False, check_finite=False)
+    else:
+        # Sample random off-diagonal elements instead of full matrix scan
+        k = min(200, n * 2)
+        idx = _MLDIVIDE_RNG.integers(0, n, size=k)
+        jdx = _MLDIVIDE_RNG.integers(0, n, size=k)
+        upper_mask = jdx > idx
+        lower_mask = idx > jdx
+        if upper_mask.any() and not np.any(A[idx[upper_mask], jdx[upper_mask]]):
+            if not np.any(np.triu(A, 1)):
+                return _solve_tri(A, b, lower=True, check_finite=False)
+        if lower_mask.any() and not np.any(A[idx[lower_mask], jdx[lower_mask]]):
+            if not np.any(np.tril(A, -1)):
+                return _solve_tri(A, b, lower=False, check_finite=False)
     # Sampled symmetry check for large matrices -> Cholesky if SPD
     if n >= 64:
         k = min(100, n)
@@ -36,8 +50,8 @@ def _smart_mldivide(A, b):
                 return _cho_solve(cf, b, check_finite=False)
             except np.linalg.LinAlgError:
                 pass
-    # General dense: scipy with skip finite check
-    return _scipy_solve(A, b, overwrite_a=False, overwrite_b=False, check_finite=False)
+    # General dense: use numpy (faster on Windows, same on Linux)
+    return np.linalg.solve(A, b)
 
 import io
 from typing import Any, Dict, List, Optional, Callable
