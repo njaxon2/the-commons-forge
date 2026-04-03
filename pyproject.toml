@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forge-ide"
-version = "0.3.5"
+version = "0.3.6"
 description = "Forge Engine - Octave-compatible numerical computing core"
 readme = "README.md"
 license = {text = "Apache-2.0"}
