@@ -907,6 +907,424 @@ def binopdf(x, n, p):
     return _fa(sp_stats.binom.pmf(xd, nd, pd))
 
 
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CONTINUOUS DISTRIBUTION FUNCTIONS  (pdf / cdf / inv / rnd)
+# ═══════════════════════════════════════════════════════════════════
+# MATLAB-compatible thin wrappers over scipy.stats.
+# SRS trace: SRS-FUNC-STATS-DIST
+
+# ── Normal distribution ──────────────────────────────────────────
+
+def normpdf(x, mu=None, sigma=None):
+    """Normal probability density function.
+
+    Y = normpdf(X)
+    Y = normpdf(X, MU, SIGMA)
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.norm.pdf(xd, loc=mu_val, scale=sigma_val))
+
+
+def normcdf(x, mu=None, sigma=None):
+    """Normal cumulative distribution function.
+
+    P = normcdf(X)
+    P = normcdf(X, MU, SIGMA)
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.norm.cdf(xd, loc=mu_val, scale=sigma_val))
+
+
+def norminv(p, mu=None, sigma=None):
+    """Inverse of the normal cumulative distribution function.
+
+    X = norminv(P)
+    X = norminv(P, MU, SIGMA)
+    """
+    pd = _ensure_float(p)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.norm.ppf(pd, loc=mu_val, scale=sigma_val))
+
+
+def normrnd(mu=None, sigma=None, r=None, c=None):
+    """Random arrays from the normal distribution.
+
+    R = normrnd(MU, SIGMA)
+    R = normrnd(MU, SIGMA, M, N)
+    """
+    mu_val = float(_scalar(mu)) if mu is not None else 0.0
+    sigma_val = float(_scalar(sigma)) if sigma is not None else 1.0
+    if r is not None:
+        rows = int(_scalar(r))
+        cols = int(_scalar(c)) if c is not None else rows
+        return _fa(sp_stats.norm.rvs(loc=mu_val, scale=sigma_val, size=(rows, cols)))
+    return _fa(sp_stats.norm.rvs(loc=mu_val, scale=sigma_val))
+
+
+# ── Student t distribution ───────────────────────────────────────
+
+def tpdf(x, nu):
+    """Student t probability density function.
+
+    Y = tpdf(X, NU)
+    """
+    xd = _ensure_float(x)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.t.pdf(xd, nu_val))
+
+
+def tcdf(x, nu):
+    """Student t cumulative distribution function.
+
+    P = tcdf(X, NU)
+    """
+    xd = _ensure_float(x)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.t.cdf(xd, nu_val))
+
+
+def tinv(p, nu):
+    """Inverse of the Student t cumulative distribution function.
+
+    X = tinv(P, NU)
+    """
+    pd = _ensure_float(p)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.t.ppf(pd, nu_val))
+
+
+# ── Chi-squared distribution ────────────────────────────────────
+
+def chi2pdf(x, nu):
+    """Chi-squared probability density function.
+
+    Y = chi2pdf(X, NU)
+    """
+    xd = _ensure_float(x)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.chi2.pdf(xd, nu_val))
+
+
+def chi2cdf(x, nu):
+    """Chi-squared cumulative distribution function.
+
+    P = chi2cdf(X, NU)
+    """
+    xd = _ensure_float(x)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.chi2.cdf(xd, nu_val))
+
+
+def chi2inv(p, nu):
+    """Inverse of the chi-squared cumulative distribution function.
+
+    X = chi2inv(P, NU)
+    """
+    pd = _ensure_float(p)
+    nu_val = _ensure_float(nu)
+    return _fa(sp_stats.chi2.ppf(pd, nu_val))
+
+
+# ── F-distribution ──────────────────────────────────────────────
+
+def fpdf(x, d1, d2):
+    """F probability density function.
+
+    Y = fpdf(X, D1, D2)
+    """
+    xd = _ensure_float(x)
+    d1_val = _ensure_float(d1)
+    d2_val = _ensure_float(d2)
+    return _fa(sp_stats.f.pdf(xd, d1_val, d2_val))
+
+
+def fcdf(x, d1, d2):
+    """F cumulative distribution function.
+
+    P = fcdf(X, D1, D2)
+    """
+    xd = _ensure_float(x)
+    d1_val = _ensure_float(d1)
+    d2_val = _ensure_float(d2)
+    return _fa(sp_stats.f.cdf(xd, d1_val, d2_val))
+
+
+def finv(p, d1, d2):
+    """Inverse of the F cumulative distribution function.
+
+    X = finv(P, D1, D2)
+    """
+    pd = _ensure_float(p)
+    d1_val = _ensure_float(d1)
+    d2_val = _ensure_float(d2)
+    return _fa(sp_stats.f.ppf(pd, d1_val, d2_val))
+
+
+# ── Exponential distribution ────────────────────────────────────
+
+def exppdf(x, mu=None):
+    """Exponential probability density function.
+
+    Y = exppdf(X)
+    Y = exppdf(X, MU)
+
+    MU is the mean (1/lambda). Default MU = 1.
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 1.0
+    return _fa(sp_stats.expon.pdf(xd, scale=mu_val))
+
+
+def expcdf(x, mu=None):
+    """Exponential cumulative distribution function.
+
+    P = expcdf(X)
+    P = expcdf(X, MU)
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 1.0
+    return _fa(sp_stats.expon.cdf(xd, scale=mu_val))
+
+
+def expinv(p, mu=None):
+    """Inverse of the exponential cumulative distribution function.
+
+    X = expinv(P)
+    X = expinv(P, MU)
+    """
+    pd = _ensure_float(p)
+    mu_val = _ensure_float(mu) if mu is not None else 1.0
+    return _fa(sp_stats.expon.ppf(pd, scale=mu_val))
+
+
+def exprnd(mu=None, r=None, c=None):
+    """Random arrays from the exponential distribution.
+
+    R = exprnd(MU)
+    R = exprnd(MU, M, N)
+    """
+    mu_val = float(_scalar(mu)) if mu is not None else 1.0
+    if r is not None:
+        rows = int(_scalar(r))
+        cols = int(_scalar(c)) if c is not None else rows
+        return _fa(sp_stats.expon.rvs(scale=mu_val, size=(rows, cols)))
+    return _fa(sp_stats.expon.rvs(scale=mu_val))
+
+
+# ── Uniform distribution ────────────────────────────────────────
+
+def unifpdf(x, a=None, b=None):
+    """Continuous uniform probability density function.
+
+    Y = unifpdf(X)
+    Y = unifpdf(X, A, B)
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a) if a is not None else 0.0
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.uniform.pdf(xd, loc=a_val, scale=b_val - a_val))
+
+
+def unifcdf(x, a=None, b=None):
+    """Continuous uniform cumulative distribution function.
+
+    P = unifcdf(X)
+    P = unifcdf(X, A, B)
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a) if a is not None else 0.0
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.uniform.cdf(xd, loc=a_val, scale=b_val - a_val))
+
+
+def unifinv(p, a=None, b=None):
+    """Inverse of the continuous uniform CDF.
+
+    X = unifinv(P)
+    X = unifinv(P, A, B)
+    """
+    pd = _ensure_float(p)
+    a_val = _ensure_float(a) if a is not None else 0.0
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.uniform.ppf(pd, loc=a_val, scale=b_val - a_val))
+
+
+def unifrnd(a=None, b=None, r=None, c=None):
+    """Random arrays from the continuous uniform distribution.
+
+    R = unifrnd(A, B)
+    R = unifrnd(A, B, M, N)
+    """
+    a_val = float(_scalar(a)) if a is not None else 0.0
+    b_val = float(_scalar(b)) if b is not None else 1.0
+    if r is not None:
+        rows = int(_scalar(r))
+        cols = int(_scalar(c)) if c is not None else rows
+        return _fa(sp_stats.uniform.rvs(loc=a_val, scale=b_val - a_val, size=(rows, cols)))
+    return _fa(sp_stats.uniform.rvs(loc=a_val, scale=b_val - a_val))
+
+
+# ── Beta distribution ───────────────────────────────────────────
+
+def betapdf(x, a, b):
+    """Beta probability density function.
+
+    Y = betapdf(X, A, B)
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b)
+    return _fa(sp_stats.beta.pdf(xd, a_val, b_val))
+
+
+def betacdf(x, a, b):
+    """Beta cumulative distribution function.
+
+    P = betacdf(X, A, B)
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b)
+    return _fa(sp_stats.beta.cdf(xd, a_val, b_val))
+
+
+def betainv(p, a, b):
+    """Inverse of the beta cumulative distribution function.
+
+    X = betainv(P, A, B)
+    """
+    pd = _ensure_float(p)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b)
+    return _fa(sp_stats.beta.ppf(pd, a_val, b_val))
+
+
+# ── Gamma distribution ──────────────────────────────────────────
+
+def gampdf(x, a, b=None):
+    """Gamma probability density function.
+
+    Y = gampdf(X, A)
+    Y = gampdf(X, A, B)
+
+    A is the shape parameter, B is the scale (default 1).
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.gamma.pdf(xd, a_val, scale=b_val))
+
+
+def gamcdf(x, a, b=None):
+    """Gamma cumulative distribution function.
+
+    P = gamcdf(X, A)
+    P = gamcdf(X, A, B)
+    """
+    xd = _ensure_float(x)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.gamma.cdf(xd, a_val, scale=b_val))
+
+
+def gaminv(p, a, b=None):
+    """Inverse of the gamma cumulative distribution function.
+
+    X = gaminv(P, A)
+    X = gaminv(P, A, B)
+    """
+    pd = _ensure_float(p)
+    a_val = _ensure_float(a)
+    b_val = _ensure_float(b) if b is not None else 1.0
+    return _fa(sp_stats.gamma.ppf(pd, a_val, scale=b_val))
+
+
+# ── Lognormal distribution ──────────────────────────────────────
+
+def lognpdf(x, mu=None, sigma=None):
+    """Lognormal probability density function.
+
+    Y = lognpdf(X)
+    Y = lognpdf(X, MU, SIGMA)
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.lognorm.pdf(xd, sigma_val, scale=np.exp(mu_val)))
+
+
+def logncdf(x, mu=None, sigma=None):
+    """Lognormal cumulative distribution function.
+
+    P = logncdf(X)
+    P = logncdf(X, MU, SIGMA)
+    """
+    xd = _ensure_float(x)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.lognorm.cdf(xd, sigma_val, scale=np.exp(mu_val)))
+
+
+def logninv(p, mu=None, sigma=None):
+    """Inverse of the lognormal cumulative distribution function.
+
+    X = logninv(P)
+    X = logninv(P, MU, SIGMA)
+    """
+    pd = _ensure_float(p)
+    mu_val = _ensure_float(mu) if mu is not None else 0.0
+    sigma_val = _ensure_float(sigma) if sigma is not None else 1.0
+    return _fa(sp_stats.lognorm.ppf(pd, sigma_val, scale=np.exp(mu_val)))
+
+
+# ── Weibull distribution ────────────────────────────────────────
+
+def wblpdf(x, lam=None, k=None):
+    """Weibull probability density function.
+
+    Y = wblpdf(X)
+    Y = wblpdf(X, LAMBDA, K)
+
+    LAMBDA is the scale, K is the shape. Defaults: LAMBDA=1, K=1.
+    """
+    xd = _ensure_float(x)
+    lam_val = _ensure_float(lam) if lam is not None else 1.0
+    k_val = _ensure_float(k) if k is not None else 1.0
+    return _fa(sp_stats.weibull_min.pdf(xd, k_val, scale=lam_val))
+
+
+def wblcdf(x, lam=None, k=None):
+    """Weibull cumulative distribution function.
+
+    P = wblcdf(X)
+    P = wblcdf(X, LAMBDA, K)
+    """
+    xd = _ensure_float(x)
+    lam_val = _ensure_float(lam) if lam is not None else 1.0
+    k_val = _ensure_float(k) if k is not None else 1.0
+    return _fa(sp_stats.weibull_min.cdf(xd, k_val, scale=lam_val))
+
+
+def wblinv(p, lam=None, k=None):
+    """Inverse of the Weibull cumulative distribution function.
+
+    X = wblinv(P)
+    X = wblinv(P, LAMBDA, K)
+    """
+    pd = _ensure_float(p)
+    lam_val = _ensure_float(lam) if lam is not None else 1.0
+    k_val = _ensure_float(k) if k is not None else 1.0
+    return _fa(sp_stats.weibull_min.ppf(pd, k_val, scale=lam_val))
+
+
 STATISTICS_REGISTRY = {
     # ── Descriptive statistics ────────────────────────────────────
     'bounds':           bounds,
@@ -968,5 +1386,48 @@ STATISTICS_REGISTRY = {
     'poisspdf':         poisspdf,
     # ── Binomial distribution ─────────────────────────────────────
     'binopdf':          binopdf,
+    # ── Normal distribution ───────────────────────────────────────
+    'normpdf':          normpdf,
+    'normcdf':          normcdf,
+    'norminv':          norminv,
+    'normrnd':          normrnd,
+    # ── Student t distribution ────────────────────────────────────
+    'tpdf':             tpdf,
+    'tcdf':             tcdf,
+    'tinv':             tinv,
+    # ── Chi-squared distribution ──────────────────────────────────
+    'chi2pdf':          chi2pdf,
+    'chi2cdf':          chi2cdf,
+    'chi2inv':          chi2inv,
+    # ── F-distribution ────────────────────────────────────────────
+    'fpdf':             fpdf,
+    'fcdf':             fcdf,
+    'finv':             finv,
+    # ── Exponential distribution ──────────────────────────────────
+    'exppdf':           exppdf,
+    'expcdf':           expcdf,
+    'expinv':           expinv,
+    'exprnd':           exprnd,
+    # ── Uniform distribution ──────────────────────────────────────
+    'unifpdf':          unifpdf,
+    'unifcdf':          unifcdf,
+    'unifinv':          unifinv,
+    'unifrnd':          unifrnd,
+    # ── Beta distribution ─────────────────────────────────────────
+    'betapdf':          betapdf,
+    'betacdf':          betacdf,
+    'betainv':          betainv,
+    # ── Gamma distribution ────────────────────────────────────────
+    'gampdf':           gampdf,
+    'gamcdf':           gamcdf,
+    'gaminv':           gaminv,
+    # ── Lognormal distribution ────────────────────────────────────
+    'lognpdf':          lognpdf,
+    'logncdf':          logncdf,
+    'logninv':          logninv,
+    # ── Weibull distribution ──────────────────────────────────────
+    'wblpdf':           wblpdf,
+    'wblcdf':           wblcdf,
+    'wblinv':           wblinv,
 }
 
