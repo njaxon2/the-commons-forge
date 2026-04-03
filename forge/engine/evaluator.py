@@ -2643,11 +2643,20 @@ class Session:
         return tuple(results)
 
 
+    _MULTI_OUTPUT_FUNCS = frozenset({
+        max, min, find, size, ind2sub, sort, eig, svd,
+        lu, qr, chol, unique, meshgrid, fileparts, ismember,
+        deal, cellfun, arrayfun,
+    })
+
     def _eval_multi_output(self, expr, ws, nargout):
         if not isinstance(expr, Index):
             return None
         name = expr.target.name if isinstance(expr.target, Identifier) else None
         if name is None:
+            return None
+        # Fast bail-out for functions not known to have multi-output paths
+        if name not in self._MULTI_OUTPUT_FUNCS and name not in self.functions:
             return None
         args = [self._eval_expr(a, ws) for a in expr.args]
         if name == 'max':

@@ -34,6 +34,8 @@ except ImportError:
 
 def _fa(x):
     """Wrap result as ForgeArray."""
+    if type(x) is np.ndarray and x.ndim >= 2:
+        return ForgeArray._from_ndarray(x)
     arr = np.asarray(x)
     if ForgeArray is np.ndarray:
         return arr
@@ -41,7 +43,10 @@ def _fa(x):
 
 
 def _ensure_float(x):
-    return np.asarray(_unwrap(x), dtype=np.float64)
+    data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+    if type(data) is np.ndarray and data.dtype == np.float64:
+        return data  # Already float64 ndarray, no copy needed
+    return np.asarray(data, dtype=np.float64)
 
 
 def _scalar(x):

@@ -13,7 +13,10 @@ from forge.engine.types import ForgeArray, _unwrap
 
 
 def _wrap(x):
-    return ForgeArray(np.asarray(x, dtype=float))
+    arr = np.asarray(x, dtype=float)
+    if arr.ndim >= 2:
+        return ForgeArray._from_ndarray(arr)
+    return ForgeArray(arr)
 
 
 def _deg2rad(x):

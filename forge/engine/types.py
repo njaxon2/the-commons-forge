@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Forge data types: ForgeArray with 1-based indexing, type conversion, and MATLAB/Octave semantics."""
 import numpy as np
+import scipy.sparse as _sp_module
 from enum import Enum
 
 
@@ -41,7 +42,31 @@ class ForgeArray:
 
     __slots__ = ("_data", "_is_char")
 
+    @classmethod
+    def _from_ndarray(cls, data):
+        """Fast path: wrap an existing ndarray without type checking.
+
+        The caller guarantees data is already a numpy ndarray with ndim >= 2.
+        No sparse check, no reshape, no dtype conversion.
+        """
+        obj = object.__new__(cls)
+        obj._data = data
+        obj._is_char = False
+        return obj
+
     def __init__(self, data, dtype=None):
+        # Fast path: ndarray with no dtype conversion (most common hot-path case)
+        if type(data) is np.ndarray and dtype is None:
+            self._data = data
+            self._is_char = False
+            ndim = data.ndim
+            if ndim >= 2:
+                return  # Already 2D+, skip all other checks
+            if ndim == 0:
+                self._data = data.reshape(1, 1)
+            else:  # ndim == 1
+                self._data = data.reshape(1, -1)
+            return
         if isinstance(data, ForgeArray):
             self._data = data._data.copy() if dtype is None else data._data.astype(DTYPE_MAP.get(dtype, dtype))
             if dtype is None:
@@ -63,16 +88,14 @@ class ForgeArray:
             if self._data.ndim == 0:
                 self._data = self._data.reshape(1, 1)
         else:
-            import scipy.sparse as _sp
-            if _sp.issparse(data):
+            if _sp_module.issparse(data):
                 self._data = data  # Preserve sparse matrices as-is
             else:
                 self._data = np.asarray(data)
         self._is_char = (dtype == "char")
         # Ensure at least 2D for MATLAB semantics (scalars and vectors)
         # Skip reshape for sparse matrices (they are always 2D)
-        import scipy.sparse as _sp2
-        if _sp2.issparse(self._data):
+        if _sp_module.issparse(self._data):
             pass  # scipy sparse is always 2D
         elif self._data.ndim == 0:
             self._data = self._data.reshape(1, 1)
