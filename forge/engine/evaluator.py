@@ -70,6 +70,8 @@ from forge.engine.classdef import (
     get_class, class_exists,
 )
 from forge.engine.builtins.sets import forge_ismember
+from forge.engine.expr_fusion import can_fuse, fused_binop
+from forge.engine.jit_compiler import can_jit_loop, compile_and_run_loop, is_numba_available
 
 
 class BreakSignal(Exception):
@@ -555,6 +557,53 @@ class Session:
         self._setup_constants()
         self._wire_global_store()
         self._session_ref = None  # Set by ForgeSession to enable .m file discovery
+        # -- Dispatch tables for O(1) node-type routing (perf #28) --
+        self._init_dispatch_tables()
+
+
+    def _init_dispatch_tables(self):
+        """Build dict-based dispatch tables for statement and expression evaluation.
+
+        Replaces isinstance chains with O(1) dict lookup for ~20 node types each.
+        """
+        # -- Statement dispatch --
+        self._stmt_dispatch = {
+            Assignment: self._exec_assign,
+            IfStatement: self._exec_if,
+            ForStatement: self._exec_for,
+            WhileStatement: self._exec_while,
+            DoUntilStatement: self._exec_do_until,
+            SwitchStatement: self._exec_switch,
+            TryCatchStatement: self._exec_try,
+            ClassDef: self._exec_classdef,
+            UnwindProtect: self._exec_unwind_protect,
+        }
+
+        # -- Expression dispatch --
+        self._expr_dispatch = {
+            NumberLiteral: self._eval_number,
+            StringLiteral: self._eval_string_literal,
+            Identifier: self._eval_identifier,
+            UnaryOp: self._eval_unary,
+            BinaryOp: self._eval_binop,
+            CompareOp: self._eval_compare,
+            LogicalOp: self._eval_logical,
+            TransposeOp: self._eval_transpose,
+            BareColon: self._eval_bare_colon,
+            ColonExpr: self._eval_colon_expr,
+            Index: self._eval_index,
+            CellIndex: self._eval_cell_index,
+            FieldAccess: self._eval_field_access,
+            DynamicFieldAccess: self._eval_dynamic_field,
+            MatrixLiteral: self._eval_matrix,
+            CellLiteral: self._eval_cell_literal,
+            FunctionHandle: self._eval_function_handle,
+            AnonFunction: self._eval_anon_function,
+            EndKeyword: self._eval_end_keyword,
+        }
+
+        # -- LRU cache for NumberLiteral results (perf: avoid re-parsing constants) --
+        self._number_cache = {}
 
     def _wire_global_store(self):
         """Connect workspace to shared global store."""
@@ -1294,260 +1343,252 @@ class Session:
         return result
 
     def _exec(self, node, ws: Workspace) -> Any:
-        """Execute a single AST node."""
-        if isinstance(node, ExpressionStatement):
-            val = self._eval_expr(node.expr, ws)
-            # R05: If result is a bare callable (command-style: who, whos, etc.)
-            # and the expression is a bare Identifier (not Index/call), auto-invoke
-            if callable(val) and not isinstance(val, ForgeArray):
-                if isinstance(node.expr, Identifier):
-                    val = val()
-            if val is not None:
-                ws.set("ans", val)
-                self.ans = val
-            if node.print_result:
-                return val
-            return None
+        """Execute a single AST node (dict-dispatch, perf #28)."""
+        # Fast path: ExpressionStatement is the most common node
+        node_type = type(node)
+        if node_type is ExpressionStatement:
+            return self._exec_expression_stmt(node, ws)
 
-        if isinstance(node, Assignment):
-            return self._exec_assign(node, ws)
+        # Dict dispatch for nodes with dedicated handler methods
+        handler = self._stmt_dispatch.get(node_type)
+        if handler is not None:
+            return handler(node, ws)
 
-        if isinstance(node, IfStatement):
-            return self._exec_if(node, ws)
-
-        if isinstance(node, ForStatement):
-            return self._exec_for(node, ws)
-
-        if isinstance(node, WhileStatement):
-            return self._exec_while(node, ws)
-
-        if isinstance(node, DoUntilStatement):
-            return self._exec_do_until(node, ws)
-
-        if isinstance(node, SwitchStatement):
-            return self._exec_switch(node, ws)
-
-        if isinstance(node, TryCatchStatement):
-            return self._exec_try(node, ws)
-
-        if isinstance(node, ClassDef):
-            return self._exec_classdef(node, ws)
-
-        if isinstance(node, UnwindProtect):
-            return self._exec_unwind_protect(node, ws)
-
-        if isinstance(node, ReturnStatement):
+        # Signal nodes (raise, no return)
+        if node_type is ReturnStatement:
             raise ReturnSignal()
-
-        if isinstance(node, BreakStatement):
+        if node_type is BreakStatement:
             raise BreakSignal()
-
-        if isinstance(node, ContinueStatement):
+        if node_type is ContinueStatement:
             raise ContinueSignal()
 
-        if isinstance(node, FunctionDef):
+        # Inline handlers for less-frequent nodes
+        if node_type is FunctionDef:
             self.functions[node.name] = node
             return None
-
-        if isinstance(node, GlobalStatement):
-            for name in node.names:
-                ws._globals.add(name)
-                # Sync: if global store has a value, load it into workspace
-                if name in self._global_store:
-                    ws.set(name, self._global_store[name])
-            return None
-
-        if isinstance(node, PersistentStatement):
-            func_name = self._current_function
-            if func_name:
-                store = self._persistent_store.setdefault(func_name, {})
-                for name in node.names:
-                    if name in store:
-                        ws.set(name, store[name])
-                    else:
-                        # First call: initialize to empty matrix (Octave behavior)
-                        ws.set(name, ForgeArray(np.empty((0, 0))))
-                    # Mark variable as persistent in workspace
-                    if not hasattr(ws, '_persistent_vars'):
-                        ws._persistent_vars = set()
-                    ws._persistent_vars.add(name)
-            return None
+        if node_type is GlobalStatement:
+            return self._exec_global(node, ws)
+        if node_type is PersistentStatement:
+            return self._exec_persistent(node, ws)
 
         raise RuntimeError(f"Unknown AST node: {type(node).__name__}")
+
+    def _exec_expression_stmt(self, node, ws: Workspace) -> Any:
+        """Handle ExpressionStatement nodes."""
+        val = self._eval_expr(node.expr, ws)
+        # R05: If result is a bare callable (command-style: who, whos, etc.)
+        # and the expression is a bare Identifier (not Index/call), auto-invoke
+        if callable(val) and not isinstance(val, ForgeArray):
+            if isinstance(node.expr, Identifier):
+                val = val()
+        if val is not None:
+            ws.set("ans", val)
+            self.ans = val
+        if node.print_result:
+            return val
+        return None
+
+    def _exec_global(self, node, ws: Workspace) -> None:
+        """Handle GlobalStatement nodes."""
+        for name in node.names:
+            ws._globals.add(name)
+            # Sync: if global store has a value, load it into workspace
+            if name in self._global_store:
+                ws.set(name, self._global_store[name])
+        return None
+
+    def _exec_persistent(self, node, ws: Workspace) -> None:
+        """Handle PersistentStatement nodes."""
+        func_name = self._current_function
+        if func_name:
+            store = self._persistent_store.setdefault(func_name, {})
+            for name in node.names:
+                if name in store:
+                    ws.set(name, store[name])
+                else:
+                    # First call: initialize to empty matrix (Octave behavior)
+                    ws.set(name, ForgeArray(np.empty((0, 0))))
+                # Mark variable as persistent in workspace
+                if not hasattr(ws, '_persistent_vars'):
+                    ws._persistent_vars = set()
+                ws._persistent_vars.add(name)
+        return None
 
     # ============================================================
     # Expression evaluation
     # ============================================================
 
     def _eval_expr(self, node, ws: Workspace) -> Any:
-        if isinstance(node, NumberLiteral):
-            return self._eval_number(node)
-
-        if isinstance(node, StringLiteral):
-            if node.is_char:
-                return ForgeChar(node.value)
-            return ForgeChar(node.value)  # Both become char for now
-
-        if isinstance(node, Identifier):
-            name = node.name
-            if ws.has(name):
-                return ws.get(name)
-            if name in self.functions:
-                return self.functions[name]
-            # R13: Try .m file auto-discovery
-            resolved = self._resolve_m_file(name)
-            if resolved is not None and resolved != "__script__":
-                return self.functions[name] if name in self.functions else resolved
-            if resolved == "__script__":
-                return ws.get(name) if ws.has(name) else None
-            raise NameError(f"Undefined variable or function: {name}")
-
-        if isinstance(node, UnaryOp):
-            val = self._eval_expr(node.operand, ws)
-            if node.op == "-":
-                return -val if isinstance(val, ForgeArray) else ForgeArray(-np.asarray(val))
-            if node.op == "~":
-                return ForgeArray(~np.asarray(_unwrap(val), dtype=bool))
-
-        if isinstance(node, BinaryOp):
-            return self._eval_binop(node, ws)
-
-        if isinstance(node, CompareOp):
-            return self._eval_compare(node, ws)
-
-        if isinstance(node, LogicalOp):
-            return self._eval_logical(node, ws)
-
-        if isinstance(node, TransposeOp):
-            val = self._eval_expr(node.operand, ws)
-            if isinstance(val, ForgeArray):
-                if node.conjugate:
-                    return ForgeArray(np.conj(val.data).T)
-                return val.T
-            return ForgeArray(np.asarray(val).T)
-
-        if isinstance(node, BareColon):
-            return None
-
-        if isinstance(node, ColonExpr):
-            start = _to_py(self._eval_expr(node.start, ws))
-            stop = _to_py(self._eval_expr(node.stop, ws))
-            if node.step is not None:
-                step = _to_py(self._eval_expr(node.step, ws))
-                return forge_colon(start, step, stop)
-            return forge_colon(start, stop)
-
-        if isinstance(node, Index):
-            return self._eval_index(node, ws)
-
-        if isinstance(node, CellIndex):
-            target = self._eval_expr(node.target, ws)
-            if isinstance(target, ForgeCell):
-                self._index_sizes.append(target.numel())
-                try:
-                    raw_args = [self._eval_expr(a, ws) for a in node.args]
-                finally:
-                    self._index_sizes.pop()
-                # BareColon expands to all elements (e.g. c{:})
-                if len(raw_args) == 1 and raw_args[0] is None:
-                    # Return tuple of all elements for expansion
-                    if target.numel() == 1:
-                        return target.content_get(1)
-                    return tuple(target._data)
-                args = [_to_int(a) for a in raw_args]
-                return target.content_get(*args)
-            raise TypeError("Cell indexing on non-cell")
-
-        if isinstance(node, FieldAccess):
-            target = self._eval_expr(node.target, ws)
-            if isinstance(target, ForgeStruct):
-                return target._fields[node.field]
-            # Support ForgeMap dot access (Count, KeyType, ValueType, keys, values, etc.)
-            if isinstance(target, ForgeMap):
-                field = node.field
-                if field == "Count":
-                    return target.Count
-                if field == "KeyType":
-                    return target.KeyType
-                if field == "ValueType":
-                    return target.ValueType
-                # Method-like access: keys(), values(), isKey(), remove(), length()
-                method = getattr(target, field, None)
-                if method is not None and callable(method):
-                    return method
-                raise TypeError(f"containers.Map has no property '{field}'")
-            # Support ForgeTable dot access (column names, Properties)
-            if isinstance(target, ForgeTable):
-                field = node.field
-                if field == "Properties":
-                    # Return a struct with VariableNames
-                    props = ForgeStruct()
-                    props._fields["VariableNames"] = ForgeCell(
-                        [ForgeChar(n) for n in target._var_names])
-                    return props
-                return target.get_column(field)
-            # Support ForgeObject (classdef instances)
-            if isinstance(target, ForgeObject):
-                return getattr(target, node.field)
-            # Generic Python object dot access (e.g. inputParser methods/properties)
-            if hasattr(target, node.field):
-                val = getattr(target, node.field)
-                # Wrap plain dict as ForgeStruct for further dot access
-                if isinstance(val, dict):
-                    s = ForgeStruct()
-                    for k, v in val.items():
-                        s._fields[k] = v
-                    return s
-                return val
-            raise TypeError(f"Field access on {type(target).__name__}")
-
-        if isinstance(node, DynamicFieldAccess):
-            target = self._eval_expr(node.target, ws)
-            field = self._eval_expr(node.field_expr, ws)
-            if isinstance(field, ForgeChar):
-                field = field.to_str()
-            if isinstance(target, ForgeObject):
-                return getattr(target, str(field))
-            return target._fields[str(field)]
-
-        if isinstance(node, MatrixLiteral):
-            return self._eval_matrix(node, ws)
-
-        if isinstance(node, CellLiteral):
-            return self._eval_cell_literal(node, ws)
-
-        if isinstance(node, FunctionHandle):
-            if node.name in self.functions:
-                fn = self.functions[node.name]
-                if isinstance(fn, FunctionDef):
-                    result = lambda *a: self._call_function(fn, list(a), ws)
-                    result._forge_name = node.name
-                    return result
-                if not hasattr(fn, '_forge_name'):
-                    fn._forge_name = node.name
-                return fn
-            raise NameError(f"Undefined function: {node.name}")
-
-        if isinstance(node, AnonFunction):
-            params = node.args
-            body = node.body
-            captured_ws = ws
-            def anon(*args):
-                local_ws = Workspace(captured_ws)
-                for p, a in zip(params, args):
-                    local_ws.set(p, a)
-                return self._eval_expr(body, local_ws)
-            return anon
-
-        if isinstance(node, EndKeyword):
-            if self._index_sizes:
-                return ForgeArray(np.array(float(self._index_sizes[-1])))
-            raise RuntimeError("'end' used outside of indexing context")
-
+        """Evaluate an expression AST node (dict-dispatch, perf #28)."""
+        handler = self._expr_dispatch.get(type(node))
+        if handler is not None:
+            return handler(node, ws)
         raise RuntimeError(f"Cannot evaluate: {type(node).__name__}")
 
-    def _eval_number(self, node: NumberLiteral) -> ForgeArray:
-        v = node.value
+    # -- Extracted expression handlers (uniform signature: self, node, ws) --
+
+    def _eval_string_literal(self, node, ws: Workspace):
+        """Handle StringLiteral nodes."""
+        if node.is_char:
+            return ForgeChar(node.value)
+        return ForgeChar(node.value)  # Both become char for now
+
+    def _eval_identifier(self, node, ws: Workspace):
+        """Handle Identifier nodes."""
+        name = node.name
+        if ws.has(name):
+            return ws.get(name)
+        if name in self.functions:
+            return self.functions[name]
+        # R13: Try .m file auto-discovery
+        resolved = self._resolve_m_file(name)
+        if resolved is not None and resolved != "__script__":
+            return self.functions[name] if name in self.functions else resolved
+        if resolved == "__script__":
+            return ws.get(name) if ws.has(name) else None
+        raise NameError(f"Undefined variable or function: {name}")
+
+    def _eval_unary(self, node, ws: Workspace):
+        """Handle UnaryOp nodes."""
+        val = self._eval_expr(node.operand, ws)
+        if node.op == "-":
+            return -val if isinstance(val, ForgeArray) else ForgeArray(-np.asarray(val))
+        if node.op == "~":
+            return ForgeArray(~np.asarray(_unwrap(val), dtype=bool))
+
+    def _eval_transpose(self, node, ws: Workspace):
+        """Handle TransposeOp nodes."""
+        val = self._eval_expr(node.operand, ws)
+        if isinstance(val, ForgeArray):
+            if node.conjugate:
+                return ForgeArray(np.conj(val.data).T)
+            return val.T
+        return ForgeArray(np.asarray(val).T)
+
+    def _eval_bare_colon(self, node, ws: Workspace):
+        """Handle BareColon nodes."""
+        return None
+
+    def _eval_colon_expr(self, node, ws: Workspace):
+        """Handle ColonExpr nodes."""
+        start = _to_py(self._eval_expr(node.start, ws))
+        stop = _to_py(self._eval_expr(node.stop, ws))
+        if node.step is not None:
+            step = _to_py(self._eval_expr(node.step, ws))
+            return forge_colon(start, step, stop)
+        return forge_colon(start, stop)
+
+    def _eval_cell_index(self, node, ws: Workspace):
+        """Handle CellIndex nodes."""
+        target = self._eval_expr(node.target, ws)
+        if isinstance(target, ForgeCell):
+            self._index_sizes.append(target.numel())
+            try:
+                raw_args = [self._eval_expr(a, ws) for a in node.args]
+            finally:
+                self._index_sizes.pop()
+            # BareColon expands to all elements (e.g. c{:})
+            if len(raw_args) == 1 and raw_args[0] is None:
+                # Return tuple of all elements for expansion
+                if target.numel() == 1:
+                    return target.content_get(1)
+                return tuple(target._data)
+            args = [_to_int(a) for a in raw_args]
+            return target.content_get(*args)
+        raise TypeError("Cell indexing on non-cell")
+
+    def _eval_field_access(self, node, ws: Workspace):
+        """Handle FieldAccess nodes."""
+        target = self._eval_expr(node.target, ws)
+        if isinstance(target, ForgeStruct):
+            return target._fields[node.field]
+        # Support ForgeMap dot access (Count, KeyType, ValueType, keys, values, etc.)
+        if isinstance(target, ForgeMap):
+            field = node.field
+            if field == "Count":
+                return target.Count
+            if field == "KeyType":
+                return target.KeyType
+            if field == "ValueType":
+                return target.ValueType
+            # Method-like access: keys(), values(), isKey(), remove(), length()
+            method = getattr(target, field, None)
+            if method is not None and callable(method):
+                return method
+            raise TypeError(f"containers.Map has no property '{field}'")
+        # Support ForgeTable dot access (column names, Properties)
+        if isinstance(target, ForgeTable):
+            field = node.field
+            if field == "Properties":
+                # Return a struct with VariableNames
+                props = ForgeStruct()
+                props._fields["VariableNames"] = ForgeCell(
+                    [ForgeChar(n) for n in target._var_names])
+                return props
+            return target.get_column(field)
+        # Support ForgeObject (classdef instances)
+        if isinstance(target, ForgeObject):
+            return getattr(target, node.field)
+        # Generic Python object dot access (e.g. inputParser methods/properties)
+        if hasattr(target, node.field):
+            val = getattr(target, node.field)
+            # Wrap plain dict as ForgeStruct for further dot access
+            if isinstance(val, dict):
+                s = ForgeStruct()
+                for k, v in val.items():
+                    s._fields[k] = v
+                return s
+            return val
+        raise TypeError(f"Field access on {type(target).__name__}")
+
+    def _eval_dynamic_field(self, node, ws: Workspace):
+        """Handle DynamicFieldAccess nodes."""
+        target = self._eval_expr(node.target, ws)
+        field = self._eval_expr(node.field_expr, ws)
+        if isinstance(field, ForgeChar):
+            field = field.to_str()
+        if isinstance(target, ForgeObject):
+            return getattr(target, str(field))
+        return target._fields[str(field)]
+
+    def _eval_function_handle(self, node, ws: Workspace):
+        """Handle FunctionHandle nodes."""
+        if node.name in self.functions:
+            fn = self.functions[node.name]
+            if isinstance(fn, FunctionDef):
+                result = lambda *a: self._call_function(fn, list(a), ws)
+                result._forge_name = node.name
+                return result
+            if not hasattr(fn, '_forge_name'):
+                fn._forge_name = node.name
+            return fn
+        raise NameError(f"Undefined function: {node.name}")
+
+    def _eval_anon_function(self, node, ws: Workspace):
+        """Handle AnonFunction nodes."""
+        params = node.args
+        body = node.body
+        captured_ws = ws
+        def anon(*args):
+            local_ws = Workspace(captured_ws)
+            for p, a in zip(params, args):
+                local_ws.set(p, a)
+            return self._eval_expr(body, local_ws)
+        return anon
+
+    def _eval_end_keyword(self, node, ws: Workspace):
+        """Handle EndKeyword nodes."""
+        if self._index_sizes:
+            return ForgeArray(np.array(float(self._index_sizes[-1])))
+        raise RuntimeError("'end' used outside of indexing context")
+
+    def _eval_number(self, node, ws: Workspace = None) -> ForgeArray:
+        """Evaluate NumberLiteral. Delegates to _parse_number."""
+        return self._parse_number(node.value)
+
+    @staticmethod
+    def _parse_number(v: str) -> ForgeArray:
+        """Parse a number string into a ForgeArray (no caching)."""
         if v == "true":
             return ForgeArray(np.array(True))
         if v == "false":
@@ -1579,9 +1620,17 @@ class Session:
                 return result  # keep sparse as raw scipy
             return ForgeArray(result)
         if op == "+":
-            return _wrap_sparse(l + r) if _any_sparse else ForgeArray(l + r)
+            if _any_sparse:
+                return _wrap_sparse(l + r)
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
+            return ForgeArray(l + r)
         if op == "-":
-            return _wrap_sparse(l - r) if _any_sparse else ForgeArray(l - r)
+            if _any_sparse:
+                return _wrap_sparse(l - r)
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
+            return ForgeArray(l - r)
         if op == "*":
             if _any_sparse:
                 if _is_matrix_op(l, r):
@@ -1624,12 +1673,20 @@ class Session:
                     return _wrap_sparse(l.multiply(r))
                 else:
                     return _wrap_sparse(r.multiply(l))
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
             return ForgeArray(l * r)
         if op == "./":
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
             return ForgeArray(l / r)
         if op == ".\\":
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
             return ForgeArray(r / l)
         if op == ".^":
+            if can_fuse(op, l, r):
+                return ForgeArray(fused_binop(op, l, r))
             return ForgeArray(l ** r)
         raise RuntimeError(f"Unknown binary op: {op}")
 
@@ -2263,6 +2320,14 @@ class Session:
         return None
 
     def _exec_for(self, node: ForStatement, ws: Workspace) -> Any:
+        # JIT acceleration: compile eligible numeric for-loops via Numba
+        if is_numba_available() and can_jit_loop(node):
+            def _ws_get(name):
+                return ws.get(name) if ws.has(name) else None
+            def _ws_set(name, val):
+                ws.set(name, val)
+            if compile_and_run_loop(node, _ws_get, _ws_set):
+                return None
         iter_val = self._eval_expr(node.iter_expr, ws)
         # R09: Handle cell array iteration: for i = {1,2,3}, each element
         if isinstance(iter_val, ForgeCell):
