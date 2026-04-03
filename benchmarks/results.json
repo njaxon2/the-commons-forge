@@ -1,58 +1,49 @@
 {
-  "timestamp": "2026-04-03T12:45:30",
+  "timestamp": "2026-04-03T12:58:22",
   "runs_per_benchmark": 3,
   "engines": [
-    "Forge",
-    "Octave"
+    "Forge"
   ],
   "benchmarks": [
     {
       "name": "elementwise",
       "description": "Benchmark: Element-wise math on large array [deterministic]",
       "file": "bench_elementwise.m",
-      "forge_time": 0.19260999999999998,
+      "forge_time": 0.179836,
       "forge_result": 5.6267989133,
-      "forge_error": null,
-      "octave_time": 0.31781133333333333,
-      "octave_result": 5.6267989133,
-      "octave_error": null,
-      "match_octave": true
+      "forge_error": null
     },
     {
       "name": "stats",
       "description": "Benchmark: Statistical operations on large array [deterministic]",
       "file": "bench_stats.m",
-      "forge_time": 0.053677333333333334,
+      "forge_time": 0.04720533333333333,
       "forge_result": 0.7071067812,
-      "forge_error": null,
-      "octave_time": 0.20793233333333336,
-      "octave_result": 0.7071067812,
-      "octave_error": null,
-      "match_octave": true
+      "forge_error": null
     },
     {
       "name": "conv",
       "description": "Benchmark: Convolution of two vectors [deterministic]",
       "file": "bench_conv.m",
-      "forge_time": 0.009183333333333333,
+      "forge_time": 0.006639,
       "forge_result": 0.6176193635,
-      "forge_error": null,
-      "octave_time": 9.568979333333333,
-      "octave_result": 0.6176193635,
-      "octave_error": null,
-      "match_octave": true
+      "forge_error": null
     },
     {
       "name": "cumsum",
       "description": "Benchmark: Cumulative sum of large array [deterministic]",
       "file": "bench_cumsum.m",
-      "forge_time": 0.029757000000000002,
+      "forge_time": 0.038067666666666666,
       "forge_result": 499999.9999553907,
-      "forge_error": null,
-      "octave_time": 0.04576433333333333,
-      "octave_result": 499999.9999553907,
-      "octave_error": null,
-      "match_octave": true
+      "forge_error": null
+    },
+    {
+      "name": "funcall",
+      "description": "Benchmark: Function call overhead (10000 sin calls) [deterministic]",
+      "file": "bench_funcall.m",
+      "forge_time": 0.3247883333333333,
+      "forge_result": -0.5440211109,
+      "forge_error": null
     }
   ]
 }

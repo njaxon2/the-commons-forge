@@ -619,6 +619,8 @@ class Session:
 
         # -- LRU cache for NumberLiteral results (perf: avoid re-parsing constants) --
         self._number_cache = {}
+        # -- Parse cache: avoid re-tokenizing + re-parsing identical source strings --
+        self._parse_cache = {}
 
     def _wire_global_store(self):
         """Connect workspace to shared global store."""
@@ -1390,7 +1392,11 @@ class Session:
 
     def eval(self, source: str) -> Any:
         """Parse and evaluate M-language source code."""
-        stmts = parse(source)
+        stmts = self._parse_cache.get(source)
+        if stmts is None:
+            stmts = parse(source)
+            if len(self._parse_cache) < 4096:
+                self._parse_cache[source] = stmts
         return self._exec_stmts(stmts, self.workspace)
 
     def _exec_stmts(self, stmts, ws: Workspace) -> Any:
@@ -1490,11 +1496,23 @@ class Session:
             return ForgeChar(node.value)
         return ForgeChar(node.value)  # Both become char for now
 
+    _SENTINEL = object()
+
     def _eval_identifier(self, node, ws: Workspace):
         """Handle Identifier nodes."""
         name = node.name
-        if ws.has(name):
-            return ws.get(name)
+        # Fast path: direct dict lookup avoids double has()+get()
+        val = ws._vars.get(name, self._SENTINEL)
+        if val is not self._SENTINEL:
+            return val
+        # Check globals
+        if name in ws._globals and ws._global_store is not None:
+            val = ws._global_store.get(name, self._SENTINEL)
+            if val is not self._SENTINEL:
+                return val
+        # Check parent workspace
+        if ws._parent and ws._parent.has(name):
+            return ws._parent.get(name)
         if name in self.functions:
             return self.functions[name]
         # R13: Try .m file auto-discovery
@@ -1655,18 +1673,17 @@ class Session:
     def _parse_number(v: str) -> ForgeArray:
         """Parse a number string into a ForgeArray (no caching)."""
         if v == "true":
-            return ForgeArray(np.array(True))
+            return ForgeArray._from_ndarray(np.array([[True]]))
         if v == "false":
-            return ForgeArray(np.array(False))
+            return ForgeArray._from_ndarray(np.array([[False]]))
         if v.startswith("0x") or v.startswith("0X"):
-            return ForgeArray(int(v, 16))
+            return ForgeArray._from_ndarray(np.float64(int(v, 16)).reshape(1, 1))
         if v.startswith("0b") or v.startswith("0B"):
-            return ForgeArray(int(v, 2))
+            return ForgeArray._from_ndarray(np.float64(int(v, 2)).reshape(1, 1))
         if v.endswith("i") or v.endswith("j"):
-            return ForgeArray(complex(0, float(v[:-1])))
-        if "." in v or "e" in v.lower():
-            return ForgeArray(float(v))
-        return ForgeArray(float(v))  # Octave: all numbers are double by default
+            return ForgeArray._from_ndarray(np.complex128(complex(0, float(v[:-1]))).reshape(1, 1))
+        # Common path: all numbers are double by default in Octave
+        return ForgeArray._from_ndarray(np.float64(float(v)).reshape(1, 1))
 
     def _eval_binop(self, node: BinaryOp, ws: Workspace) -> ForgeArray:
         left = self._eval_expr(node.left, ws)
