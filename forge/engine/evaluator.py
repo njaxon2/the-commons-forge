@@ -91,6 +91,19 @@ from forge.engine.builtins.sets import forge_ismember
 from forge.engine.expr_fusion import can_fuse, fused_binop
 from forge.engine.jit_compiler import can_jit_loop, compile_and_run_loop, is_numba_available
 
+# === PERF: Fast-path ufunc dispatch table ===
+_FAST_UFUNC = {
+    "abs": np.abs, "sqrt": np.sqrt, "exp": np.exp,
+    "log": np.log, "log2": np.log2, "log10": np.log10,
+    "sin": np.sin, "cos": np.cos, "tan": np.tan,
+    "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
+    "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
+    "asinh": np.arcsinh, "acosh": np.arccosh, "atanh": np.arctanh,
+    "ceil": np.ceil, "floor": np.floor, "round": np.round,
+    "fix": np.fix, "sign": np.sign,
+    "real": np.real, "imag": np.imag, "conj": np.conj, "angle": np.angle,
+}
+
 
 class BreakSignal(Exception):
     pass
@@ -785,20 +798,28 @@ class Session:
                     dims.append(-1)  # [] means auto-compute
                 else:
                     dims.append(int(pv))
-            data = _unwrap(x)
-            # Octave reshape uses Fortran order
-            return ForgeArray(data.reshape(dims, order='F'))
+            data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            # Octave reshape uses Fortran order; numpy returns view when possible
+            result = data.reshape(dims, order='F')
+            return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         b["reshape"] = _forge_reshape
         b["squeeze"] = lambda x: ForgeArray(np.squeeze(_unwrap(x)))
         b["permute"] = lambda x, order: ForgeArray(np.transpose(_unwrap(x), [int(_to_py(o))-1 for o in _unwrap(order).flatten()]))
         b["ndims"] = lambda x: ForgeArray(np.float64(max(2, _unwrap(x).ndim)))
         b["rows"] = lambda x: ForgeArray(np.float64(_unwrap(x).shape[0] if _unwrap(x).ndim >= 1 else 1))
         b["columns"] = lambda x: ForgeArray(np.float64(_unwrap(x).shape[1] if _unwrap(x).ndim >= 2 else 1))
-        b["transpose"] = lambda x: x.T if isinstance(x, ForgeArray) else ForgeArray(np.asarray(x).T)
+        b["transpose"] = lambda x: ForgeArray._from_ndarray(x._data.T) if isinstance(x, ForgeArray) and x._data.ndim >= 2 else (x.T if isinstance(x, ForgeArray) else ForgeArray(np.asarray(x).T))
         b["ctranspose"] = lambda x: ForgeArray(np.conj(np.asarray(x.data if isinstance(x, ForgeArray) else x).T))
         def _fast_sum(x, *a):
             data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
-            result = np.sum(data, axis=int(_to_py(a[0]))-1 if a else None)
+            if not a:
+                # Octave default: sum along first non-singleton dim
+                if data.ndim >= 2 and data.shape[0] > 1:
+                    result = data.sum(axis=0, keepdims=True)
+                    return ForgeArray._from_ndarray(result)
+                result = np.sum(data)
+                return ForgeArray(result)
+            result = np.sum(data, axis=int(_to_py(a[0]))-1)
             return ForgeArray._from_ndarray(result) if type(result) is np.ndarray and result.ndim >= 2 else ForgeArray(result)
         b["sum"] = _fast_sum
         def _fast_prod(x, *a):
@@ -867,20 +888,28 @@ class Session:
         b["diff"] = lambda x, *a: ForgeArray(np.diff(_unwrap(x), n=_to_py(a[0]) if a else 1, axis=-1))
         b["cat"] = lambda dim, *arrays: ForgeArray(np.concatenate([_unwrap(a) for a in arrays], axis=_to_py(dim)-1))
         def _forge_horzcat(*a):
-            non_empty = [_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0]
+            # Fast path: 2 ForgeArray args (common [A, B] case)
+            if len(a) == 2 and isinstance(a[0], ForgeArray) and isinstance(a[1], ForgeArray) and a[0]._data.size > 0 and a[1]._data.size > 0:
+                return ForgeArray._from_ndarray(np.concatenate((a[0]._data, a[1]._data), axis=1))
+            non_empty = [x._data if isinstance(x, ForgeArray) else np.atleast_2d(x) for x in a]
+            non_empty = [x for x in non_empty if x.size > 0]
             if not non_empty:
                 return ForgeArray(np.array([]).reshape(0, 0))
             try:
-                return ForgeArray(np.concatenate(non_empty, axis=1))
+                return ForgeArray._from_ndarray(np.concatenate(non_empty, axis=1))
             except ValueError:
                 raise ValueError("horizontal dimensions mismatch")
         b["horzcat"] = _forge_horzcat
         def _forge_vertcat(*a):
-            non_empty = [_unwrap(x) for x in a if np.asarray(_unwrap(x)).size > 0]
+            # Fast path: 2 ForgeArray args (common [A; B] case)
+            if len(a) == 2 and isinstance(a[0], ForgeArray) and isinstance(a[1], ForgeArray) and a[0]._data.size > 0 and a[1]._data.size > 0:
+                return ForgeArray._from_ndarray(np.concatenate((a[0]._data, a[1]._data), axis=0))
+            non_empty = [x._data if isinstance(x, ForgeArray) else np.atleast_2d(x) for x in a]
+            non_empty = [x for x in non_empty if x.size > 0]
             if not non_empty:
                 return ForgeArray(np.array([]).reshape(0, 0))
             try:
-                return ForgeArray(np.concatenate(non_empty, axis=0))
+                return ForgeArray._from_ndarray(np.concatenate(non_empty, axis=0))
             except ValueError:
                 raise ValueError("vertical dimensions mismatch")
         b["vertcat"] = _forge_vertcat
@@ -1539,8 +1568,10 @@ class Session:
         val = self._eval_expr(node.operand, ws)
         if isinstance(val, ForgeArray):
             if node.conjugate:
-                return ForgeArray(np.conj(val.data).T)
-            return val.T
+                t = np.conj(val._data).T
+            else:
+                t = val._data.T
+            return ForgeArray._from_ndarray(t) if t.ndim >= 2 else ForgeArray(t)
         return ForgeArray(np.asarray(val).T)
 
     def _eval_bare_colon(self, node, ws: Workspace):
@@ -1823,8 +1854,17 @@ class Session:
         raise RuntimeError(f"Unknown logical op: {op}")
 
     def _eval_index(self, node: Index, ws: Workspace) -> Any:
-        # Step 1: Resolve the target
+        # Step 0: FAST PATH for single-arg ufuncs (abs, sin, exp, etc.)
         name = node.target.name if isinstance(node.target, Identifier) else None
+        if name is not None and len(node.args) == 1:
+            _uf = _FAST_UFUNC.get(name)
+            if _uf is not None and not ws.has(name):
+                arg = self._eval_expr(node.args[0], ws)
+                if isinstance(arg, ForgeArray):
+                    return ForgeArray._from_ndarray(_uf(arg._data))
+                return ForgeArray(np.atleast_2d(_uf(_unwrap(arg))))
+
+        # Step 1: Resolve the target
         try:
             target = self._eval_expr(node.target, ws)
         except (NameError, ForgeError) as e:
@@ -2022,14 +2062,26 @@ class Session:
     def _eval_matrix(self, node: MatrixLiteral, ws: Workspace) -> ForgeArray:
         if not node.rows:
             return ForgeArray(np.array([]).reshape(0, 0))
-        # Check if all elements are ForgeChar (string/char concatenation)
+        nrows = len(node.rows)
+        # FAST PATH: single row with 2 elements (common [A, B] horzcat)
+        if nrows == 1 and len(node.rows[0]) == 2:
+            v0 = self._eval_expr(node.rows[0][0], ws)
+            v1 = self._eval_expr(node.rows[0][1], ws)
+            if isinstance(v0, ForgeArray) and isinstance(v1, ForgeArray) and not isinstance(v0, ForgeChar) and not isinstance(v1, ForgeChar) and v0._data.size > 0 and v1._data.size > 0:
+                return ForgeArray._from_ndarray(np.concatenate((v0._data, v1._data), axis=1))
+        # FAST PATH: 2 rows with 1 element each (common [A; B] vertcat)
+        if nrows == 2 and len(node.rows[0]) == 1 and len(node.rows[1]) == 1:
+            v0 = self._eval_expr(node.rows[0][0], ws)
+            v1 = self._eval_expr(node.rows[1][0], ws)
+            if isinstance(v0, ForgeArray) and isinstance(v1, ForgeArray) and not isinstance(v0, ForgeChar) and not isinstance(v1, ForgeChar) and v0._data.size > 0 and v1._data.size > 0:
+                return ForgeArray._from_ndarray(np.concatenate((v0._data, v1._data), axis=0))
+        # General path: collect all values
         raw_vals = []
         all_char = True
         for row in node.rows:
             row_raw = []
             for e in row:
                 val = self._eval_expr(e, ws)
-                # Expand tuples from cell {:} expansion
                 if isinstance(val, tuple):
                     row_raw.extend(val)
                 else:
@@ -2039,29 +2091,27 @@ class Session:
                 if not isinstance(v, ForgeChar):
                     all_char = False
         if all_char and raw_vals:
-            # Concatenate as char arrays (MATLAB: ['hello', ' ', 'world'] => 'hello world')
             result_str = ""
             for row_raw in raw_vals:
                 for v in row_raw:
                     result_str += v.to_str()
             return ForgeChar(result_str)
-        # Standard numeric concatenation
+        # Standard numeric concatenation with fast unwrap
         rows = []
         for row_raw in raw_vals:
-            vals = [_unwrap(v) for v in row_raw]
-            vals = [np.atleast_2d(v) if np.asarray(v).ndim < 2 else v for v in vals]
-            # Filter out empty arrays (MATLAB skips [] in concatenation)
+            vals = [v._data if isinstance(v, ForgeArray) else np.atleast_2d(v) for v in row_raw]
             vals = [v for v in vals if v.size > 0]
             if not vals:
                 continue
             try:
-                rows.append(np.concatenate(vals, axis=1))
+                rows.append(np.concatenate(vals, axis=1) if len(vals) > 1 else vals[0])
             except ValueError:
                 raise ValueError("horizontal dimensions mismatch")
         if not rows:
             return ForgeArray(np.array([]).reshape(0, 0))
         try:
-            return ForgeArray(np.concatenate(rows, axis=0))
+            result = np.concatenate(rows, axis=0) if len(rows) > 1 else rows[0]
+            return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         except ValueError:
             sizes = " vs ".join(str(r.shape[1]) for r in rows)
             raise ValueError(f"vertical dimensions mismatch ({sizes} columns)")

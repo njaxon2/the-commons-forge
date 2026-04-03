@@ -2454,10 +2454,10 @@ class ForgeSession:
             return ForgeArray(block_diag(*mats))
 
         def forge_kron(A, B):
-            """kron(A, B) — Kronecker tensor product."""
-            ad = A.data if isinstance(A, ForgeArray) else np.atleast_2d(A)
-            bd = B.data if isinstance(B, ForgeArray) else np.atleast_2d(B)
-            return ForgeArray(np.kron(ad, bd))
+            """kron(A, B) -- Kronecker tensor product."""
+            ad = A._data if isinstance(A, ForgeArray) else np.atleast_2d(A)
+            bd = B._data if isinstance(B, ForgeArray) else np.atleast_2d(B)
+            return ForgeArray._from_ndarray(np.kron(ad, bd))
 
         def forge_sylvester2(A, B, C):
             """sylvester(A, B, C) — solve AX + XB = C."""
@@ -2593,33 +2593,32 @@ class ForgeSession:
         import scipy.fft as _scipy_fft
 
         def forge_fft2(x, *args):
-            """fft(x) or fft(x, n) — Fast Fourier Transform."""
-            xd = _unwrap(x)
+            """fft(x) or fft(x, n) -- Fast Fourier Transform."""
+            xd = x._data if isinstance(x, ForgeArray) else _unwrap(x)
             if xd.ndim > 1:
                 xd = xd.ravel()
-            n = int(_unwrap(args[0]).flat[0]) if args else None
+            n = int(args[0]._data.flat[0]) if args and isinstance(args[0], ForgeArray) else (int(_unwrap(args[0]).flat[0]) if args else None)
             result = _scipy_fft.fft(xd, n=n)
-            return ForgeArray(result.reshape(1, -1))
+            return ForgeArray._from_ndarray(result.reshape(1, -1))
 
         def forge_ifft2(x, *args):
-            """ifft(x) — inverse FFT."""
-            xd = _unwrap(x)
+            """ifft(x) -- inverse FFT."""
+            xd = x._data if isinstance(x, ForgeArray) else _unwrap(x)
             if xd.ndim > 1:
                 xd = xd.ravel()
-            n = int(_unwrap(args[0]).flat[0]) if args else None
+            n = int(args[0]._data.flat[0]) if args and isinstance(args[0], ForgeArray) else (int(_unwrap(args[0]).flat[0]) if args else None)
             result = _scipy_fft.ifft(xd, n=n)
-            return ForgeArray(result.reshape(1, -1))
+            return ForgeArray._from_ndarray(result.reshape(1, -1))
 
         def forge_fft2d(x):
-            """fft2(x) — 2-D FFT."""
-            xd = _unwrap(x)
-            return ForgeArray(_scipy_fft.fft2(xd))
+            """fft2(x) -- 2-D FFT."""
+            xd = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            return ForgeArray._from_ndarray(_scipy_fft.fft2(xd))
 
         def forge_ifft2d(x):
-            """ifft2(x) — inverse 2-D FFT."""
-            xd = _unwrap(x)
-            return ForgeArray(np.real(_scipy_fft.ifft2(xd)))
-
+            """ifft2(x) -- inverse 2-D FFT."""
+            xd = x._data if isinstance(x, ForgeArray) else _unwrap(x)
+            return ForgeArray._from_ndarray(np.real(_scipy_fft.ifft2(xd)))
         def forge_fftshift2(x):
             """fftshift(x) — shift zero-frequency to center."""
             xd = x.data if isinstance(x, ForgeArray) else np.atleast_2d(x)
@@ -8203,11 +8202,24 @@ class ForgeSession:
             return ForgeArray(Ad[idx])
 
         def forge_unique2(x, *args):
-            """[C, ia, ic] = unique(x) — unique values."""
+            """[C, ia, ic] = unique(x) -- unique values.
+            When called with 1 output, uses fast path without computing indices.
+            For bounded integer data, uses boolean mask (O(n) vs O(n log n))."""
             data = x._data if isinstance(x, ForgeArray) else np.array(x)
             data = data.ravel() if data.ndim != 1 else data
+            # Fast path for bounded integers: boolean mask approach
+            if np.issubdtype(data.dtype, np.integer) or (np.issubdtype(data.dtype, np.floating) and data.size > 0):
+                mn, mx = int(data.min()), int(data.max())
+                span = mx - mn + 1
+                if span <= 10_000_000 and span < data.size * 4:  # bounded range
+                    seen = np.zeros(span, dtype=np.bool_)
+                    idata = (data - mn).astype(np.intp) if not np.issubdtype(data.dtype, np.integer) else (data - mn)
+                    seen[idata] = True
+                    C = np.nonzero(seen)[0] + mn
+                    C = C.astype(data.dtype)
+                    return ForgeArray._from_ndarray(C.reshape(1, -1)), ForgeArray._from_ndarray(np.empty((0,1))), ForgeArray._from_ndarray(np.empty((0,1)))
             C, ia, ic = np.unique(data, return_index=True, return_inverse=True)
-            return ForgeArray(C.reshape(1, -1)), ForgeArray((ia + 1).astype(float).reshape(-1, 1)), ForgeArray((ic + 1).astype(float).reshape(-1, 1))
+            return ForgeArray._from_ndarray(C.reshape(1, -1)), ForgeArray._from_ndarray((ia + 1).astype(float).reshape(-1, 1)), ForgeArray._from_ndarray((ic + 1).astype(float).reshape(-1, 1))
 
         def forge_intersect2(a, b, *args):
             """[C, ia, ib] = intersect(a, b) — set intersection."""

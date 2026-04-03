@@ -125,7 +125,10 @@ class ForgeArray:
 
     @property
     def T(self):
-        return ForgeArray(self._data.T)
+        t = self._data.T
+        if t.ndim >= 2:
+            return ForgeArray._from_ndarray(t)
+        return ForgeArray(t)
 
     def type_name(self):
         """Return Octave-style type name."""
