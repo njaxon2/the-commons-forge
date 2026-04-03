@@ -2079,8 +2079,11 @@ class Session:
 
         if isinstance(target, Identifier):
             # Value semantics: copy ForgeArray to prevent aliasing (B = A)
+            # Skip copy if RHS is an expression (function call, binop, etc.)
+            # — those always produce new allocations. Only copy for bare identifiers.
             if isinstance(value, ForgeArray) and not isinstance(value, ForgeChar):
-                value = value.copy()
+                if isinstance(node.value, Identifier):
+                    value = value.copy()
             ws.set(target.name, value)
             return value
 
