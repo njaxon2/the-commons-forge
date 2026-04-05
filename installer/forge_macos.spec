@@ -44,6 +44,7 @@ dep_modules = [
     "PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets",
     "PySide6.QtSvg", "PySide6.QtSvgWidgets",
     "requests", "jwt",
+    "unittest", "unittest.mock", "numpy.testing",
 ]
 
 a = Analysis(
@@ -55,7 +56,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "test", "unittest"],
+    excludes=["tkinter", "test"]  # Do NOT exclude unittest -- scipy needs it,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

@@ -1,2 +1,0 @@
-[console_scripts]
-forge-engine = forge.__main__:cli_main
