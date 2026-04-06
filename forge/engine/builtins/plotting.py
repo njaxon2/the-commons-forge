@@ -11,41 +11,58 @@ import numpy as np
 import matplotlib
 
 # When the IDE imports plot_widget.py, matplotlib's backend becomes QtAgg.
-# Plotting functions must not call plt.pause() or plt.show() on worker
+# Plotting functions must not call _plt().pause() or _plt().show() on worker
 # threads because those try to process Qt events from the wrong thread.
-import matplotlib.pyplot as plt
+# DEFERRED: matplotlib.pyplot is NOT imported at module level.
+# Importing plt with the QtAgg backend creates Qt widgets, which deadlocks
+# when this module is first loaded on a worker thread (IDE QThread worker).
+# Instead, _plt() lazily imports and initializes pyplot on first use.
+_plt_module = None
+
 from matplotlib.patches import Rectangle as _Rectangle
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3-D projection
 
 from forge.engine.types import ForgeArray, _unwrap
 
 
+def _plt():
+    """Lazy import of matplotlib.pyplot. Thread-safe: only calls ion() on main thread."""
+    global _plt_module
+    if _plt_module is not None:
+        return _plt_module
+    import matplotlib.pyplot as plt
+    _plt_module = plt
+    if threading.current_thread() is threading.main_thread():
+        plt.ion()
+    return plt
+
+
+# Backward-compat alias so existing code using `_plt().xxx` still works
+# after search-and-replace of `plt.` -> `_plt().`
+plt = None  # Will be set on first use
+
+
 def _enhance_current():
     # Enhance the current figure window with Forge tools (Probe, etc.).
     try:
         from forge_ide.gui.figure_enhancer import enhance_figure
-        enhance_figure(plt.gcf())
+        enhance_figure(_plt().gcf())
     except Exception:
         pass
-
-
-# Enable interactive mode so figures appear without blocking.
-# On non-main threads (IDE worker), ion() is a no-op with Agg.
-plt.ion()
 
 
 def _safe_redraw():
     """Redraw the current figure without blocking.
 
-    plt.pause() processes GUI events, which deadlocks when called from
+    _plt().pause() processes GUI events, which deadlocks when called from
     a worker thread (e.g. the IDE's QThread engine worker).  On non-main
     threads, just call draw_idle() which queues a repaint safely.
     """
     try:
         if threading.current_thread() is threading.main_thread():
-            fig = plt.gcf()
+            fig = _plt().gcf()
             fig.canvas.draw_idle()
-            plt.pause(0.001)
+            _plt().pause(0.001)
             _enhance_current()
         # On worker threads: skip all GUI interaction.  The IDE picks up
         # plot data via _plot_requests or reads the figure object later.
@@ -60,20 +77,20 @@ _hold_state: bool = False
 
 
 # Thread-local figure storage for non-main threads.
-# Avoids calling plt.figure() which creates QWidgets under qtagg backend.
+# Avoids calling _plt().figure() which creates QWidgets under qtagg backend.
 _thread_figures = threading.local()
 
 
 def _cur_fig():
     if threading.current_thread() is not threading.main_thread():
         # On a worker thread, use a plain Figure object (no GUI canvas).
-        # plt.figure() with the qtagg backend would try to create a
+        # _plt().figure() with the qtagg backend would try to create a
         # QWidget from a non-main thread, which deadlocks Qt.
         if not hasattr(_thread_figures, 'fig') or _thread_figures.fig is None:
             from matplotlib.figure import Figure
             _thread_figures.fig = Figure(tight_layout=True)
         return _thread_figures.fig
-    return plt.gcf()
+    return _plt().gcf()
 
 
 def _cur_ax():
@@ -440,7 +457,7 @@ def _get_3d_ax():
             ax = fig.add_subplot(geo[0], geo[1], geo[2], projection="3d")
         else:
             ax = fig.add_subplot(111, projection="3d")
-        plt.sca(ax)
+        _plt().sca(ax)
     return ax
 
 
@@ -555,11 +572,11 @@ def forge_surf(*args, **kwargs):
     X, Y, Z, C, props = _prepare_surf_args(*args)
     kw = {"cmap": "viridis", "edgecolor": "none"}
     if C is not None:
-        kw["facecolors"] = plt.cm.viridis((C - C.min()) / max(C.ptp(), 1e-15))
+        kw["facecolors"] = _plt().cm.viridis((C - C.min()) / max(C.ptp(), 1e-15))
     kw.update(props)
     kw.update(kwargs)
     surf_obj = ax.plot_surface(X, Y, Z, **kw)
-    fig = plt.gcf()
+    fig = _plt().gcf()
     fig._forge_last_mappable = surf_obj
     _safe_redraw()
 
@@ -573,7 +590,7 @@ def forge_surfc(*args, **kwargs):
     kw.update(kwargs)
     surf_obj = ax.plot_surface(X, Y, Z, **kw)
     ax.contour(X, Y, Z, zdir="z", offset=Z.min())
-    fig = plt.gcf()
+    fig = _plt().gcf()
     fig._forge_last_mappable = surf_obj
     _safe_redraw()
 
@@ -1052,16 +1069,16 @@ def forge_colorbar(**kwargs):
                     mappable = c
                     break
     if mappable is not None:
-        plt.colorbar(mappable, ax=ax, **kwargs)
+        _plt().colorbar(mappable, ax=ax, **kwargs)
     else:
-        plt.colorbar(**kwargs)
+        _plt().colorbar(**kwargs)
     _safe_redraw()
     _safe_redraw()
 
 
 def forge_colormap(name: str):
     """Set the default colormap by name."""
-    plt.set_cmap(name)
+    _plt().set_cmap(name)
 
 
 # ===================================================================
@@ -1071,9 +1088,9 @@ def forge_colormap(name: str):
 def forge_figure(n=None):
     """Create or switch to figure *n*."""
     if n is None:
-        fig = plt.figure()
+        fig = _plt().figure()
     else:
-        fig = plt.figure(int(n))
+        fig = _plt().figure(int(n))
     # Raise the figure window to the front
     try:
         manager = fig.canvas.manager
@@ -1093,7 +1110,7 @@ def forge_subplot(m, n, p):
     p_int = int(_to_np(p).flat[0]) if hasattr(p, '__array__') else int(p)
     fig = _cur_fig()
     ax = fig.add_subplot(m_int, n_int, p_int)
-    plt.sca(ax)
+    _plt().sca(ax)
     _safe_redraw()
     return ax
 
@@ -1127,12 +1144,12 @@ def forge_close(n=None):
     """close — close current figure window. close all closes all figures."""
     global _close_all_requested
     if n is None:
-        plt.close()
+        _plt().close()
     elif n == "all":
-        plt.close("all")
+        _plt().close("all")
         _close_all_requested = True
     else:
-        plt.close(int(n))
+        _plt().close(int(n))
 
 
 def _resolve_figure(h):
@@ -1151,7 +1168,7 @@ def _resolve_figure(h):
     elif hasattr(h, 'data'):
         h = int(h.data.flat[0])
     # Now h should be an int figure number
-    return _plt.figure(int(h))
+    return _plt().figure(int(h))
 
 
 def forge_saveas(*args):
@@ -1200,7 +1217,7 @@ def forge_print_fig(*args):
             import numpy as np
             val = a.array.flat[0]
             if np.issubdtype(type(val), np.floating) or np.issubdtype(type(val), np.integer):
-                fig = plt.figure(int(val))
+                fig = _plt().figure(int(val))
                 continue
         if isinstance(a, str):
             if a.startswith("-r"):
@@ -1272,7 +1289,7 @@ def forge_pause(t=None):
         time.sleep(0.1)
         if threading.current_thread() is threading.main_thread():
             try:
-                plt.gcf().canvas.draw_idle()
+                _plt().gcf().canvas.draw_idle()
             except Exception:
                 pass
 
@@ -1488,7 +1505,7 @@ def forge_bar3(*args, **kwargs):
     Z = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
     if Z.ndim == 1:
         Z = Z.reshape(1, -1)
-    fig = plt.gcf()
+    fig = _plt().gcf()
     ax = fig.add_subplot(111, projection='3d')
     rows, cols = Z.shape
     xpos, ypos = np.meshgrid(np.arange(cols), np.arange(rows))
@@ -1518,7 +1535,7 @@ def forge_boxplot(*args, **kwargs):
         data = [X]
     else:
         data = [X[:, j] for j in range(X.shape[1])]
-    ax = plt.gca()
+    ax = _plt().gca()
     bp = ax.boxplot(data, patch_artist=True)
     for box in bp['boxes']:
         box.set_facecolor('#89b4fa')
@@ -1539,9 +1556,9 @@ def forge_heatmap(*args, **kwargs):
     cmap = 'viridis'
     if len(args) > 1 and isinstance(args[1], str):
         cmap = args[1]
-    ax = plt.gca()
+    ax = _plt().gca()
     im = ax.imshow(Z, cmap=cmap, aspect='auto')
-    plt.colorbar(im, ax=ax)
+    _plt().colorbar(im, ax=ax)
     return ForgeArray(np.array(0.0))
 
 
@@ -1559,7 +1576,7 @@ def forge_ginput(*args, **kwargs):
     if len(args) > 0:
         n = int(args[0])
     try:
-        pts = plt.ginput(n, timeout=30)
+        pts = _plt().ginput(n, timeout=30)
         if pts:
             x = np.array([p[0] for p in pts])
             y = np.array([p[1] for p in pts])
