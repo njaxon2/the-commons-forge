@@ -1,6 +1,33 @@
 # Copyright 2026 The Commons™
 # SPDX-License-Identifier: Apache-2.0
-"""Security tests: dependency audit, static analysis, and secret detection."""
+"""Security tests: dependency audit, static analysis, and secret detection.
+
+Requirement R-SEC-01: The Forge engine SHALL not introduce known security
+vulnerabilities through its dependencies, source code patterns, or hardcoded
+credentials.
+
+Model-user argument: An engineer running untrusted .m files received from
+colleagues or downloaded from file-exchange repositories expects that executing
+those scripts will not expose their system to known exploits. The engine's
+dependency chain must be free of published CVEs, its source code must not contain
+unexpected dangerous patterns (beyond the intentional interpreter eval/exec
+paths), and no credentials may be baked into the distributed package.
+
+Decomposition:
+    R-SEC-01.1  All pip dependencies SHALL have zero known vulnerabilities as
+                reported by pip-audit (excluding the local forge-ide package).
+    R-SEC-01.2  The forge/ source tree SHALL have zero unexpected High-severity
+                Bandit findings (known intentional patterns are whitelisted).
+    R-SEC-01.3  The forge/ source tree SHALL contain no hardcoded passwords,
+                API keys, tokens, or private keys in non-test Python files.
+
+Consistency argument: R-SEC-01.1 covers supply-chain risk (third-party packages).
+R-SEC-01.2 covers first-party static analysis (dangerous code patterns in Forge
+itself). R-SEC-01.3 covers credential hygiene (secrets that would be exposed if
+the source is published or the wheel is inspected). Together these three
+sub-requirements address the three major attack surfaces for a distributed Python
+application.
+"""
 import json
 import os
 import re
@@ -44,7 +71,7 @@ def _is_whitelisted(issue: dict) -> bool:
 @pytest.mark.slow
 @pytest.mark.security
 def test_pip_audit_no_vulnerabilities():
-    """Run pip-audit and assert zero known vulnerabilities in dependencies."""
+    """R-SEC-01.1: pip-audit reports zero known vulnerabilities in dependencies."""
     if shutil.which("pip-audit") is None:
         pytest.skip("pip-audit not installed")
 
@@ -87,7 +114,7 @@ def test_pip_audit_no_vulnerabilities():
 @pytest.mark.slow
 @pytest.mark.security
 def test_bandit_no_high_severity_issues():
-    """Run bandit static analysis and assert no unexpected High severity issues."""
+    """R-SEC-01.2: Bandit reports zero unexpected High-severity findings."""
     if shutil.which("bandit") is None:
         pytest.skip("bandit not installed")
 
@@ -134,7 +161,7 @@ def test_bandit_no_high_severity_issues():
 
 @pytest.mark.security
 def test_no_hardcoded_secrets():
-    """Scan forge/ source for hardcoded passwords, API keys, or tokens."""
+    """R-SEC-01.3: No hardcoded passwords, API keys, or tokens in forge/ source."""
     src_dir = os.path.abspath(FORGE_SRC)
 
     # Patterns that indicate hardcoded secrets (value in quotes after =)
