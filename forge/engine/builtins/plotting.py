@@ -64,8 +64,13 @@ def _safe_redraw():
             fig.canvas.draw_idle()
             _plt().pause(0.001)
             _enhance_current()
-        # On worker threads: skip all GUI interaction.  The IDE picks up
-        # plot data via _plot_requests or reads the figure object later.
+        else:
+            # On worker threads: store the figure for the IDE to pick up.
+            # The command_widget checks _pending_figures after eval completes
+            # and renders them in PlotWidgets on the main thread.
+            fig = _cur_fig()
+            if fig.axes and any(ax.lines or ax.patches or ax.images or ax.collections for ax in fig.axes):
+                _store_pending_figure(fig)
     except Exception:
         pass
 
@@ -74,6 +79,32 @@ def _safe_redraw():
 # ---------------------------------------------------------------------------
 
 _hold_state: bool = False
+
+# Pending figures from worker threads, waiting for the IDE to display them.
+_pending_figures = []
+
+
+def _store_pending_figure(fig):
+    """Save a copy of the worker-thread figure for the main thread to render."""
+    from matplotlib.figure import Figure
+    import pickle, io
+    # Deep-copy the figure by pickling (matplotlib figures are picklable)
+    try:
+        buf = io.BytesIO()
+        pickle.dump(fig, buf)
+        buf.seek(0)
+        fig_copy = pickle.load(buf)
+        _pending_figures.append(fig_copy)
+    except Exception:
+        # Fallback: store line data directly
+        for ax in fig.axes:
+            for line in ax.lines:
+                xdata = line.get_xdata().tolist()
+                ydata = line.get_ydata().tolist()
+                _pending_figures.append(("line", xdata, ydata))
+    # Clear the thread-local figure for next plot
+    for ax in fig.axes:
+        ax.cla()
 
 
 # Thread-local figure storage for non-main threads.
