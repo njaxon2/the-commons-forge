@@ -458,7 +458,27 @@ class ForgeSession:
             p = str(path_arg)
             if isinstance(path_arg, ForgeChar):
                 p = path_arg.to_str()
-            with open(p, 'r') as f:
+            # Strip .m extension if present for path resolution
+            if not p.endswith(".m"):
+                p_m = p + ".m"
+            else:
+                p_m = p
+            # Resolve against session path, cwd, and absolute path
+            import os
+            candidates = [p_m, p]
+            if not os.path.isabs(p_m):
+                # Try session paths first
+                for sp in session.path:
+                    candidates.append(os.path.join(sp, p_m))
+                    candidates.append(os.path.join(sp, p))
+            found = None
+            for c in candidates:
+                if os.path.isfile(c):
+                    found = c
+                    break
+            if found is None:
+                raise FileNotFoundError(f"[Errno 2] No such file or directory: '{p}'")
+            with open(found, 'r') as f:
                 source = f.read()
             stmts = parse(source)
             for stmt in stmts:
