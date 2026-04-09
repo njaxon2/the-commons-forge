@@ -488,7 +488,8 @@ def _get_3d_ax():
             ax = fig.add_subplot(geo[0], geo[1], geo[2], projection="3d")
         else:
             ax = fig.add_subplot(111, projection="3d")
-        _plt().sca(ax)
+        if threading.current_thread() is threading.main_thread():
+            _plt().sca(ax)
     return ax
 
 
@@ -1141,7 +1142,8 @@ def forge_subplot(m, n, p):
     p_int = int(_to_np(p).flat[0]) if hasattr(p, '__array__') else int(p)
     fig = _cur_fig()
     ax = fig.add_subplot(m_int, n_int, p_int)
-    _plt().sca(ax)
+    if threading.current_thread() is threading.main_thread():
+        _plt().sca(ax)
     _safe_redraw()
     return ax
 
