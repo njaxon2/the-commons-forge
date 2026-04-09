@@ -65,12 +65,9 @@ def _safe_redraw():
             _plt().pause(0.001)
             _enhance_current()
         else:
-            # On worker threads: store the figure for the IDE to pick up.
-            # The command_widget checks _pending_figures after eval completes
-            # and renders them in PlotWidgets on the main thread.
-            fig = _cur_fig()
-            if fig.axes and any(ax.lines or ax.patches or ax.images or ax.collections for ax in fig.axes):
-                _store_pending_figure(fig)
+            # On worker threads: do nothing here. The figure will be
+            # stored by flush_pending_figure() after eval completes.
+            pass
     except Exception:
         pass
 
@@ -111,6 +108,19 @@ def _store_pending_figure(fig):
 # Avoids calling _plt().figure() which creates QWidgets under qtagg backend.
 _thread_figures = threading.local()
 
+
+
+
+def flush_pending_figure():
+    """Store the current thread-local figure for the IDE to display.
+    Called once after all commands in an eval() block complete, not on
+    every _safe_redraw(). This ensures subplot(2,1,1);plot();subplot(2,1,2);plot()
+    produces one figure with two panels, not two separate figures."""
+    if threading.current_thread() is threading.main_thread():
+        return
+    fig = _cur_fig()
+    if fig.axes and any(ax.lines or ax.patches or ax.images or ax.collections for ax in fig.axes):
+        _store_pending_figure(fig)
 
 def _cur_fig():
     if threading.current_thread() is not threading.main_thread():
