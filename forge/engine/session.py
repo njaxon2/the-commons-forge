@@ -11186,6 +11186,48 @@ class ForgeSession:
             return ""
         session._engine.functions["clc"] = forge_clc
 
+        # R-31a: Multi-line MATLAB-style help docstrings for top 25 functions
+        _rich_docs = {
+            'plot': "plot(y), plot(x, y), plot(x, y, fmt)\n\n2D line plot. Plots y vs x, or vs index if x omitted.\n\nParameters\n----------\nx : vector, optional. X-axis data.\ny : vector or matrix. Each column is a separate line.\nfmt : string, optional. Format string, e.g. 'r--' or 'bo'.\n\nExamples\n--------\n  x = linspace(0, 2*pi, 100);\n  plot(x, sin(x))\n  plot(x, sin(x), 'r--', x, cos(x), 'b:')\n\nSee also: figure, hold, xlabel, ylabel, title, legend, grid",
+            'disp': 'disp(x)\n\nDisplay value without printing variable name.\n\nParameters\n----------\nx : any. Matrices in grid format. Strings without quotes.\n\nExamples\n--------\n  disp(42)\n  disp(magic(3))\n\nSee also: fprintf, sprintf, num2str',
+            'fprintf': "fprintf(fmt, ...)\nfprintf(fid, fmt, ...)\n\nWrite formatted text to stdout or a file.\n\nParameters\n----------\nfid : integer, optional. 1=stdout (default), 2=stderr.\nfmt : string. Specifiers: %d %f %e %g %s. Escapes: \\n \\t.\n\nExamples\n--------\n  fprintf('Value: %g\\n', 42)\n  fprintf('pi = %.4f\\n', pi)\n\nSee also: sprintf, disp, fopen, fclose",
+            'linspace': 'linspace(a, b)\nlinspace(a, b, n)\n\nLinearly-spaced vector from a to b, inclusive.\n\nParameters\n----------\na : scalar. Start value.\nb : scalar. End value.\nn : integer, optional. Number of points. Default 100.\n\nExamples\n--------\n  x = linspace(0, 2*pi, 100);\n  t = linspace(0, 1);\n\nSee also: logspace, colon, zeros, ones',
+            'zeros': 'zeros(n)\nzeros(m, n)\n\nCreate matrix of zeros.\n\nParameters\n----------\nn : integer. n-by-n square matrix.\nm, n : integers. m-by-n matrix.\n\nExamples\n--------\n  A = zeros(3)      % 3-by-3 zero matrix\n  B = zeros(2, 5)   % 2-by-5 zero matrix\n\nSee also: ones, eye, rand, NaN',
+            'ones': 'ones(n)\nones(m, n)\n\nCreate matrix of ones.\n\nParameters\n----------\nn : integer. n-by-n square matrix.\nm, n : integers. m-by-n matrix.\n\nExamples\n--------\n  A = ones(3)        % 3-by-3 ones\n  v = ones(1, 5)     % [1 1 1 1 1]\n\nSee also: zeros, eye, rand, linspace',
+            'eye': 'eye(n)\neye(m, n)\n\nIdentity matrix (ones on diagonal, zeros elsewhere).\n\nParameters\n----------\nn : integer. n-by-n identity matrix.\nm, n : integers. m-by-n identity matrix.\n\nExamples\n--------\n  I = eye(3)       % 3-by-3 identity\n  A = eye(2, 4)    % 2-by-4 partial identity\n\nSee also: zeros, ones, diag',
+            'rand': 'rand(n)\nrand(m, n)\n\nUniformly distributed random numbers in [0, 1).\n\nParameters\n----------\nn : integer. n-by-n matrix.\nm, n : integers. m-by-n matrix.\n\nExamples\n--------\n  r = rand(1, 100)   % 100 random scalars\n  A = rand(3)        % 3-by-3 random matrix\n\nSee also: randn, randi, randperm',
+            'size': 'size(A)\nsize(A, dim)\n[m, n] = size(A)\n\nReturn dimensions of array.\n\nParameters\n----------\nA : array.\ndim : integer, optional. 1=rows, 2=columns.\n\nExamples\n--------\n  A = rand(3, 4);\n  size(A)           % [3 4]\n  size(A, 1)        % 3 (rows)\n  [m, n] = size(A)  % m=3, n=4\n\nSee also: length, numel, ndims, rows, columns',
+            'length': 'length(X)\n\nLength of largest dimension: max(size(X)).\n\nReturns 0 for empty arrays, 1 for scalars.\n\nExamples\n--------\n  length([1 2 3])      % returns 3\n  length(rand(4, 7))   % returns 7\n\nSee also: size, numel, ndims',
+            'sum': 'sum(X)\nsum(X, dim)\n\nSum of array elements along a dimension.\n\nParameters\n----------\nX : array.\ndim : integer, optional. 1=column sums (default), 2=row sums.\n\nExamples\n--------\n  sum([1 2 3 4])      % returns 10\n  A = [1 2; 3 4];\n  sum(A)              % [4 6] column sums\n  sum(A, 2)           % [3; 7] row sums\n\nSee also: prod, cumsum, mean, min, max',
+            'max': 'max(X)\nmax(X, [], dim)\nmax(a, b)\n[m, i] = max(X)\n\nMaximum value or element-wise maximum.\n\nReturns m (maximum) and optionally i (index).\n\nExamples\n--------\n  max([3 1 4 1 5])       % returns 5\n  [v, i] = max([3 1 5])  % v=5, i=3\n\nSee also: min, sort, find',
+            'min': 'min(X)\nmin(X, [], dim)\nmin(a, b)\n[m, i] = min(X)\n\nMinimum value or element-wise minimum.\n\nReturns m (minimum) and optionally i (index).\n\nExamples\n--------\n  min([3 1 4 1 5])       % returns 1\n  [v, i] = min([3 1 5])  % v=1, i=2\n\nSee also: max, sort, find',
+            'abs': 'abs(X)\n\nAbsolute value. For complex: magnitude = sqrt(real^2 + imag^2).\n\nExamples\n--------\n  abs(-5)        % returns 5\n  abs([1 -2 3])  % returns [1 2 3]\n  abs(3 + 4i)    % returns 5\n\nSee also: sign, real, imag, angle',
+            'sin': 'sin(X)\n\nSine of angle(s) in radians. Returns values in [-1, 1].\n\nExamples\n--------\n  sin(pi/2)    % returns 1\n  sin(0)       % returns 0\n  x = linspace(0, 2*pi, 100); plot(x, sin(x))\n\nSee also: cos, tan, asin, sind, sinh',
+            'cos': 'cos(X)\n\nCosine of angle(s) in radians. Returns values in [-1, 1].\n\nExamples\n--------\n  cos(0)     % returns 1\n  cos(pi)    % returns -1\n\nSee also: sin, tan, acos, cosd, cosh',
+            'sqrt': 'sqrt(X)\n\nSquare root. Returns complex output for negative real input.\n\nExamples\n--------\n  sqrt(4)            % returns 2\n  sqrt([1 4 9 16])   % returns [1 2 3 4]\n  sqrt(-1)           % returns 0+1i\n\nSee also: sqrtm, abs, power, exp',
+            'exp': 'exp(X)\n\nExponential: e raised to power X.\n\nExamples\n--------\n  exp(1)        % returns 2.71828...\n  exp(0)        % returns 1\n  exp(1i*pi)    % returns -1 (Euler identity)\n\nSee also: log, expm, sinh, cosh',
+            'log': 'log(X)\n\nNatural logarithm (base e). Complex output for negative real.\n\nExamples\n--------\n  log(exp(1))   % returns 1\n  log(1)        % returns 0\n  log(10)       % returns 2.3026\n\nSee also: log2, log10, exp',
+            'fft': 'fft(x)\nfft(x, n)\n\nDiscrete Fourier Transform (DFT) using FFT algorithm.\n\nParameters\n----------\nx : vector or matrix. Operates on each column if matrix.\nn : integer, optional. Transform length (pads or truncates).\n\nBin k corresponds to k*Fs/n Hz where Fs is sample rate.\n\nExamples\n--------\n  Fs = 1000; t = 0:1/Fs:1-1/Fs;\n  X = fft(sin(2*pi*100*t));\n  plot((0:length(X)-1)*Fs/length(X), abs(X))\n\nSee also: ifft, fftshift, fft2, freqz, spectrogram',
+            'find': 'find(X)\nfind(X, k)\n[row, col] = find(X)\n\nFind indices of nonzero (or true) elements.\n\nParameters\n----------\nX : array. Finds nonzero or true entries.\nk : integer, optional. Return only first k indices.\n\nExamples\n--------\n  find([0 3 0 5])            % returns [2 4]\n  find(A > 0)               % indices where A is positive\n  [r,c] = find(A == max(A(:)))\n\nSee also: any, all, logical, nonzeros',
+            'sort': 'sort(X)\nsort(X, dim)\nsort(X, dim, direction)\n[Y, I] = sort(X)\n\nSort array elements ascending or descending.\n\nReturns Y (sorted values) and optionally I (sort indices).\n\nExamples\n--------\n  sort([3 1 4 1 5])       % returns [1 1 3 4 5]\n  [Y, I] = sort(x)\n\nSee also: min, max, unique, sortrows',
+            'floor': 'floor(X)\n\nRound toward negative infinity (largest integer not greater than X).\n\nExamples\n--------\n  floor(2.7)     % returns 2\n  floor(-2.7)    % returns -3\n\nSee also: ceil, round, fix, mod, rem',
+            'ceil': 'ceil(X)\n\nRound toward positive infinity (smallest integer not less than X).\n\nExamples\n--------\n  ceil(2.3)      % returns 3\n  ceil(-2.7)     % returns -2\n\nSee also: floor, round, fix, mod, rem',
+            'numel': 'numel(X)\n\nTotal number of elements in array (product of all dimensions).\n\nExamples\n--------\n  numel(rand(3, 4))   % returns 12\n  numel(5)            % returns 1\n  numel([])           % returns 0\n\nSee also: size, length, ndims, isempty',
+        }
+        for _fname, _doc in _rich_docs.items():
+            if _fname in session._engine.functions:
+                _f = session._engine.functions[_fname]
+                try:
+                    _f.__doc__ = _doc
+                except (AttributeError, TypeError):
+                    import functools
+                    def _wrap(_fn, _d):
+                        @functools.wraps(_fn)
+                        def _w(*a, **kw): return _fn(*a, **kw)
+                        _w.__doc__ = _d
+                        return _w
+                    session._engine.functions[_fname] = _wrap(_f, _doc)
+
 
 
 
