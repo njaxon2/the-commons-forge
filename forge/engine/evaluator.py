@@ -853,8 +853,29 @@ class Session:
                 return ForgeArray(np.sort(idx).astype(float))
             return ForgeArray(np.flatnonzero(data) + 1)
         b["find"] = _forge_find_builtin  # 1-based
-        b["any"] = lambda x, *a: ForgeArray(np.array(np.any(_unwrap(x))))
-        b["all"] = lambda x, *a: ForgeArray(np.array(np.all(_unwrap(x))))
+        def _forge_any(x, *a):
+            data = _unwrap(x)
+            if a:
+                dim = int(_to_py(a[0]))
+                axis = dim - 1
+                return ForgeArray(np.any(data != 0, axis=axis).astype(np.float64))
+            # No dim: column-wise for 2-D matrices, scalar for vectors
+            if data.ndim == 2 and data.shape[0] > 1 and data.shape[1] > 1:
+                return ForgeArray(np.any(data != 0, axis=0).astype(np.float64))
+            return ForgeArray(np.array(np.float64(1 if np.any(data != 0) else 0)))
+        b["any"] = _forge_any
+
+        def _forge_all(x, *a):
+            data = _unwrap(x)
+            if a:
+                dim = int(_to_py(a[0]))
+                axis = dim - 1
+                return ForgeArray(np.all(data != 0, axis=axis).astype(np.float64))
+            # No dim: column-wise for 2-D matrices, scalar for vectors
+            if data.ndim == 2 and data.shape[0] > 1 and data.shape[1] > 1:
+                return ForgeArray(np.all(data != 0, axis=0).astype(np.float64))
+            return ForgeArray(np.array(np.float64(1 if np.all(data != 0) else 0)))
+        b["all"] = _forge_all
         def _fast_cumsum(x, *a):
             data = x._data if isinstance(x, ForgeArray) else _unwrap(x)
             if a:
@@ -1465,9 +1486,12 @@ class Session:
             r = self._exec(stmt, ws)
             is_last = (i == n - 1)
             if not is_last and r is not None:
-                if isinstance(stmt, Assignment) and stmt.suppress:
-                    pass
-                else:
+                # Only auto-print Assignment (if not suppressed) or
+                # ExpressionStatement (if print_result). Control structures
+                # (if/for/while/try) never auto-print their return value.
+                if isinstance(stmt, Assignment) and not stmt.suppress:
+                    self._auto_print_value(r)
+                elif isinstance(stmt, ExpressionStatement) and stmt.print_result:
                     self._auto_print_value(r)
             result = r
         return result

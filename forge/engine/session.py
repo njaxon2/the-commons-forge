@@ -333,7 +333,9 @@ class ForgeSession:
                 else:
                     if isinstance(val, ForgeCell):
                         shape = 'x'.join(str(s) for s in val.shape)
-                        lines.append(f'  {name:20s} {shape:10s} {"cell":10s}')
+                        is_struct_arr = bool(val._data and all(isinstance(e, ForgeStruct) for e in val._data))
+                        _cls = "struct" if is_struct_arr else "cell"
+                        lines.append(f'  {name:20s} {shape:10s} {_cls:10s}')
                     elif isinstance(val, ForgeStruct):
                         n_fields = len(val._fields) if hasattr(val, '_fields') else 0
                         lines.append(f'  {name:20s} {"1x1":10s} {"struct":10s}')
@@ -1755,6 +1757,9 @@ class ForgeSession:
             if isinstance(obj, ForgeChar):
                 return ForgeChar("char")
             if isinstance(obj, ForgeCell):
+                # ForgeCell of ForgeStructs is a struct array
+                if obj._data and all(isinstance(e, ForgeStruct) for e in obj._data):
+                    return ForgeChar("struct")
                 return ForgeChar("cell")
             if isinstance(obj, ForgeStruct):
                 return ForgeChar("struct")
