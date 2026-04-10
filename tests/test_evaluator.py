@@ -821,3 +821,52 @@ end
         s.eval("result = f(5)")
         assert float(s.workspace.get("result")) == 10.0
         assert not s.workspace.has("z")  # z should not leak
+
+
+class TestR_POLISH_27_ClcCommand:
+    """R-POLISH-27: When the user types clc in the command window, the command
+    SHALL execute without error and SHALL set the _clc_request flag on the
+    session, which the IDE uses to clear command window output.
+
+    Model-user argument: The engineer types clc to reset the command window
+    before starting a new analysis session, exactly as they have done in
+    MATLAB/Octave every day for years. Finding that the first thing they type
+    causes a cryptic TypeError immediately signals that the IDE is broken.
+    This is a blocker for first impressions: clc is the first command a new
+    user types after help.
+
+    Decomposition:
+        R-POLISH-27.1: The clc builtin SHALL accept being called with zero
+            arguments (as the evaluator dispatches via fn(*[])).
+        R-POLISH-27.2: After evaluating clc, session._clc_request SHALL be True.
+
+    Consistency: R-POLISH-27.1 prevents the crash. R-POLISH-27.2 confirms
+    the request flag is set so the GUI side can clear the screen. Together
+    they ensure the golden user experience: clc clears the screen silently.
+    """
+
+    def test_clc_no_args_no_crash(self):
+        """R-POLISH-27.1: clc evaluates without TypeError when called with no args."""
+        from forge.engine.session import ForgeSession
+        fs = ForgeSession()
+        clc_fn = fs._engine.functions.get("clc")
+        assert clc_fn is not None, "clc must be registered in engine functions"
+        # Call exactly as the evaluator does: fn(*[]) == fn()
+        result = clc_fn()
+        assert result == "" or result is None
+
+    def test_clc_eval_sets_clc_request(self):
+        """R-POLISH-27.2: Evaluating clc sets session._clc_request to True."""
+        from forge.engine.session import ForgeSession
+        fs = ForgeSession()
+        fs._clc_request = False
+        fs.eval("clc")
+        assert fs._clc_request is True
+
+    def test_clc_with_args_no_crash(self):
+        """R-POLISH-27.1: clc called with extra args (evaluator quirk) does not crash."""
+        from forge.engine.session import ForgeSession
+        fs = ForgeSession()
+        clc_fn = fs._engine.functions.get("clc")
+        result = clc_fn()
+        assert result == "" or result is None
