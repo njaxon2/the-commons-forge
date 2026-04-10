@@ -42,7 +42,7 @@ def test_validation_framework():
 def test_forge_version():
     """R-SMOKE-01.2: Package version string is set and current."""
     import forge
-    assert forge.__version__ == "0.3.8"
+    assert forge.__version__ == "0.3.9"
 
 
 def test_session_basic():

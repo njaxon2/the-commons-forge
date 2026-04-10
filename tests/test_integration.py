@@ -267,7 +267,7 @@ class TestVersionAndMetadata:
     def test_version_string(self):
         """R-INT-20: forge.__version__ matches the expected release string."""
         import forge
-        assert forge.__version__ == "0.3.8"
+        assert forge.__version__ == "0.3.9"
 
     def test_importable(self):
         """R-INT-21: All core modules are importable without error."""
