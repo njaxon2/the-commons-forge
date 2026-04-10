@@ -120,6 +120,7 @@ class BareColon:
 class Assignment:
     targets: Any  # Identifier, Index, FieldAccess, or list for [a,b]=...
     value: Any
+    suppress: bool = False
 
 @dataclass
 class IfStatement:
@@ -279,7 +280,8 @@ class Parser:
             self._advance()
 
     def _at_end_of_statement(self):
-        return self._at(TokenType.NEWLINE) or self._at(TokenType.SEMICOLON) or self._at(TokenType.EOF)
+        return (self._at(TokenType.NEWLINE) or self._at(TokenType.SEMICOLON)
+                or self._at(TokenType.COMMA) or self._at(TokenType.EOF))
 
     def _is_end_keyword(self):
         """Check if current token is 'end' or end-variant."""
@@ -362,9 +364,12 @@ class Parser:
         return self._parse_expr_or_assign()
 
     def _consume_terminator(self):
-        """Consume optional ; or newline after statement."""
+        """Consume optional ; or , or newline after statement.
+        Comma and newline are non-suppressing; semicolon suppresses output."""
         if self._match(TokenType.SEMICOLON):
             pass
+        elif self._match(TokenType.COMMA):
+            pass  # comma is non-suppressing (like newline)
         elif self._match(TokenType.NEWLINE):
             pass
 
@@ -493,8 +498,10 @@ class Parser:
                 if self._match(TokenType.ASSIGN):
                     value = self._parse_expression(0)
                     suppress = bool(self._match(TokenType.SEMICOLON))
+                    if not suppress:
+                        self._match(TokenType.COMMA)  # comma is non-suppressing separator
                     self._match(TokenType.NEWLINE)
-                    return Assignment(targets, value)
+                    return Assignment(targets, value, suppress)
                 else:
                     # Not an assignment, backtrack
                     self.pos = saved
@@ -523,6 +530,8 @@ class Parser:
                     str_args = []
                 expr = Index(cmd_ident, str_args)
                 suppress = bool(self._match(TokenType.SEMICOLON))
+                if not suppress:
+                    self._match(TokenType.COMMA)  # comma is non-suppressing separator
                 self._match(TokenType.NEWLINE)
                 return ExpressionStatement(expr, not suppress)
             else:
@@ -547,6 +556,8 @@ class Parser:
                     break
             expr = Index(Identifier("clearvars"), str_args)
             suppress = bool(self._match(TokenType.SEMICOLON))
+            if not suppress:
+                self._match(TokenType.COMMA)  # comma is non-suppressing separator
             self._match(TokenType.NEWLINE)
             return ExpressionStatement(expr, print_result=not suppress)
 
@@ -615,10 +626,14 @@ class Parser:
                 self._advance()
                 value = self._parse_expression(0)
                 suppress = bool(self._match(TokenType.SEMICOLON))
+                if not suppress:
+                    self._match(TokenType.COMMA)  # comma is non-suppressing separator
                 self._match(TokenType.NEWLINE)
-                return Assignment(expr, value)
+                return Assignment(expr, value, suppress)
 
         suppress = bool(self._match(TokenType.SEMICOLON))
+        if not suppress:
+            self._match(TokenType.COMMA)  # comma is non-suppressing separator
         self._match(TokenType.NEWLINE)
         return ExpressionStatement(expr, print_result=not suppress)
 

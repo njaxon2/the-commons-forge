@@ -79,18 +79,15 @@ class ForgeSession:
             result = self._engine.eval(code)
             # Read captured output
             output = self._engine.output_buffer.getvalue()
+            # Combine buffer output with last-statement result (R-35)
+            parts = []
             if output:
-                return output.rstrip(chr(10))
-            # R01: Check if statement was suppressed (semicolon)
-            # The evaluator returns None for suppressed ExpressionStatements.
-            # For assignments, check the source code for trailing semicolon.
+                parts.append(output.rstrip(chr(10)))
             if result is not None:
-                # Check if the code ends with semicolon (strip whitespace)
                 stripped = code.rstrip()
-                if stripped.endswith(';'):
-                    return ''
-                return self._format_result(result)
-            return ''
+                if not stripped.endswith(';'):
+                    parts.append(self._format_result(result))
+            return chr(10).join(parts)
         except ForgeError as e:
             self.last_error = e
             return f'error: {e.identifier}: {e.message}'
@@ -308,18 +305,21 @@ class ForgeSession:
             _CONSTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan", "true", "false", "i", "j", "realmin", "realmax", "containers", "ans"}
             return chr(10).join(sorted(n for n in session._engine.workspace.names() if n not in _CONSTS))
 
-        def forge_whos():
-            """whos — list variables with size and type information."""
+        def forge_whos(*_whos_args):
+            """whos [var ...] — list variables with size and type information."""
             _dtype_map = {
                 "float64": "double", "float32": "single",
                 "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
                 "uint8": "uint8", "uint16": "uint16", "uint32": "uint32", "uint64": "uint64",
                 "bool": "logical", "complex128": "double complex", "complex64": "single complex",
             }
+            _filter = {str(a) for a in _whos_args} if _whos_args else None
             lines = []
             ws = session._engine.workspace
             _CONSTS = {"pi", "e", "eps", "Inf", "inf", "NaN", "nan", "true", "false", "i", "j", "realmin", "realmax", "containers", "ans"}
             for name in sorted(n for n in ws.names() if n not in _CONSTS):
+                if _filter is not None and name not in _filter:
+                    continue
                 val = ws.get(name)
                 if isinstance(val, ForgeChar):
                     s_val = val.to_str()

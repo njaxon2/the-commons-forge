@@ -1431,10 +1431,45 @@ class Session:
                 self._parse_cache[source] = stmts
         return self._exec_stmts(stmts, self.workspace)
 
+    def _auto_print_value(self, value):
+        if value is None:
+            return
+        nl = chr(10)
+        if isinstance(value, ForgeArray):
+            data = value._data
+            if data.size == 0:
+                return
+            if data.size == 1:
+                v = data.flat[0]
+                if hasattr(v, "item"):
+                    v = v.item()
+                if isinstance(v, float) and v == int(v) and abs(v) < 1e15:
+                    self.output_buffer.write("  " + str(int(v)) + nl)
+                else:
+                    self.output_buffer.write("  " + str(v) + nl)
+            else:
+                self.output_buffer.write("  " + str(data) + nl)
+        elif isinstance(value, (int, float)):
+            v = value
+            if isinstance(v, float) and v == int(v) and abs(v) < 1e15:
+                self.output_buffer.write("  " + str(int(v)) + nl)
+            else:
+                self.output_buffer.write("  " + str(v) + nl)
+        else:
+            self.output_buffer.write("  " + str(value) + nl)
+
     def _exec_stmts(self, stmts, ws: Workspace) -> Any:
         result = None
-        for stmt in stmts:
-            result = self._exec(stmt, ws)
+        n = len(stmts)
+        for i, stmt in enumerate(stmts):
+            r = self._exec(stmt, ws)
+            is_last = (i == n - 1)
+            if not is_last and r is not None:
+                if isinstance(stmt, Assignment) and stmt.suppress:
+                    pass
+                else:
+                    self._auto_print_value(r)
+            result = r
         return result
 
     def _exec(self, node, ws: Workspace) -> Any:
@@ -2383,6 +2418,7 @@ class Session:
                     # Grow if needed
                     while len(container._data) < idx:
                         container._data.append(ForgeStruct())
+                    container._shape = (1, len(container._data))
                     entry = container._data[idx - 1]
                     if not isinstance(entry, ForgeStruct):
                         entry = ForgeStruct()
@@ -2394,6 +2430,7 @@ class Session:
                     struct_arr = ForgeCell([container])
                     while len(struct_arr._data) < idx:
                         struct_arr._data.append(ForgeStruct())
+                    struct_arr._shape = (1, len(struct_arr._data))
                     struct_arr._data[idx - 1]._fields[target.field] = value
                     ws.set(struct_name, struct_arr)
                 return value
