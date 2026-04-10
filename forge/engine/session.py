@@ -11164,17 +11164,21 @@ class ForgeSession:
         session._engine.functions["extractBetween"] = forge_extractBetween
 
         # ── edit command ──────────────────────────────────────────
-        def forge_edit(args, nargout=0):
+        def forge_edit(args=None, nargout=0):
             """Open a file in the editor."""
-            if not args:
+            if args is None:
                 return ""
-            path = args[0]
+            path = args
             if hasattr(path, 'to_str'):
                 path = path.to_str()
+            elif hasattr(path, 'item'):
+                path = str(path.item())
             elif hasattr(path, 'data'):
                 path = str(path.data.flat[0])
             else:
                 path = str(path)
+            if not path:
+                return ""
             # Store path for GUI to pick up
             self._edit_request = path
             return ""
