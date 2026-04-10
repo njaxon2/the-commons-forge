@@ -1185,14 +1185,28 @@ _close_all_requested = False
 
 def forge_close(n=None):
     """close — close current figure window. close all closes all figures."""
+    from forge.engine.containers import ForgeChar
     global _close_all_requested
     if n is None:
         _plt().close()
-    elif n == "all":
-        _plt().close("all")
-        _close_all_requested = True
     else:
-        _plt().close(int(n))
+        # Coerce ForgeChar/ForgeArray to plain Python str or int before comparison.
+        # Command-style syntax (close all, close 1) passes arguments as ForgeChar,
+        # and ForgeChar.__eq__ returns a non-scalar ForgeArray, causing a ValueError
+        # when used as a boolean condition.
+        if isinstance(n, ForgeChar):
+            n = n.to_str()
+        elif hasattr(n, 'array'):
+            import numpy as _np
+            if n.array.dtype.kind in ('U', 'S', 'O'):
+                n = str(n.array.flat[0])
+            else:
+                n = int(n.array.flat[0])
+        if n == "all":
+            _plt().close("all")
+            _close_all_requested = True
+        else:
+            _plt().close(int(n))
 
 
 def _resolve_figure(h):

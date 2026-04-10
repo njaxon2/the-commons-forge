@@ -196,3 +196,58 @@ class TestFigureManagement:
         import os
         assert os.path.exists(outpath)
         forge_close()
+
+
+class TestCloseAll:
+    """R-POLISH-26: The close command shall successfully handle ForgeChar
+    arguments, so that close all closes all figure windows without raising
+    a ValueError.
+
+    Model-user argument: The golden user opens multiple figures during an
+    interactive session, then types close all to clear the visual workspace
+    before starting a new analysis. Currently this crashes with
+    ValueError: Truth value of non-scalar ForgeArray is ambiguous because
+    the all argument is passed as a ForgeChar and the equality check
+    n == "all" returns a non-scalar ForgeArray. This breaks the most
+    common multi-figure cleanup workflow.
+
+    Decomposition:
+      R-POLISH-26-A: forge_close(ForgeChar("all")) closes all matplotlib
+                     figures and sets _close_all_requested without error.
+      R-POLISH-26-B: forge_close() with no argument closes the current
+                     figure without error (existing behavior preserved).
+
+    Consistency argument: R-POLISH-26-A covers the ForgeChar "all" path
+    which is the specific crashing case. R-POLISH-26-B verifies the
+    no-argument path is not regressed. Together they cover the two most
+    common close() usages.
+    """
+
+    def test_close_all_with_forgechar_does_not_raise(self):
+        """R-POLISH-26-A: forge_close(ForgeChar("all")) shall not raise ValueError."""
+        from forge.engine.builtins.plotting import forge_figure, forge_close
+        from forge.engine.containers import ForgeChar
+        import forge.engine.builtins.plotting as _pm
+        forge_figure()
+        forge_figure()
+        _pm._close_all_requested = False
+        forge_close(ForgeChar("all"))
+        assert _pm._close_all_requested is True
+
+    def test_close_all_with_forgechar_closes_all_figures(self):
+        """R-POLISH-26-A: forge_close(ForgeChar("all")) closes all matplotlib figures."""
+        from forge.engine.builtins.plotting import forge_figure, forge_close
+        from forge.engine.containers import ForgeChar
+        forge_figure()
+        forge_figure()
+        assert len(plt.get_fignums()) >= 2
+        forge_close(ForgeChar("all"))
+        assert len(plt.get_fignums()) == 0
+
+    def test_close_no_arg_not_regressed(self):
+        """R-POLISH-26-B: forge_close() with no argument still closes current figure."""
+        from forge.engine.builtins.plotting import forge_figure, forge_close
+        forge_figure()
+        count_before = len(plt.get_fignums())
+        forge_close()
+        assert len(plt.get_fignums()) == count_before - 1
