@@ -82,24 +82,88 @@ _pending_figures = []
 
 
 def _store_pending_figure(fig):
-    """Save a copy of the worker-thread figure for the main thread to render."""
-    from matplotlib.figure import Figure
-    import pickle, io
-    # Deep-copy the figure by pickling (matplotlib figures are picklable)
-    try:
-        buf = io.BytesIO()
-        pickle.dump(fig, buf)
-        buf.seek(0)
-        fig_copy = pickle.load(buf)
-        _pending_figures.append(fig_copy)
-    except Exception:
-        # Fallback: store line data directly
-        for ax in fig.axes:
-            for line in ax.lines:
-                xdata = line.get_xdata().tolist()
-                ydata = line.get_ydata().tolist()
-                _pending_figures.append(("line", xdata, ydata))
-    # Clear the thread-local figure for next plot
+    """Extract plot data from the worker-thread figure as plain dicts.
+
+    Previous implementation used pickle.dump/load to deep-copy the entire
+    matplotlib Figure object.  This caused deadlocks because matplotlib
+    pickle can trigger Qt-backend code on the worker thread, freezing the
+    IDE.  The new approach extracts only the raw numeric data and style
+    attributes into plain Python structures that are safe to pass between
+    threads.
+    """
+    from matplotlib.patches import Rectangle as _Rect
+
+    axes_data = []
+    for ax in fig.axes:
+        ax_info = {
+            "lines": [],
+            "collections": [],
+            "images": [],
+            "patches": [],
+            "xlim": tuple(ax.get_xlim()),
+            "ylim": tuple(ax.get_ylim()),
+            "title": ax.get_title() or "",
+            "xlabel": ax.get_xlabel() or "",
+            "ylabel": ax.get_ylabel() or "",
+            "subplot_spec": None,
+        }
+        try:
+            gs = ax.get_subplotspec()
+            if gs is not None:
+                geom = gs.get_geometry()
+                num = gs.rowspan.start * geom[1] + gs.colspan.start + 1
+                ax_info["subplot_spec"] = (geom[0], geom[1], num)
+        except Exception:
+            pass
+
+        for line in ax.lines:
+            xd = line.get_xdata()
+            yd = line.get_ydata()
+            ax_info["lines"].append({
+                "xdata": xd.tolist() if hasattr(xd, "tolist") else list(xd),
+                "ydata": yd.tolist() if hasattr(yd, "tolist") else list(yd),
+                "color": line.get_color(),
+                "linestyle": line.get_linestyle(),
+                "linewidth": line.get_linewidth(),
+                "label": line.get_label() or "",
+            })
+
+        for coll in ax.collections:
+            try:
+                offsets = coll.get_offsets()
+                if len(offsets) > 0:
+                    ax_info["collections"].append({
+                        "offsets": offsets.tolist()
+                            if hasattr(offsets, "tolist") else [list(o) for o in offsets],
+                    })
+            except Exception:
+                pass
+
+        for img in ax.images:
+            try:
+                arr = img.get_array()
+                ax_info["images"].append({
+                    "data": arr.tolist() if hasattr(arr, "tolist") else arr,
+                })
+            except Exception:
+                pass
+
+        for patch in ax.patches:
+            if isinstance(patch, _Rect):
+                ax_info["patches"].append({
+                    "x": patch.get_x(),
+                    "y": patch.get_y(),
+                    "width": patch.get_width(),
+                    "height": patch.get_height(),
+                    "facecolor": patch.get_facecolor(),
+                    "edgecolor": patch.get_edgecolor(),
+                    "linewidth": patch.get_linewidth(),
+                })
+
+        axes_data.append(ax_info)
+
+    _pending_figures.append(("axes_data", axes_data))
+    # Clear the thread-local figure for the next plot command.
     for ax in fig.axes:
         ax.cla()
 
