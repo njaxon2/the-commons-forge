@@ -668,27 +668,62 @@ def forge_sprintf(fmt, *args):
 
 @_tb("strcmp")
 def forge_strcmp(s1, s2):
-    """strcmp(s1, s2) — compare strings (case-sensitive)."""
+    """strcmp(s1, s2) — case-sensitive string compare; cell array aware."""
     import numpy as np
-    """Compare two strings (exact match)."""
-    from forge.engine.containers import ForgeChar
+    from forge.engine.containers import ForgeChar, ForgeCell
     from forge.engine.types import ForgeArray
-    a = s1.to_str() if isinstance(s1, ForgeChar) else str(s1)
-    b = s2.to_str() if isinstance(s2, ForgeChar) else str(s2)
-    return ForgeArray(np.float64(1.0 if a == b else 0.0))
+    def _s(v):
+        if isinstance(v, ForgeChar):
+            return v.to_str()
+        return str(v)
+    if isinstance(s1, ForgeCell) or isinstance(s2, ForgeCell):
+        cells = s1 if isinstance(s1, ForgeCell) else s2
+        scalar = s2 if isinstance(s1, ForgeCell) else s1
+        results = [1.0 if _s(el) == _s(scalar) else 0.0 for el in cells._data]
+        return ForgeArray(np.array(results, dtype=np.float64).reshape(1, len(results)))
+    return ForgeArray(np.float64(1.0 if _s(s1) == _s(s2) else 0.0))
 
 
 @_tb("strcmpi")
 def forge_strcmpi(s1, s2):
-    """strcmpi(s1, s2) — compare strings (case-insensitive)."""
+    """strcmpi(s1, s2) — case-insensitive string compare; cell array aware."""
     import numpy as np
-    """Compare two strings (case-insensitive)."""
+    from forge.engine.containers import ForgeChar, ForgeCell
+    from forge.engine.types import ForgeArray
+    def _s(v):
+        v = v.to_str() if isinstance(v, ForgeChar) else str(v)
+        return v.lower()
+    if isinstance(s1, ForgeCell) or isinstance(s2, ForgeCell):
+        cells = s1 if isinstance(s1, ForgeCell) else s2
+        scalar = s2 if isinstance(s1, ForgeCell) else s1
+        results = [1.0 if _s(el) == _s(scalar) else 0.0 for el in cells._data]
+        return ForgeArray(np.array(results, dtype=np.float64).reshape(1, len(results)))
+    return ForgeArray(np.float64(1.0 if _s(s1) == _s(s2) else 0.0))
+
+
+
+@_tb("strncmp")
+def forge_strncmp(s1, s2, n):
+    """strncmp(s1, s2, n) — compare first n characters (case-sensitive)."""
+    import numpy as np
     from forge.engine.containers import ForgeChar
     from forge.engine.types import ForgeArray
-    a = s1.to_str() if isinstance(s1, ForgeChar) else str(s1)
-    b = s2.to_str() if isinstance(s2, ForgeChar) else str(s2)
-    return ForgeArray(np.float64(1.0 if a.lower() == b.lower() else 0.0))
+    def _s(v):
+        return v.to_str() if isinstance(v, ForgeChar) else str(v)
+    n = int(n._data.ravel()[0]) if isinstance(n, ForgeArray) else int(n)
+    return ForgeArray(np.float64(1.0 if _s(s1)[:n] == _s(s2)[:n] else 0.0))
 
+@_tb("strncmpi")
+def forge_strncmpi(s1, s2, n):
+    """strncmpi(s1, s2, n) — compare first n characters (case-insensitive)."""
+    import numpy as np
+    from forge.engine.containers import ForgeChar
+    from forge.engine.types import ForgeArray
+    def _s(v):
+        v = v.to_str() if isinstance(v, ForgeChar) else str(v)
+        return v.lower()
+    n = int(n._data.ravel()[0]) if isinstance(n, ForgeArray) else int(n)
+    return ForgeArray(np.float64(1.0 if _s(s1)[:n] == _s(s2)[:n] else 0.0))
 
 @_tb("regexpi")
 def forge_regexpi(s, pattern, *args):

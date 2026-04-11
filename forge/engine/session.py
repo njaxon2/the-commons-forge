@@ -2159,7 +2159,16 @@ class ForgeSession:
                 'logical': np.bool_,
             }
             if typename in type_map:
-                return ForgeArray(data.astype(type_map[typename]))
+                target_dt = type_map[typename]
+                import numpy as _np2
+                int_types = {_np2.int8, _np2.int16, _np2.int32, _np2.int64,
+                             _np2.uint8, _np2.uint16, _np2.uint32, _np2.uint64}
+                if target_dt in int_types:
+                    rounded = _np2.round(data) if _np2.issubdtype(data.dtype, _np2.floating) else data
+                    info = _np2.iinfo(target_dt)
+                    clamped = _np2.clip(rounded, info.min, info.max)
+                    return ForgeArray(clamped.astype(target_dt))
+                return ForgeArray(data.astype(target_dt))
             return ForgeArray(data)
 
         def forge_filter(b, a, x):
@@ -10449,6 +10458,36 @@ class ForgeSession:
         session._engine.functions["sylvester"] = forge_sylvester
         session._engine.functions["validateattributes"] = forge_validateattributes
         session._engine.functions["inputParser"] = forge_inputParser
+
+        def forge_parse_func(p, *args):
+            """parse(p, ...) — invoke inputParser parse method."""
+            if hasattr(p, "parse") and callable(p.parse):
+                p.parse(*args)
+                return None
+            raise ValueError("parse: first argument must be an inputParser object")
+
+        def forge_addRequired_func(p, name, *args):
+            """addRequired(p, name) — dispatch to inputParser.addRequired."""
+            if hasattr(p, "addRequired"):
+                p.addRequired(name, *args)
+            return None
+
+        def forge_addOptional_func(p, name, *args):
+            """addOptional(p, name, default) — dispatch to inputParser.addOptional."""
+            if hasattr(p, "addOptional"):
+                p.addOptional(name, *args)
+            return None
+
+        def forge_addParameter_func(p, name, *args):
+            """addParameter(p, name, default) — dispatch to inputParser.addParameter."""
+            if hasattr(p, "addParameter"):
+                p.addParameter(name, *args)
+            return None
+
+        session._engine.functions["parse"] = forge_parse_func
+        session._engine.functions["addRequired"] = forge_addRequired_func
+        session._engine.functions["addOptional"] = forge_addOptional_func
+        session._engine.functions["addParameter"] = forge_addParameter_func
         session._engine.functions["accumarray"] = forge_accumarray
         session._engine.functions["histc"] = forge_histc
         session._engine.functions["histcounts"] = forge_histcounts

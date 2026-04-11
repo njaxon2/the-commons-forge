@@ -92,6 +92,10 @@ from forge.engine.expr_fusion import can_fuse, fused_binop
 from forge.engine.jit_compiler import can_jit_loop, compile_and_run_loop, is_numba_available
 
 # === PERF: Fast-path ufunc dispatch table ===
+def _matlab_round(x):
+    """Round half away from zero (MATLAB semantics)."""
+    return np.where(x >= 0, np.floor(x + 0.5), -np.floor(-x + 0.5))
+
 _FAST_UFUNC = {
     "abs": np.abs, "sqrt": np.sqrt, "exp": np.exp,
     "log": np.log, "log2": np.log2, "log10": np.log10,
@@ -99,7 +103,7 @@ _FAST_UFUNC = {
     "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
     "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
     "asinh": np.arcsinh, "acosh": np.arccosh, "atanh": np.arctanh,
-    "ceil": np.ceil, "floor": np.floor, "round": np.round,
+    "ceil": np.ceil, "floor": np.floor, "round": _matlab_round,
     "fix": np.fix, "sign": np.sign,
     "real": np.real, "imag": np.imag, "conj": np.conj, "angle": np.angle,
 }
@@ -663,8 +667,22 @@ class Session:
 
         # Matrix construction
         b["eye"] = lambda *a: forge_eye(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
-        b["ones"] = lambda *a: forge_ones(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
-        b["zeros"] = lambda *a: forge_zeros(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
+        def _forge_ones_typed(*a):
+            dtype = "double"
+            raw = list(a)
+            if raw and isinstance(raw[-1], ForgeChar):
+                dtype = raw.pop().to_str()
+            iargs = [int(_to_py(x)) if isinstance(_to_py(x), float) and _to_py(x) == int(_to_py(x)) else _to_py(x) for x in raw]
+            return forge_ones(*iargs, dtype=dtype)
+        b["ones"] = _forge_ones_typed
+        def _forge_zeros_typed(*a):
+            dtype = "double"
+            raw = list(a)
+            if raw and isinstance(raw[-1], ForgeChar):
+                dtype = raw.pop().to_str()
+            iargs = [int(_to_py(x)) if isinstance(_to_py(x), float) and _to_py(x) == int(_to_py(x)) else _to_py(x) for x in raw]
+            return forge_zeros(*iargs, dtype=dtype)
+        b["zeros"] = _forge_zeros_typed
         b["rand"] = lambda *a: forge_rand(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
         b["randn"] = lambda *a: forge_randn(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
         b["randi"] = lambda *a: forge_randi(*[int(v) if isinstance(v, float) and v == int(v) else v for v in [_to_py(x) for x in a]])
@@ -725,7 +743,7 @@ class Session:
         b["isnan"] = forge_isnan
         b["isinf"] = forge_isinf
         b["isfinite"] = forge_isfinite
-        b["isempty"] = lambda x: ForgeArray(np.float64(x.isempty() if isinstance(x, ForgeArray) else len(x) == 0))
+        b["isempty"] = lambda x: ForgeArray(np.float64(x.isempty() if isinstance(x, ForgeArray) else (len(x._data) == 0 if isinstance(x, ForgeCell) else len(x) == 0)))
         def _isfield(s, f):
             if isinstance(f, ForgeChar):
                 f = f.to_str()
@@ -780,7 +798,7 @@ class Session:
                 b[_n].__doc__ = _d
 
         b["mod"] = lambda a, m: ForgeArray(np.mod(_unwrap(a), _unwrap(m)))
-        b["rem"] = lambda a, m: ForgeArray(np.remainder(_unwrap(a), _unwrap(m)))
+        b["rem"] = lambda a, m: ForgeArray(_unwrap(a) - _unwrap(m) * np.fix(_unwrap(a) / _unwrap(m)))
         b["atan2"] = lambda y, x: ForgeArray(np.arctan2(_unwrap(y), _unwrap(x)))
         b["hypot"] = lambda x, y: ForgeArray(np.hypot(_unwrap(x), _unwrap(y)))
         b["power"] = lambda x, y: ForgeArray(np.power(_unwrap(x), _unwrap(y)))
@@ -843,7 +861,31 @@ class Session:
                 return ForgeArray(np.max(data))
             return ForgeArray(np.maximum(data, _unwrap(a[0])))
         b["max"] = _forge_max
-        b["sort"] = lambda x, *a: ForgeArray(np.sort(_unwrap(x), axis=-1))
+        def _forge_sort(x, *args):
+            """sort(A), sort(A,dim), sort(A,mode), sort(A,dim,mode)."""
+            data = _unwrap(x)
+            dim = None
+            mode = "ascend"
+            for arg in args:
+                if isinstance(arg, ForgeChar):
+                    mode = arg.to_str().lower()
+                elif isinstance(arg, ForgeArray):
+                    v = int(arg._data.ravel()[0])
+                    if v in (1, 2):
+                        dim = v
+                elif isinstance(arg, (int, float)):
+                    if int(arg) in (1, 2):
+                        dim = int(arg)
+            axis = (dim - 1) if dim is not None else (-1)
+            idx = np.argsort(data, axis=axis, stable=True)
+            if mode == "descend":
+                if axis == -1:
+                    idx = idx[..., ::-1]
+                else:
+                    idx = np.flip(idx, axis=axis)
+            sorted_data = np.take_along_axis(data, idx, axis=axis)
+            return ForgeArray(sorted_data), ForgeArray((idx + 1).astype(float))
+        b["sort"] = _forge_sort
         def _forge_find_builtin(x):
             data = _unwrap(x) if isinstance(x, ForgeArray) else x
             if _sp.issparse(data):
@@ -2863,17 +2905,31 @@ class Session:
             return None
         if name == 'sort':
             x = _unwrap(args[0])
+            mode = "ascend"
+            dim = None
+            for arg in args[1:]:
+                if isinstance(arg, ForgeChar):
+                    mode = arg.to_str().lower()
+                elif isinstance(arg, ForgeArray):
+                    v = int(arg._data.ravel()[0])
+                    if v in (1, 2):
+                        dim = v
             if x.ndim == 2 and (x.shape[0] == 1 or x.shape[1] == 1):
                 flat = x.ravel()
-                idx = np.argsort(flat)
+                idx = np.argsort(flat, stable=True)
+                if mode == "descend":
+                    idx = idx[::-1]
                 sorted_vals = flat[idx]
                 if x.shape[0] == 1:
                     return (ForgeArray(sorted_vals.reshape(1, -1)), ForgeArray((idx + 1).astype(float).reshape(1, -1)))
                 else:
                     return (ForgeArray(sorted_vals.reshape(-1, 1)), ForgeArray((idx + 1).astype(float).reshape(-1, 1)))
             else:
-                idx = np.argsort(x, axis=0)
-                sorted_vals = np.take_along_axis(x, idx, axis=0)
+                axis = (dim - 1) if dim is not None else 0
+                idx = np.argsort(x, axis=axis, stable=True)
+                if mode == "descend":
+                    idx = np.flip(idx, axis=axis)
+                sorted_vals = np.take_along_axis(x, idx, axis=axis)
                 return (ForgeArray(sorted_vals), ForgeArray((idx + 1).astype(float)))
         if name == 'eig':
             x = _unwrap(args[0])
