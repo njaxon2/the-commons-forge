@@ -1798,14 +1798,20 @@ class Session:
                 return _wrap_sparse(l + r)
             if can_fuse(op, l, r):
                 return ForgeArray._from_ndarray(fused_binop(op, l, r))
-            result = l + r
+            try:
+                result = l + r
+            except ValueError:
+                _nonconformant_err("+", l, r)
             return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         if op == "-":
             if _any_sparse:
                 return _wrap_sparse(l - r)
             if can_fuse(op, l, r):
                 return ForgeArray._from_ndarray(fused_binop(op, l, r))
-            result = l - r
+            try:
+                result = l - r
+            except ValueError:
+                _nonconformant_err("-", l, r)
             return ForgeArray._from_ndarray(result) if result.ndim >= 2 else ForgeArray(result)
         if op == "*":
             if _any_sparse:
@@ -3100,3 +3106,21 @@ def _values_equal(a, b) -> bool:
         return np.array_equal(a_raw, b_raw)
     except (TypeError, ValueError):
         return a_raw == b_raw
+
+
+def _shape_str(arr) -> str:
+    """Return Octave-style shape string: 1x3, 4x4, 1x1 for scalars."""
+    a = np.asarray(arr)
+    if a.ndim == 0 or a.size == 1:
+        return "1x1"
+    if a.ndim == 1:
+        return f"1x{a.shape[0]}"
+    return "x".join(str(d) for d in a.shape[:2])
+
+
+def _nonconformant_err(op: str, l, r):
+    """Raise Octave-style nonconformant error for element-wise shape mismatch."""
+    raise ValueError(
+        f"operator {op}: nonconformant arguments "
+        f"(op1 is {_shape_str(l)}, op2 is {_shape_str(r)})"
+    )

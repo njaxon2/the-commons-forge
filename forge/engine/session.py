@@ -95,7 +95,7 @@ class ForgeSession:
             self.last_error = e; return f"error: {e}"
         except Exception as e:
             self.last_error = e
-            return f'error: {type(e).__name__}: {e}'
+            return f'error: {e}'
 
     def get_workspace_dict(self):
         """Return workspace variables as plain dict for GUI display."""
