@@ -1571,6 +1571,8 @@ class Session:
 
     def _exec_expression_stmt(self, node, ws: Workspace) -> Any:
         """Handle ExpressionStatement nodes."""
+        # E2: nargout=0 for bare expressions (triggers freqz/etc auto-plot)
+        self._set_builtin_nargout(0)
         val = self._eval_expr(node.expr, ws)
         # R05: If result is a bare callable (command-style: who, whos, etc.)
         # and the expression is a bare Identifier (not Index/call), auto-invoke
@@ -2240,11 +2242,21 @@ class Session:
     # Statement execution
     # ============================================================
 
+    @staticmethod
+    def _set_builtin_nargout(n):
+        """Set thread-local nargout for signal builtins (E2)."""
+        try:
+            from forge.engine.builtins.signal import _nargout_context
+            _nargout_context.nargout = n
+        except Exception:
+            pass
+
     def _exec_assign(self, node: Assignment, ws: Workspace) -> Any:
         target = node.targets
 
         if isinstance(target, list):
             nargout = len(target)
+            self._set_builtin_nargout(nargout)
             # Try nargout-aware multi-output path FIRST to avoid computing
             # unneeded outputs (e.g. unique with nargout=1 skips indices).
             value = self._eval_multi_output(node.value, ws, nargout)
@@ -2262,6 +2274,7 @@ class Session:
                     ws.set(target[0].name, value)
             return value
 
+        self._set_builtin_nargout(1)
         value = self._eval_expr(node.value, ws)
         # Auto-call bare callable identifiers on RHS (e.g., t = toc)
         if callable(value) and not isinstance(value, ForgeArray):

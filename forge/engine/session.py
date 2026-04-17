@@ -34,6 +34,7 @@ class ForgeSession:
         self.history = []
         self.last_error = None
         self._file_browser_dir = None  # set by GUI when file browser navigates
+        self._cwd_callbacks = []  # G1/G2: callbacks notified on cd()
 
         # Add-on manager: tracks which Forge toolboxes and Octave packages are active
         self.addon_manager = AddonManager()
@@ -44,6 +45,10 @@ class ForgeSession:
 
         # Give engine a back-reference for .m file discovery (R13)
         self._engine._session_ref = self
+
+    def on_cwd_change(self, callback):
+        """Register a callback to be notified when cd() changes the working directory."""
+        self._cwd_callbacks.append(callback)
 
     def _apply_addons(self):
         """Register functions from all enabled add-ons."""
@@ -295,7 +300,14 @@ class ForgeSession:
                 return os.getcwd()
             os.chdir(str(args[0]))
             session.path[0] = os.getcwd()
-            return os.getcwd()
+            cwd = os.getcwd()
+            # G1/G2: Notify registered callbacks of directory change
+            for cb in session._cwd_callbacks:
+                try:
+                    cb(cwd)
+                except Exception:
+                    pass
+            return cwd
 
         def forge_pwd():
             return os.getcwd()
@@ -5059,6 +5071,13 @@ class ForgeSession:
                 session.path[0] = cwd
             else:
                 session.path.append(cwd)
+            # G1/G2: Notify registered callbacks of directory change
+            if dirname is not None:
+                for cb in session._cwd_callbacks:
+                    try:
+                        cb(cwd)
+                    except Exception:
+                        pass
             return ForgeChar(cwd)
 
         # Register all R144 functions

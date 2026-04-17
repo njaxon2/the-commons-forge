@@ -11,6 +11,14 @@ Backend: NumPy + SciPy (scipy.signal, scipy.fft).
 from __future__ import annotations
 
 import numpy as np
+
+# Thread-local nargout context for builtins that auto-plot when called without output capture
+import threading as _threading
+_nargout_context = _threading.local()
+
+def _get_nargout():
+    return getattr(_nargout_context, "nargout", None)
+
 from scipy import signal as sig
 from scipy import fft as spfft
 
@@ -132,8 +140,16 @@ def butter(N, Wn, btype='low', analog=False, fs=None):
     -------
     b, a : ForgeArray — Numerator and denominator coefficients.
     """
-    b, a = sig.butter(int(N), Wn, btype=btype, analog=analog,
-                       output='ba', fs=fs)
+    # Unwrap ForgeArray scalars for scipy compatibility
+    N_int = int(float(_unwrap(N).ravel()[0]) if hasattr(N, "_data") else int(N))
+    if hasattr(Wn, "_data"):
+        wn_raw = _unwrap(Wn).ravel()
+        Wn_val = float(wn_raw[0]) if wn_raw.size == 1 else wn_raw.tolist()
+    else:
+        Wn_val = Wn
+    fs_val = float(_unwrap(fs).ravel()[0]) if fs is not None and hasattr(fs, "_data") else fs
+    b, a = sig.butter(N_int, Wn_val, btype=btype, analog=analog,
+                       output='ba', fs=fs_val)
     return _fa(b), _fa(a)
 
 
@@ -148,7 +164,10 @@ def cheby1(N, Rp, Wn, btype='low', analog=False, fs=None):
     Rp : float — Maximum ripple in passband (dB).
     Wn : float — Cutoff frequency.
     """
-    b, a = sig.cheby1(int(N), float(Rp), Wn, btype=btype,
+    _N = int(float(_unwrap(N).ravel()[0]) if hasattr(N, "_data") else int(N))
+    _Rp = float(_unwrap(Rp).ravel()[0]) if hasattr(Rp, "_data") else float(Rp)
+    _Wn = float(_unwrap(Wn).ravel()[0]) if hasattr(Wn, "_data") and _unwrap(Wn).size == 1 else (_unwrap(Wn).ravel().tolist() if hasattr(Wn, "_data") else Wn)
+    b, a = sig.cheby1(_N, _Rp, _Wn, btype=btype,
                        analog=analog, output='ba', fs=fs)
     return _fa(b), _fa(a)
 
@@ -164,7 +183,10 @@ def cheby2(N, Rs, Wn, btype='low', analog=False, fs=None):
     Rs : float — Minimum stopband attenuation (dB).
     Wn : float — Cutoff frequency.
     """
-    b, a = sig.cheby2(int(N), float(Rs), Wn, btype=btype,
+    _N = int(float(_unwrap(N).ravel()[0]) if hasattr(N, "_data") else int(N))
+    _Rs = float(_unwrap(Rs).ravel()[0]) if hasattr(Rs, "_data") else float(Rs)
+    _Wn = float(_unwrap(Wn).ravel()[0]) if hasattr(Wn, "_data") and _unwrap(Wn).size == 1 else (_unwrap(Wn).ravel().tolist() if hasattr(Wn, "_data") else Wn)
+    b, a = sig.cheby2(_N, _Rs, _Wn, btype=btype,
                        analog=analog, output='ba', fs=fs)
     return _fa(b), _fa(a)
 
@@ -181,7 +203,11 @@ def ellip(N, Rp, Rs, Wn, btype='low', analog=False, fs=None):
     Rs : float — Stopband attenuation (dB).
     Wn : float — Cutoff frequency.
     """
-    b, a = sig.ellip(int(N), float(Rp), float(Rs), Wn, btype=btype,
+    _N = int(float(_unwrap(N).ravel()[0]) if hasattr(N, "_data") else int(N))
+    _Rp = float(_unwrap(Rp).ravel()[0]) if hasattr(Rp, "_data") else float(Rp)
+    _Rs = float(_unwrap(Rs).ravel()[0]) if hasattr(Rs, "_data") else float(Rs)
+    _Wn = float(_unwrap(Wn).ravel()[0]) if hasattr(Wn, "_data") and _unwrap(Wn).size == 1 else (_unwrap(Wn).ravel().tolist() if hasattr(Wn, "_data") else Wn)
+    b, a = sig.ellip(_N, _Rp, _Rs, _Wn, btype=btype,
                       analog=analog, output='ba', fs=fs)
     return _fa(b), _fa(a)
 
@@ -445,6 +471,9 @@ def freqz(b, a=1, n=512, whole=False, fs=None):
     [H, W] = freqz(B, A, N)
     Returns the N-point frequency response vector H and the angular
     frequency vector W (in rad/sample, or Hz if fs given).
+
+    When called without output capture (nargout == 0), auto-plots
+    magnitude and phase response like Octave/MATLAB (E2).
     """
     b = _coeff1d(b)
     a = _coeff1d(a) if not isinstance(a, (int, float)) else np.array([float(a)])
@@ -452,21 +481,52 @@ def freqz(b, a=1, n=512, whole=False, fs=None):
     if fs is not None:
         kwargs['fs'] = float(fs)
     w, h = sig.freqz(b, a, worN=int(n), whole=whole, **kwargs)
-    return _fa(h), _fa(w)
+    H, W = _fa(h), _fa(w)
+    # E2: auto-plot when called without output capture (nargout == 0)
+    if _get_nargout() == 0:
+        try:
+            freqz_plot(W, H, fs=fs)
+        except Exception:
+            pass
+    return H, W
 
 
-def freqz_plot(w, h):
+def freqz_plot(w, h, fs=None):
     """Plot frequency response from freqz output.
 
-    freqz_plot(W, H)
-    Returns (w, mag_dB, phase_deg) for non-interactive use.
-    Magnitude in dB and phase in degrees.
+    freqz_plot(W, H) or freqz_plot(W, H, Fs)
+    Draws magnitude (dB) and phase (degrees) subplots.
+    Also returns (freq, mag_dB, phase_deg) for programmatic use.
     """
-    w = _ensure_float(w)
-    h = np.asarray(_unwrap(h))
+    import matplotlib.pyplot as plt
+
+    w = np.asarray(_unwrap(w)).ravel()
+    h = np.asarray(_unwrap(h)).ravel()
     mag_dB = 20 * np.log10(np.maximum(np.abs(h), 1e-15))
     phase_deg = np.degrees(np.unwrap(np.angle(h)))
-    return _fa(w), _fa(mag_dB), _fa(phase_deg)
+
+    if fs is not None:
+        freq = w
+        xlabel_str = "Frequency (Hz)"
+    else:
+        freq = w / np.pi
+        xlabel_str = "Normalized Frequency (x pi rad/sample)"
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+    fig.subplots_adjust(hspace=0.3)
+
+    ax1.plot(freq, mag_dB, linewidth=1.5)
+    ax1.set_ylabel("Magnitude (dB)")
+    ax1.set_title("Frequency Response")
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xlim(freq[0], freq[-1])
+
+    ax2.plot(freq, phase_deg, linewidth=1.5)
+    ax2.set_ylabel("Phase (degrees)")
+    ax2.set_xlabel(xlabel_str)
+    ax2.grid(True, alpha=0.3)
+
+    return _fa(freq), _fa(mag_dB), _fa(phase_deg)
 
 
 def freqs(b, a, w=None):

@@ -24,6 +24,28 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3-D projecti
 
 from forge.engine.types import ForgeArray, _unwrap
 
+# ── Catppuccin Mocha dark theme (applied globally) ──────────────────
+import matplotlib as _mpl
+_mpl.rcParams.update({
+    'figure.facecolor':   '#1e1e2e',
+    'axes.facecolor':     '#1e1e2e',
+    'text.color':         '#cdd6f4',
+    'axes.labelcolor':    '#cdd6f4',
+    'xtick.color':        '#a6adc8',
+    'ytick.color':        '#a6adc8',
+    'axes.edgecolor':     '#585b70',
+    'grid.color':         '#45475a',
+    'grid.alpha':         0.3,
+    'legend.facecolor':   '#313244',
+    'legend.edgecolor':   '#585b70',
+    'savefig.facecolor':  '#1e1e2e',
+    'axes.prop_cycle':    _mpl.cycler(color=[
+        '#89b4fa', '#f38ba8', '#a6e3a1', '#fab387',
+        '#cba6f7', '#f9e2af', '#94e2d5', '#f5c2e7',
+    ]),
+})
+
+
 
 def _plt():
     """Lazy import of matplotlib.pyplot. Thread-safe: only calls ion() on main thread."""
@@ -564,6 +586,10 @@ def _get_3d_ax():
             ax = fig.add_subplot(111, projection="3d")
         if threading.current_thread() is threading.main_thread():
             _plt().sca(ax)
+        # Apply dark-theme pane styling for 3D axes
+        for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
+            pane.fill = False
+            pane.set_edgecolor((0.27, 0.28, 0.35, 0.5))
     return ax
 
 
@@ -1218,6 +1244,8 @@ def forge_subplot(m, n, p):
     ax = fig.add_subplot(m_int, n_int, p_int)
     if threading.current_thread() is threading.main_thread():
         _plt().sca(ax)
+    # Prevent subplot overlap
+    fig.subplots_adjust(hspace=0.3, wspace=0.3)
     _safe_redraw()
     return ax
 
@@ -1621,6 +1649,8 @@ def forge_bar3(*args, **kwargs):
     """bar3(Z) or bar3(Y, Z) -- 3D bar chart."""
     from mpl_toolkits.mplot3d import Axes3D
     from forge.engine.types import ForgeArray, _unwrap
+
+
     if len(args) == 0:
         raise ValueError("bar3 requires at least one argument")
     Z = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
@@ -1628,6 +1658,10 @@ def forge_bar3(*args, **kwargs):
         Z = Z.reshape(1, -1)
     fig = _plt().gcf()
     ax = fig.add_subplot(111, projection='3d')
+    # Apply dark-theme pane styling for 3D axes
+    for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
+        pane.fill = False
+        pane.set_edgecolor((0.27, 0.28, 0.35, 0.5))
     rows, cols = Z.shape
     xpos, ypos = np.meshgrid(np.arange(cols), np.arange(rows))
     xpos = xpos.flatten()
@@ -1649,6 +1683,8 @@ def forge_bar3(*args, **kwargs):
 def forge_boxplot(*args, **kwargs):
     """boxplot(X) -- Box-and-whisker plot."""
     from forge.engine.types import ForgeArray, _unwrap
+
+
     if len(args) == 0:
         raise ValueError("boxplot requires at least one argument")
     X = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
@@ -1671,6 +1707,8 @@ def forge_boxplot(*args, **kwargs):
 def forge_heatmap(*args, **kwargs):
     """heatmap(Z) -- Display matrix as a color-coded heatmap."""
     from forge.engine.types import ForgeArray, _unwrap
+
+
     if len(args) == 0:
         raise ValueError("heatmap requires at least one argument")
     Z = _unwrap(args[0]) if isinstance(args[0], ForgeArray) else np.asarray(args[0])
